@@ -296,8 +296,15 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
 .dialog::backdrop { background: rgba(16, 24, 40, .45); }
 .dialog__nav { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .dialog__nav h2 { margin: 0; font-size: 17px; }
-.btn--nav { padding: 4px 10px; font-size: 20px; line-height: 1; font-weight: 700; }
-.edit-pos { font-size: 12px; color: var(--ink-soft); min-width: 56px; text-align: center; }
+.nav-group { display: flex; align-items: center; gap: 4px; }
+.btn--nav {
+  width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+  padding: 0; font-size: 18px; line-height: 1; font-weight: 700;
+  border-radius: 50%; border: 2px solid var(--accent); background: transparent; color: var(--accent);
+  cursor: pointer; transition: background .12s, color .12s;
+}
+.btn--nav:hover { background: var(--accent); color: #fff; }
+.edit-pos { font-size: 13px; font-weight: 600; color: var(--ink-soft); min-width: 64px; text-align: center; }
 .dialog label { display: block; margin-bottom: 11px; font-size: 12.5px; color: var(--ink-soft); }
 .dialog label > input, .dialog label > select, .dialog label > textarea {
   display: block; width: 100%; margin-top: 4px; padding: 8px 10px;
