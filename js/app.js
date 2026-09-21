@@ -16,6 +16,10 @@
 
   var filter = { suche: '', bereich: '', prio: '', status: '', verant: '' };
 
+  // Nummern in genau der Reihenfolge, in der sie gerade angezeigt werden.
+  // Danach richtet sich das Durchblättern im Bearbeiten-Dialog.
+  var reihenfolge = [];
+
   var PRIO_RANK = { 'Hoch': 0, 'Mittel': 1, 'Niedrig': 2 };
   var STATUS_RANK = { 'Offen': 0, 'In Arbeit': 1, 'Erledigt': 2 };
 
@@ -138,6 +142,7 @@
     var liste = alle.filter(sichtbar);
     var content = $('#content');
     content.textContent = '';
+    reihenfolge = [];
 
     if (!liste.length) {
       var leer = el('div', 'empty');
@@ -148,7 +153,13 @@
       return;
     }
 
-    if (view === 'tabelle') { content.appendChild(renderTabelle(liste)); return; }
+    if (view === 'tabelle') {
+      var sortiert = liste.slice().sort(sortiereTabelle);
+      reihenfolge = sortiert.map(function (e) { return e.nr; });
+      content.appendChild(renderTabelle(sortiert));
+      aktualisiereBlaettern();
+      return;
+    }
 
     var offeneListe = liste.filter(function (e) { return e.status !== 'Erledigt'; });
     var erledigt = liste.filter(function (e) { return e.status === 'Erledigt'; });
@@ -169,9 +180,12 @@
     if (erledigt.length) {
       content.appendChild(renderGruppe('Erledigt', erledigt.sort(sortiereKarten), true));
     }
+    aktualisiereBlaettern();
   }
 
   function renderGruppe(titel, eintraege, istErledigtGruppe) {
+    // Auch eingeklappte Gruppen zaehlen mit, damit beim Blaettern keiner ausfaellt.
+    eintraege.forEach(function (e) { reihenfolge.push(e.nr); });
     var offen = istErledigtGruppe ? erledigtOffen : !zugeklappt[titel];
     var g = el('section', 'group' + (offen ? ' is-open' : ''));
 
@@ -208,6 +222,21 @@
 
   function renderCard(e) {
     var c = el('article', 'card card--' + slug(e.prio) + (e.status === 'Erledigt' ? ' card--erledigt' : ''));
+    c.tabIndex = 0;
+    c.title = 'Klick öffnet den Punkt zum Bearbeiten';
+
+    // Ganze Karte oeffnet den Dialog – ausser man trifft ein Bedienelement darin.
+    function kartenKlick(ev) {
+      if (ev.target.closest('button, input, select, textarea, a, .thumb')) return;
+      oeffneEdit(e.nr);
+    }
+    c.addEventListener('click', kartenKlick);
+    c.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      if (ev.target !== c) return;
+      ev.preventDefault();
+      oeffneEdit(e.nr);
+    });
 
     var top = el('div', 'card__top');
     top.appendChild(el('span', 'card__nr', '#' + e.nr));
@@ -340,7 +369,11 @@
       row.appendChild(el('td', 'col-todo', e.todo));
       row.appendChild(el('td', null, e.notiz || (e.bilder.length ? e.bilder.length + ' Bild(er)' : '')));
 
-      row.addEventListener('dblclick', function () { oeffneEdit(e.nr); });
+      row.title = 'Klick öffnet den Punkt zum Bearbeiten';
+      row.addEventListener('click', function (ev) {
+        if (ev.target.closest('button, input, select, textarea, a')) return;
+        oeffneEdit(e.nr);
+      });
       tbody.appendChild(row);
     });
     t.appendChild(tbody);
@@ -421,10 +454,90 @@
     werte.forEach(function (w) { sel.appendChild(new Option(w, w)); });
   }
 
+  /** Liest die Formularwerte als Datensatz. */
+  function formLesen() {
+    return {
+      bereich: $('#fmBereich').value,
+      thema: $('#fmThema').value.trim(),
+      prio: $('#fmPrio').value,
+      status: $('#fmStatus').value,
+      verantwortlicher: $('#fmVerant').value.trim(),
+      faellig: $('#fmFaellig').value,
+      todo: $('#fmTodo').value.trim(),
+      notiz: $('#fmNotiz').value.trim(),
+      bilder: editBilder
+    };
+  }
+
+  /** Weicht das Formular vom gespeicherten Punkt ab? */
+  function istGeaendert() {
+    if (editNr == null) return !!$('#fmThema').value.trim();
+    var e = Store.byNr(editNr);
+    if (!e) return false;
+    var f = formLesen();
+    return Object.keys(f).some(function (k) {
+      if (k === 'bilder') return JSON.stringify(f.bilder) !== JSON.stringify(e.bilder);
+      return f[k] !== e[k];
+    });
+  }
+
+  /**
+   * Speichert, falls nötig. Liefert false, wenn nicht gespeichert werden konnte
+   * (dann bleibt der Dialog stehen, statt die Eingabe zu verlieren).
+   */
+  function speichereWennNoetig() {
+    if (!istGeaendert()) return Promise.resolve(true);
+    var daten = formLesen();
+    if (!daten.thema) {
+      toast('Bitte ein Thema angeben.', true);
+      $('#fmThema').focus();
+      return Promise.resolve(false);
+    }
+    if (editNr == null) {
+      return Store.add(daten).then(function (neu) {
+        editNr = neu.nr;
+        toast('Punkt #' + neu.nr + ' angelegt.');
+        return true;
+      }).catch(function () { return false; });
+    }
+    var nr = editNr;
+    return Store.update(nr, daten).then(function () { return true; })
+      .catch(function () { return false; });
+  }
+
+  /** Blättert um <delta> Positionen weiter und speichert vorher. */
+  function blaettern(delta) {
+    var idx = reihenfolge.indexOf(editNr);
+    var ziel = idx < 0 ? reihenfolge[delta > 0 ? 0 : reihenfolge.length - 1]
+                       : reihenfolge[idx + delta];
+    if (ziel == null) {
+      toast(delta > 0 ? 'Das ist der letzte Punkt der Liste.' : 'Das ist der erste Punkt der Liste.');
+      return;
+    }
+    speichereWennNoetig().then(function (ok) {
+      if (ok) oeffneEdit(ziel);
+    });
+  }
+
+  /** Schaltet die Blätter-Knöpfe passend zur aktuellen Position. */
+  function aktualisiereBlaettern() {
+    if (!$('#dlgEdit').open) return;
+    var idx = reihenfolge.indexOf(editNr);
+    var zeigen = editNr != null && idx >= 0 && reihenfolge.length > 1;
+    $('#blaettern').hidden = !zeigen;
+    $('#btnWeiter').hidden = !zeigen;
+    if (!zeigen) return;
+    $('#dlgPos').textContent = (idx + 1) + ' von ' + reihenfolge.length;
+    $('#btnPrev').disabled = idx === 0;
+    $('#btnNext').disabled = idx === reihenfolge.length - 1;
+    $('#btnWeiter').textContent = idx === reihenfolge.length - 1
+      ? 'Speichern & schließen' : 'Speichern & weiter ▶';
+  }
+
   function oeffneEdit(nr, fokus) {
     editNr = nr == null ? null : nr;
     var e = nr == null ? null : Store.byNr(nr);
-    $('#dlgEditTitle').textContent = e ? 'Punkt #' + e.nr + ' bearbeiten' : 'Neuer Punkt';
+    $('#dlgEditTitle').textContent = e ? 'Punkt #' + e.nr : 'Neuer Punkt';
     $('#fmBereich').value = e ? e.bereich : (filter.bereich || Store.BEREICHE[0]);
     $('#fmThema').value = e ? e.thema : '';
     $('#fmPrio').value = e ? e.prio : 'Mittel';
@@ -437,10 +550,16 @@
     editBilder = e ? Store.clone(e.bilder) : [];
     renderEditBilder();
     $('#btnDelete').hidden = !e;
-    $('#dlgEdit').showModal();
+    $('#fmGeaendert').textContent = e && e.geaendertVon
+      ? 'zuletzt: ' + e.geaendertVon + ', ' + new Date(e.geaendertAm).toLocaleString('de-DE')
+      : '';
+    $('#tastenhinweis').hidden = editNr == null || reihenfolge.length < 2;
+    if (!$('#dlgEdit').open) $('#dlgEdit').showModal();
+    aktualisiereBlaettern();
     setTimeout(function () {
       if (fokus === 'faellig') $('#fmFaellig').focus();
       else if (fokus === 'verant') $('#fmVerant').focus();
+      else if (e) $('#fmTodo').focus();     // beim Durchblaettern ist das To Do das Arbeitsfeld
       else $('#fmThema').focus();
     }, 30);
   }
@@ -693,31 +812,39 @@
       });
     });
 
+    // Speichern und schliessen
     $('#formEdit').addEventListener('submit', function (ev) {
       ev.preventDefault();
-      var data = {
-        bereich: $('#fmBereich').value,
-        thema: $('#fmThema').value.trim(),
-        prio: $('#fmPrio').value,
-        status: $('#fmStatus').value,
-        verantwortlicher: $('#fmVerant').value.trim(),
-        faellig: $('#fmFaellig').value,
-        todo: $('#fmTodo').value.trim(),
-        notiz: $('#fmNotiz').value.trim(),
-        bilder: editBilder
-      };
-      if (!data.thema) { toast('Bitte ein Thema angeben.', true); return; }
-      if (editNr == null) {
-        Store.add(data).then(function (neu) {
-          toast('Punkt #' + neu.nr + ' angelegt.');
-        }).catch(function () { /* Meldung kam schon aus dem Store */ });
-      } else {
-        var nr = editNr;
-        Store.update(nr, data).then(function () {
-          toast('Punkt #' + nr + ' gespeichert.');
-        }).catch(function () { /* Meldung kam schon aus dem Store */ });
+      var geaendert = istGeaendert();
+      var nr = editNr;
+      speichereWennNoetig().then(function (ok) {
+        if (!ok) return;
+        if (geaendert && nr != null) toast('Punkt #' + nr + ' gespeichert.');
+        $('#dlgEdit').close();
+      });
+    });
+
+    // Speichern und zum naechsten Punkt
+    $('#btnWeiter').addEventListener('click', function () {
+      var idx = reihenfolge.indexOf(editNr);
+      if (idx >= 0 && idx === reihenfolge.length - 1) {
+        speichereWennNoetig().then(function (ok) { if (ok) $('#dlgEdit').close(); });
+        return;
       }
-      $('#dlgEdit').close();
+      blaettern(1);
+    });
+
+    $('#btnPrev').addEventListener('click', function () { blaettern(-1); });
+    $('#btnNext').addEventListener('click', function () { blaettern(1); });
+
+    // Tastatur im Dialog: Alt+Pfeil blaettert, Strg+Enter speichert und blaettert.
+    $('#dlgEdit').addEventListener('keydown', function (ev) {
+      if (ev.altKey && ev.key === 'ArrowLeft') { ev.preventDefault(); blaettern(-1); }
+      else if (ev.altKey && ev.key === 'ArrowRight') { ev.preventDefault(); blaettern(1); }
+      else if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
+        ev.preventDefault();
+        $('#btnWeiter').click();
+      }
     });
 
     $('#btnDelete').addEventListener('click', function () {

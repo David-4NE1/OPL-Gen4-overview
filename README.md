@@ -52,12 +52,32 @@ rechts dient nur dem Änderungsprotokoll, nicht der Zugangskontrolle.
 
 ## Bedienung
 
+- **Karte anklicken** (irgendwo, auch eine Tabellenzeile) → Punkt öffnet sich zum Bearbeiten.
 - **Ampel-Punkt anklicken** → Prio wechselt Hoch → Mittel → Niedrig.
 - **Status-Chip anklicken** → Offen → In Arbeit → Erledigt.
 - **Datum-/Personen-Chip anklicken** → Dialog springt direkt auf das Feld.
-- **✎ oben rechts auf der Karte** (oder Doppelklick auf eine Tabellenzeile) → Punkt bearbeiten.
 - **KPI-Kacheln oben** sind Schnellfilter (z. B. nur überfällige Punkte).
 - **Taste `n`** legt einen neuen Punkt an.
+
+### Durchblättern statt Dialog auf, Dialog zu
+
+Ist ein Punkt offen, blättert man direkt zum nächsten weiter – gedacht für das
+Abarbeiten einer ganzen Liste in einem Rutsch:
+
+| Bedienung | Wirkung |
+|---|---|
+| **◀ / ▶** im Dialogkopf | ein Punkt zurück bzw. weiter |
+| **Alt + ←** / **Alt + →** | dasselbe über die Tastatur |
+| **Speichern & weiter ▶** | speichert und springt zum nächsten Punkt |
+| **Strg + ↵** | dasselbe über die Tastatur |
+
+Der Zähler („7 von 29“) zeigt, wo man steht. Die Reihenfolge ist genau die
+angezeigte – filtert man also z. B. auf „Prio hoch, Verantwortlicher offen“,
+blättert man nur durch diese Punkte.
+
+Beim Blättern wird **automatisch gespeichert**, man muss also nicht an
+„Speichern“ denken. Fehlt ein Thema, bleibt der Dialog stehen und sagt es,
+statt die Eingabe zu verlieren.
 - Erledigte Punkte werden nicht gelöscht, sondern landen in der einklappbaren
   Sektion **„✓ Erledigt“**.
 - Überfällig = Datum „Bis wann“ liegt vor heute **und** Status ≠ Erledigt.

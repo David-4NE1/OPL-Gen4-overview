@@ -76,7 +76,20 @@
 <!-- Dialog: Punkt anlegen/bearbeiten -->
 <dialog id="dlgEdit" class="dialog">
   <form id="formEdit" method="dialog">
-    <h2 id="dlgEditTitle">Neuer Punkt</h2>
+    <header class="dialog__head">
+      <div class="dialog__headtext">
+        <h2 id="dlgEditTitle">Neuer Punkt</h2>
+        <span id="fmGeaendert" class="geaendert"></span>
+      </div>
+      <div class="blaettern" id="blaettern">
+        <button type="button" id="btnPrev" title="Vorheriger Punkt (Alt + ←)"
+                aria-label="Vorheriger Punkt">◀</button>
+        <span id="dlgPos">–</span>
+        <button type="button" id="btnNext" title="Nächster Punkt (Alt + →)"
+                aria-label="Nächster Punkt">▶</button>
+      </div>
+    </header>
+    <div class="dialog__body">
     <div class="grid2">
       <label>Bereich
         <select name="bereich" id="fmBereich" required></select>
@@ -108,11 +121,17 @@
       <input id="fmBilder" type="file" accept="image/*" multiple>
     </label>
     <div id="fmBilderListe" class="thumbrow"></div>
+    <p class="tastenhinweis" id="tastenhinweis">
+      <b>Alt + ←</b> / <b>Alt + →</b> blättert zum vorigen bzw. nächsten Punkt ·
+      <b>Strg + ↵</b> speichert und blättert weiter · beim Blättern wird automatisch gespeichert
+    </p>
+    </div>
     <footer class="dialog__footer">
       <button type="button" id="btnDelete" class="btn btn--danger" hidden>Löschen</button>
       <span class="spacer"></span>
       <button type="button" class="btn btn--ghost" data-close>Abbrechen</button>
-      <button type="submit" class="btn btn--primary">Speichern</button>
+      <button type="submit" class="btn">Speichern</button>
+      <button type="button" id="btnWeiter" class="btn btn--primary">Speichern &amp; weiter ▶</button>
     </footer>
   </form>
 </dialog>
