@@ -14,7 +14,7 @@
   var erledigtOffen = false;
   var importPuffer = null;
 
-  var filter = { suche: '', bereich: '', prio: '', status: '', verant: '' };
+  var filter = { suche: '', bereich: '', thema: '', prio: '', status: '', verant: '' };
 
   var PRIO_RANK = { 'Hoch': 0, 'Mittel': 1, 'Niedrig': 2 };
   var STATUS_RANK = { 'Offen': 0, 'In Arbeit': 1, 'Erledigt': 2 };
@@ -82,6 +82,7 @@
 
   function sichtbar(e) {
     if (filter.bereich && e.bereich !== filter.bereich) return false;
+    if (filter.thema && e.thema !== filter.thema) return false;
     if (filter.prio && e.prio !== filter.prio) return false;
     if (filter.status && e.status !== filter.status) return false;
     if (filter.verant) {
@@ -103,7 +104,7 @@
   }
 
   function filterAktiv() {
-    return !!(filter.suche || filter.bereich || filter.prio || filter.status || filter.verant || quick);
+    return !!(filter.suche || filter.bereich || filter.thema || filter.prio || filter.status || filter.verant || quick);
   }
 
   function sortiereKarten(a, b) {
@@ -132,6 +133,7 @@
   function render() {
     var alle = Store.state.entries;
     renderKpis(alle);
+    fuelleThemaFilter(alle);
     fuelleVerantFilter(alle);
     $('#btnFilterReset').hidden = !filterAktiv();
 
@@ -383,6 +385,19 @@
       .forEach(function (n) { dl.appendChild(new Option(n)); });
   }
 
+  function fuelleThemaFilter(alle) {
+    var sel = $('#fThema');
+    var themen = {};
+    alle.forEach(function (e) { if (e.thema) themen[e.thema] = true; });
+    var liste = Object.keys(themen).sort();
+    var aktuell = filter.thema;
+    sel.textContent = '';
+    sel.appendChild(new Option('Alle Themen', ''));
+    liste.forEach(function (t) { sel.appendChild(new Option(t, t)); });
+    sel.value = liste.indexOf(aktuell) >= 0 ? aktuell : '';
+    if (sel.value !== aktuell) filter.thema = sel.value;
+  }
+
   /* ---------------------------------------------------------- Lightbox */
 
   function zeigeLightbox(src, alt) {
@@ -621,7 +636,7 @@
       var v = ev.target.value.trim().toLowerCase();
       t = setTimeout(function () { filter.suche = v; render(); }, 120);
     });
-    [['#fBereich', 'bereich'], ['#fPrio', 'prio'], ['#fStatus', 'status'], ['#fVerant', 'verant']]
+    [['#fBereich', 'bereich'], ['#fThema', 'thema'], ['#fPrio', 'prio'], ['#fStatus', 'status'], ['#fVerant', 'verant']]
       .forEach(function (pair) {
         $(pair[0]).addEventListener('change', function (ev) {
           filter[pair[1]] = ev.target.value;
@@ -629,10 +644,10 @@
         });
       });
     $('#btnFilterReset').addEventListener('click', function () {
-      filter = { suche: '', bereich: '', prio: '', status: '', verant: '' };
+      filter = { suche: '', bereich: '', thema: '', prio: '', status: '', verant: '' };
       quick = null;
       $('#suche').value = '';
-      ['#fBereich', '#fPrio', '#fStatus', '#fVerant'].forEach(function (s) { $(s).value = ''; });
+      ['#fBereich', '#fThema', '#fPrio', '#fStatus', '#fVerant'].forEach(function (s) { $(s).value = ''; });
       render();
     });
 
