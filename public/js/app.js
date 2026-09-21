@@ -609,6 +609,28 @@
 
     $('#userName').addEventListener('change', function (ev) { Store.setUser(ev.target.value.trim()); });
 
+    // Dark Mode
+    (function () {
+      var btn = $('#btnDark');
+      var saved = null;
+      try { saved = localStorage.getItem('opl.theme'); } catch (e) {}
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+      function updateIcon() {
+        var theme = document.documentElement.getAttribute('data-theme');
+        var isDark = theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        btn.textContent = isDark ? '☀' : '☾';
+      }
+      updateIcon();
+      btn.addEventListener('click', function () {
+        var theme = document.documentElement.getAttribute('data-theme');
+        var isDark = theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        var next = isDark ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        try { localStorage.setItem('opl.theme', next); } catch (e) {}
+        updateIcon();
+      });
+    })();
+
     // Menü
     var panel = $('#menuPanel');
     $('#btnMenu').addEventListener('click', function (ev) {
