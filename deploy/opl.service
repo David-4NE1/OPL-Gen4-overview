@@ -1,0 +1,34 @@
+# systemd-Unit fuer den OPL-Server.
+#
+# Ablegen unter /etc/systemd/system/opl.service, Pfade und Benutzer anpassen, dann:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now opl
+#   journalctl -u opl -f
+
+[Unit]
+Description=OPL 4NE1 Gen4 – Open Point List
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=opl
+Group=opl
+WorkingDirectory=/opt/opl-gen4
+ExecStart=/usr/bin/node /opt/opl-gen4/server/server.js
+Environment=PORT=8787
+Environment=HOST=0.0.0.0
+Environment=OPL_DATA=/var/lib/opl
+Restart=always
+RestartSec=3
+
+# Der Dienst braucht nur seinen Datenordner beschreibbar.
+StateDirectory=opl
+ProtectSystem=strict
+ReadWritePaths=/var/lib/opl
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

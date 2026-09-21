@@ -363,6 +363,26 @@
     });
     $('#standLine').textContent = 'Open Point List · ' + alle.length + ' Punkte · Stand ' +
       Xlsx.ddmmyyyy(Store.heute());
+    renderVerbindung();
+  }
+
+  function renderVerbindung() {
+    var n = $('#verbindung');
+    if (Store.state.modus !== 'server') {
+      n.className = 'conn conn--lokal';
+      n.textContent = '● Lokal';
+      n.title = 'Kein Server erreichbar – der Stand liegt nur in diesem Browser. ' +
+        'Austausch über Excel-Export/-Import.';
+    } else if (Store.state.verbunden) {
+      n.className = 'conn conn--live';
+      n.textContent = '● Live';
+      n.title = 'Mit dem OPL-Server verbunden – alle sehen denselben Stand.';
+    } else {
+      n.className = 'conn conn--weg';
+      n.textContent = '● Getrennt';
+      n.title = 'Verbindung zum OPL-Server unterbrochen. Es wird automatisch neu verbunden; ' +
+        'Änderungen werden solange nicht gespeichert.';
+    }
   }
 
   function fuelleVerantFilter(alle) {
@@ -538,8 +558,15 @@
 
   function zeigeLog() {
     var box = $('#logList');
+    box.textContent = 'Wird geladen …';
+    $('#dlgLog').showModal();
+    Store.holeLog().then(renderLog);
+  }
+
+  function renderLog(log) {
+    var box = $('#logList');
     box.textContent = '';
-    var eintraege = Store.state.log.slice().reverse();
+    var eintraege = log.slice().reverse();
     if (!eintraege.length) {
       box.appendChild(el('div', null, 'Noch keine Änderungen protokolliert.'));
     }
@@ -552,7 +579,6 @@
         new Date(l.wann).toLocaleString('de-DE')));
       box.appendChild(d);
     });
-    $('#dlgLog').showModal();
   }
 
   /* --------------------------------------------------------------- Init */
@@ -566,9 +592,8 @@
     Store.STATI.forEach(function (s) { $('#fStatus').appendChild(new Option(s, s)); });
 
     Store.onError(function (msg) { toast(msg, true); });
-    Store.load();
+    Store.onInfo(function (msg) { toast(msg); });
     Store.subscribe(render);
-    $('#userName').value = Store.state.user;
 
     // Filter
     var t;
@@ -634,10 +659,15 @@
         $('#dlgImport').showModal();
       } else if (act === 'log') zeigeLog();
       else if (act === 'reset') {
-        if (confirm('Wirklich alle Änderungen verwerfen und den Excel-Startstand ' +
-                    '(29 Punkte, 21.09.2026) wiederherstellen?')) {
-          Store.reset();
-          toast('Startstand wiederhergestellt.');
+        var warnung = Store.state.modus === 'server'
+          ? 'Wirklich alle Änderungen verwerfen und den Excel-Startstand wiederherstellen? ' +
+            'Das gilt für ALLE im Team, nicht nur für dich.'
+          : 'Wirklich alle Änderungen verwerfen und den Excel-Startstand ' +
+            '(29 Punkte, 21.09.2026) wiederherstellen?';
+        if (confirm(warnung)) {
+          Store.reset().then(function () {
+            toast('Startstand wiederhergestellt.');
+          }).catch(function () { /* Meldung kam schon aus dem Store */ });
         }
       }
     });
@@ -648,11 +678,19 @@
     // Edit-Dialog
     $('#fmBilder').addEventListener('change', function (ev) {
       var files = Array.prototype.slice.call(ev.target.files);
-      Promise.all(files.map(ladeBild)).then(function (bilder) {
+      if (!files.length) return;
+      ev.target.disabled = true;
+      Promise.all(files.map(function (f) {
+        return ladeBild(f).then(Store.bildSpeichern);
+      })).then(function (bilder) {
         editBilder = editBilder.concat(bilder);
         renderEditBilder();
+      }).catch(function (err) {
+        toast('Bild konnte nicht übernommen werden: ' + err.message, true);
+      }).then(function () {
+        ev.target.disabled = false;
         ev.target.value = '';
-      }).catch(function (err) { toast(err.message, true); });
+      });
     });
 
     $('#formEdit').addEventListener('submit', function (ev) {
@@ -670,11 +708,14 @@
       };
       if (!data.thema) { toast('Bitte ein Thema angeben.', true); return; }
       if (editNr == null) {
-        var neu = Store.add(data);
-        toast('Punkt #' + neu.nr + ' angelegt.');
+        Store.add(data).then(function (neu) {
+          toast('Punkt #' + neu.nr + ' angelegt.');
+        }).catch(function () { /* Meldung kam schon aus dem Store */ });
       } else {
-        Store.update(editNr, data);
-        toast('Punkt #' + editNr + ' gespeichert.');
+        var nr = editNr;
+        Store.update(nr, data).then(function () {
+          toast('Punkt #' + nr + ' gespeichert.');
+        }).catch(function () { /* Meldung kam schon aus dem Store */ });
       }
       $('#dlgEdit').close();
     });
@@ -683,9 +724,11 @@
       if (editNr == null) return;
       if (!confirm('Punkt #' + editNr + ' wirklich löschen? ' +
                    'Tipp: Status „Erledigt“ behält die Historie.')) return;
-      Store.remove(editNr);
+      var weg = editNr;
       $('#dlgEdit').close();
-      toast('Punkt gelöscht.');
+      Store.remove(weg).then(function () {
+        toast('Punkt #' + weg + ' gelöscht.');
+      }).catch(function () { /* Meldung kam schon aus dem Store */ });
     });
 
     // Import-Dialog
@@ -698,11 +741,15 @@
       if (modus === 'ersetzen' &&
           !confirm('Der aktuelle Stand (' + Store.state.entries.length +
                    ' Punkte) wird komplett ersetzt. Fortfahren?')) return;
-      var res = Store.applyImport(importPuffer, modus);
-      $('#dlgImport').close();
-      toast(modus === 'ersetzen'
-        ? 'Import fertig: Liste durch ' + res.neu + ' Punkte aus der Excel ersetzt.'
-        : 'Import fertig: ' + res.aktualisiert + ' aktualisiert, ' + res.neu + ' neu.');
+      $('#btnImportGo').disabled = true;
+      Store.applyImport(importPuffer, modus).then(function (res) {
+        $('#dlgImport').close();
+        toast(modus === 'ersetzen'
+          ? 'Import fertig: Liste durch ' + res.neu + ' Punkte aus der Excel ersetzt.'
+          : 'Import fertig: ' + res.aktualisiert + ' aktualisiert, ' + res.neu + ' neu.');
+      }).catch(function () {
+        $('#btnImportGo').disabled = false;   // Meldung kam schon aus dem Store
+      });
     });
 
     // Dialoge schließen
@@ -722,6 +769,15 @@
     });
 
     render();
+
+    Store.init().then(function () {
+      $('#userName').value = Store.state.user;
+      render();
+      if (Store.state.modus === 'server') toast('Mit dem OPL-Server verbunden – Live-Stand für alle.');
+    }).catch(function (err) {
+      console.error(err);
+      toast('Start fehlgeschlagen: ' + err.message, true);
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

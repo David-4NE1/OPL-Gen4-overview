@@ -4,16 +4,51 @@ Schlanke Web-App zum Anlegen, Bearbeiten, Filtern und Verfolgen offener Punkte
 der 4NE1-Gen4-Entwicklung. Gedacht als aufgeräumte Version der bestehenden
 Excel-Liste – ein Klick statt Zeilen-Editing, kein Formelwissen nötig.
 
-Kein Build-Step, keine Abhängigkeiten, kein Internet nötig:
-`index.html` im Browser öffnen, fertig.
+Kein Build-Step, keine Fremdbibliotheken – weder im Browser noch auf dem Server.
 
 ## Starten
 
-| Weg | Vorgehen |
-|---|---|
-| Lokal | `index.html` doppelklicken |
-| Im Team | Ordner auf einen Webserver/Fileshare legen und die URL teilen |
-| Lokaler Testserver | `python3 -m http.server 8000`, dann <http://localhost:8000> |
+**Im Team (empfohlen): mit Server, alle sehen denselben Live-Stand.**
+
+```bash
+node server/server.js          # oder: npm start
+```
+
+Dann <http://localhost:8787> öffnen bzw. die Adresse des Rechners im Team teilen.
+Änderungen landen sofort beim Server und werden per Server-Sent-Events an alle
+offenen Browser verteilt – kein Neuladen, kein „wer hat zuletzt gespeichert“.
+Oben im Kopf zeigt eine Plakette **● Live**, dass die Verbindung steht.
+
+Voraussetzung: Node 18 oder neuer. Sonst nichts – kein `npm install`.
+
+| Umgebungsvariable | Standard | Zweck |
+|---|---|---|
+| `PORT` | `8787` | Port |
+| `HOST` | `0.0.0.0` | Netzwerk-Interface (`127.0.0.1` = nur lokal) |
+| `OPL_DATA` | `./data` | Ordner für `opl.json` und hochgeladene Bilder |
+
+**Ohne Server** funktioniert weiterhin alles: `index.html` doppelklicken. Die App
+merkt, dass kein Backend da ist, zeigt **● Lokal** und hält den Stand im
+localStorage. Austausch dann über Excel-Export/-Import.
+
+## Betrieb
+
+Der Server ist ein einzelner Node-Prozess ohne Abhängigkeiten. Beispiel als
+systemd-Dienst (`deploy/opl.service`) oder per Docker (`deploy/Dockerfile`):
+
+```bash
+docker build -t opl-gen4 -f deploy/Dockerfile .
+docker run -d -p 8787:8787 -v opl-daten:/data -e OPL_DATA=/data --name opl opl-gen4
+```
+
+Die Daten liegen in `$OPL_DATA/opl.json` (bei jeder Änderung atomar geschrieben)
+und `$OPL_DATA/images/`. Für ein Backup reicht es, diesen Ordner zu sichern.
+
+**Kein Login.** Das Tool ist für den internen Gebrauch gedacht und hat bewusst
+keine Nutzerverwaltung – wer die URL erreicht, darf lesen und schreiben. Also
+nicht ungeschützt ins offene Netz stellen, sondern ins Firmennetz bzw. VPN, oder
+einen Reverse Proxy mit Authentifizierung davorsetzen. Der Name im Feld oben
+rechts dient nur dem Änderungsprotokoll, nicht der Zugangskontrolle.
 
 ## Bedienung
 
@@ -58,19 +93,49 @@ Export und Import kommen ohne externe Bibliothek aus – `js/xlsx-io.js` schreib
 liest die xlsx-Pakete direkt (ZIP + OOXML). Nichts wird nachgeladen, nichts verlässt
 den Rechner.
 
-## Datenhaltung
+## Datenhaltung und gleichzeitiges Arbeiten
 
-Der Stand liegt im **localStorage des Browsers** und wird nach jeder Änderung sofort
-gespeichert. Beim ersten Start werden die 29 Punkte aus
-`assets/OPL_4NE1_Gen4_Vorlage.xlsx` (Stand 21.09.2026) geladen.
+Im **Servermodus** hält der Server den Stand; jede Änderung wird sofort in
+`data/opl.json` geschrieben und an alle verbundenen Browser verteilt. Beim ersten
+Start werden die 29 Punkte aus `js/seed.js` (generiert aus
+`assets/OPL_4NE1_Gen4_Vorlage.xlsx`, Stand 21.09.2026) übernommen.
 
-> **Wichtig:** Das ist damit ein Stand **pro Browser/Gerät**, kein Live-Server.
-> Der Abgleich im Team läuft über Excel-Export/-Import. Für einen echten gemeinsamen
-> Live-Stand bräuchte es ein Backend – siehe „Offene Punkte“ unten.
+Damit sich zwei Leute nicht gegenseitig überschreiben, hat jeder Punkt eine
+Versionsnummer. Wer auf einem veralteten Stand aufsetzt, bekommt den aktuellen
+Stand angezeigt statt ihn zu überschreiben („Punkt #7 wurde zwischenzeitlich von
+Anna geändert – aktueller Stand übernommen“). Änderungen erscheinen sofort in der
+eigenen Ansicht und werden vom Server bestätigt; schlägt das fehl, springt die
+Anzeige zurück und sagt warum.
+
+Reißt die Verbindung ab, wechselt die Plakette auf **● Getrennt**, die App
+verbindet sich selbst wieder und holt den verpassten Stand nach.
+
+Im **lokalen Modus** liegt der Stand im localStorage dieses Browsers.
 
 Das Menü **⋯ → Änderungsprotokoll** zeigt, wer wann was geändert hat (Name im Feld
 oben rechts eintragen). **⋯ → Auf Excel-Startstand zurücksetzen** verwirft alles und
-lädt die Ausgangsliste neu.
+lädt die Ausgangsliste neu – im Servermodus für das ganze Team.
+
+## API
+
+| Methode | Pfad | Zweck |
+|---|---|---|
+| `GET` | `/api/health` | Erreichbarkeitsprüfung |
+| `GET` | `/api/state` | kompletter Stand `{rev, entries, log}` |
+| `GET` | `/api/events` | Server-Sent-Events mit allen Änderungen |
+| `POST` | `/api/entries` | Punkt anlegen |
+| `PATCH` | `/api/entries/:nr` | Punkt ändern (mit Versionsprüfung, sonst `409`) |
+| `DELETE` | `/api/entries/:nr?user=` | Punkt löschen |
+| `POST` | `/api/import` | Excel-Import (`zusammenfuehren` \| `ersetzen`) |
+| `POST` | `/api/reset` | zurück auf den Excel-Startstand |
+| `POST` | `/api/images` | Bild hochladen (JPEG/PNG/WebP/GIF, max. 8 MB) |
+
+## Tests
+
+```bash
+npm test     # 45 Prüfungen gegen die API: Anlegen, Versionskonflikte, Import,
+             # Bilder, Zugriffsschutz, Persistenz über einen Neustart
+```
 
 ## Dateien
 
@@ -79,10 +144,15 @@ index.html          Oberfläche
 css/app.css         Styles (Desktop, Tablet, Handy)
 js/seed.js          Startdaten, generiert aus der Excel-Vorlage
 js/xlsx-io.js       xlsx-Export/-Import ohne Fremdbibliothek
-js/store.js         Datenhaltung, Persistenz, Änderungsprotokoll
+js/api.js           Verbindung zum Server (HTTP + Server-Sent-Events)
+js/store.js         Datenhaltung in beiden Modi, Änderungsprotokoll
 js/app.js           Rendering, Filter, Dialoge
+server/server.js    Backend: API, Live-Verteilung, statische Auslieferung
+test/api.test.js    Tests gegen die API
+deploy/             Dockerfile und systemd-Unit
 assets/OPL_4NE1_Gen4_Vorlage.xlsx   Ausgangsliste (Stand 21.09.2026)
 assets/img/         Bilder zu Punkt #26 (Kollision Bein, aus dem Mechanik-Review)
+data/               wird vom Server angelegt (nicht im Git)
 ```
 
 ## Browser
@@ -92,11 +162,17 @@ Aktueller Chrome, Edge, Firefox oder Safari. Der Excel-**Import** braucht
 meldet das Tool das verständlich statt stillschweigend zu scheitern. Alles andere
 funktioniert auch in älteren Browsern.
 
-## Offene Punkte
+## Grenzen und mögliche nächste Schritte
 
-- **Gemeinsamer Live-Stand**: aktuell Excel-Austausch statt Server. Ein kleines
-  Backend (oder eine SharePoint-/Teams-Ablage mit einer Datei) wäre der nächste
-  Schritt, wenn mehrere gleichzeitig pflegen sollen.
-- **Bilder** vergrößern den localStorage schnell; sie werden beim Hochladen auf
-  max. 1400 px skaliert und als JPEG (Qualität 0.82) abgelegt. Bei „Speichern
-  fehlgeschlagen“ hilft exportieren und Bilder reduzieren.
+- **Kein Login**: siehe „Betrieb“. Für den Einsatz außerhalb des Firmennetzes
+  bräuchte es einen Reverse Proxy mit Authentifizierung.
+- **Eine Datei als Speicher**: `opl.json` wird komplett gelesen und geschrieben.
+  Für die Größenordnung einer OPL (Hunderte Punkte, eine Handvoll Bearbeiter)
+  völlig ausreichend; für Tausende Einträge wäre SQLite der nächste Schritt.
+- **Feldgenaues Zusammenführen**: Bei gleichzeitigen Änderungen am selben Punkt
+  gewinnt derzeit die erste; die zweite bekommt den aktuellen Stand angezeigt.
+  Ein Zusammenführen pro Feld wäre denkbar, macht die Bedienung aber schwerer
+  nachvollziehbar.
+- **Bilder** werden beim Hochladen auf max. 1400 px skaliert und als JPEG
+  (Qualität 0.82) abgelegt. Im lokalen Modus landen sie im localStorage; bei
+  „Speichern fehlgeschlagen“ hilft exportieren und Bilder reduzieren.

@@ -1,0 +1,13 @@
+{
+  "name": "opl-4ne1-gen4",
+  "version": "1.0.0",
+  "description": "Open Point List Tool fuer die 4NE1-Gen4-Entwicklung, mit Live-Backend und Excel-Export/-Import",
+  "private": true,
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node test/api.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

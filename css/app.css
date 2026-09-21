@@ -46,6 +46,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .topbar__title h1 { margin: 0; font-size: 18px; letter-spacing: .3px; }
 .topbar__title h1 span { opacity: .5; }
 .topbar__title p { margin: 1px 0 0; font-size: 11.5px; opacity: .65; }
+.conn {
+  display: inline-block; vertical-align: middle; margin-left: 6px;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .3px;
+  background: rgba(255, 255, 255, .14); color: #fff; opacity: 1;
+  cursor: help;
+}
+.conn--live { background: rgba(120, 220, 140, .2); color: #a8e0a2; }
+.conn--lokal { background: rgba(255, 255, 255, .14); color: #cbd6e2; }
+.conn--weg { background: rgba(255, 140, 130, .24); color: #ffb3ad; }
 .topbar__actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
 
 .user-input {
