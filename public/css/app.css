@@ -185,6 +185,24 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 .group__body { display: none; margin-top: 10px; }
 .group.is-open .group__body { display: block; }
 
+.progress { display: flex; height: 6px; border-radius: 3px; overflow: hidden; flex: 0 0 100px; background: var(--line); }
+.progress__seg { height: 100%; transition: width .2s; }
+.progress__seg--erledigt { background: var(--niedrig); }
+.progress__seg--arbeit { background: var(--mittel); }
+.progress__seg--offen { background: var(--hoch); opacity: .5; }
+
+.filter-banner {
+  display: flex; align-items: center; gap: 8px; padding: 7px 16px;
+  background: var(--accent); color: #fff; font-size: 13px;
+}
+.filter-banner[hidden] { display: none; }
+.filter-banner__text { flex: 1; }
+.filter-banner__close {
+  border: 0; background: rgba(255,255,255,.2); color: #fff; border-radius: 6px;
+  padding: 3px 10px; cursor: pointer; font-size: 12px;
+}
+.filter-banner__close:hover { background: rgba(255,255,255,.35); }
+
 .pill {
   display: inline-block; padding: 1px 8px; border-radius: 999px;
   font-size: 11px; font-weight: 700;
@@ -210,7 +228,10 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 .card--erledigt { opacity: .72; }
 .card--erledigt .card__todo { text-decoration: line-through; text-decoration-color: rgba(0, 0, 0, .25); }
 
-.card__top { display: flex; align-items: center; gap: 8px; }
+.card__top { display: flex; align-items: center; gap: 8px; margin: -12px -13px 0; padding: 9px 13px; border-radius: var(--radius) var(--radius) 0 0; }
+.card--hoch .card__top { background: var(--hoch-bg); }
+.card--mittel .card__top { background: var(--mittel-bg); }
+.card--niedrig .card__top { background: var(--niedrig-bg); }
 .card__nr { font-size: 11px; font-weight: 700; color: var(--ink-soft); min-width: 26px; }
 .card__thema { font-weight: 600; flex: 1; }
 .card__edit { border: 0; background: none; cursor: pointer; opacity: .4; padding: 2px 4px; border-radius: 6px; }

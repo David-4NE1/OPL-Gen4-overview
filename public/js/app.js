@@ -135,9 +135,30 @@
     renderKpis(alle);
     fuelleThemaFilter(alle);
     fuelleVerantFilter(alle);
-    $('#btnFilterReset').hidden = !filterAktiv();
+    var istAktiv = filterAktiv();
+    $('#btnFilterReset').hidden = !istAktiv;
 
     var liste = alle.filter(sichtbar);
+
+    var banner = $('#filterBanner');
+    if (istAktiv) {
+      var teile = [];
+      if (quick) {
+        var ql = { offen: 'Offen', erledigt: 'Erledigt', hoch: 'Prio Hoch', mittel: 'Prio Mittel', niedrig: 'Prio Niedrig', ueberfaellig: 'Überfällig' };
+        teile.push(ql[quick] || quick);
+      }
+      if (filter.bereich) teile.push('Bereich: ' + filter.bereich);
+      if (filter.thema) teile.push('Thema: ' + filter.thema);
+      if (filter.prio) teile.push('Prio: ' + filter.prio);
+      if (filter.status) teile.push('Status: ' + filter.status);
+      if (filter.verant) teile.push('Verantwortlich: ' + filter.verant);
+      if (filter.suche) teile.push('Suche: "' + filter.suche + '"');
+      $('#filterBannerText').textContent = 'Zeige ' + liste.length + ' von ' + alle.length + ' Punkten — ' + teile.join(', ');
+      banner.hidden = false;
+    } else {
+      banner.hidden = true;
+    }
+
     var content = $('#content');
     content.textContent = '';
 
@@ -190,6 +211,24 @@
       });
       var ueber = eintraege.filter(Store.istUeberfaellig).length;
       if (ueber) head.appendChild(el('span', 'pill pill--hoch', '⚠ ' + ueber + ' überfällig'));
+
+      var alleImBereich = Store.state.entries.filter(function (e) { return e.bereich === titel; });
+      var total = alleImBereich.length;
+      if (total) {
+        var nErl = alleImBereich.filter(function (e) { return e.status === 'Erledigt'; }).length;
+        var nArb = alleImBereich.filter(function (e) { return e.status === 'In Arbeit'; }).length;
+        var nOff = total - nErl - nArb;
+        var bar = el('span', 'progress');
+        var s1 = el('span', 'progress__seg progress__seg--erledigt');
+        s1.style.width = (nErl / total * 100) + '%';
+        var s2 = el('span', 'progress__seg progress__seg--arbeit');
+        s2.style.width = (nArb / total * 100) + '%';
+        var s3 = el('span', 'progress__seg progress__seg--offen');
+        s3.style.width = (nOff / total * 100) + '%';
+        bar.appendChild(s1); bar.appendChild(s2); bar.appendChild(s3);
+        bar.title = nErl + ' erledigt, ' + nArb + ' in Arbeit, ' + nOff + ' offen';
+        head.appendChild(bar);
+      }
     }
     head.appendChild(el('span', 'group__count', eintraege.length + (eintraege.length === 1 ? ' Punkt' : ' Punkte')));
 
@@ -643,13 +682,15 @@
           render();
         });
       });
-    $('#btnFilterReset').addEventListener('click', function () {
+    function resetFilter() {
       filter = { suche: '', bereich: '', thema: '', prio: '', status: '', verant: '' };
       quick = null;
       $('#suche').value = '';
       ['#fBereich', '#fThema', '#fPrio', '#fStatus', '#fVerant'].forEach(function (s) { $(s).value = ''; });
       render();
-    });
+    }
+    $('#btnFilterReset').addEventListener('click', resetFilter);
+    $('#filterBannerClose').addEventListener('click', resetFilter);
 
     $$('.kpi').forEach(function (b) {
       b.addEventListener('click', function () {
