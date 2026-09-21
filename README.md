@@ -14,6 +14,32 @@ Kein Build-Step, keine Abhängigkeiten, kein Internet nötig:
 | Lokal | `index.html` doppelklicken |
 | Im Team | Ordner auf einen Webserver/Fileshare legen und die URL teilen |
 | Lokaler Testserver | `python3 -m http.server 8000`, dann <http://localhost:8000> |
+| Öffentlich per URL | GitHub Pages, siehe „Deployment“ |
+
+## Deployment (GitHub Pages)
+
+`.github/workflows/pages.yml` deployt das Repo-Root bei jedem Push als statische
+Seite – kein Build, keine Abhängigkeiten. Einmalig nötig:
+
+1. **Settings → Pages → Build and deployment → Source: „GitHub Actions”** setzen.
+   Ohne diesen Schritt bricht der Deploy mit `Get Pages site failed … Not Found`
+   ab. Das lässt sich nicht im Workflow erledigen – der `GITHUB_TOKEN` darf die
+   Pages-Site nicht anlegen (`Resource not accessible by integration`).
+2. Push auf `main` (oder einen `claude/**`-Branch) bzw. **Actions → Deploy to
+   GitHub Pages → Run workflow** manuell auslösen.
+3. Die URL steht danach unter Settings → Pages bzw. am Deploy-Job:
+   `https://<user>.github.io/OPL-Gen4-overview/`
+
+Hinweise:
+
+- Bei einem **privaten** Repo braucht GitHub Pages einen bezahlten Plan (Pro/Team/
+  Enterprise). Auf dem Free-Plan das Repo auf public stellen oder anders hosten
+  (SharePoint-Ordner, interner Webserver, Netlify/Vercel – überall reicht das
+  Hochladen der Dateien, da kein Build nötig ist).
+- Die Pages-Site eines **public** Repos ist immer öffentlich erreichbar.
+- Pages liefert nur die Dateien aus. Der **Datenstand bleibt pro Browser** im
+  localStorage – eine öffentliche URL macht daraus noch keinen gemeinsamen
+  Live-Stand, siehe „Offene Punkte“.
 
 ## Bedienung
 
