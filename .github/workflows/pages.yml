@@ -26,7 +26,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # enablement: schaltet Pages per API auf "GitHub Actions", falls noch
+      # nicht konfiguriert – sonst scheitert der Run mit "Get Pages site failed".
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       # Kein Build-Step: die Seite ist statisch, das Repo-Root ist das Artefakt.
       - uses: actions/upload-pages-artifact@v3
