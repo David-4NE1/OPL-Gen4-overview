@@ -5,4 +5,4 @@ compatibility_date = "2024-09-25"
 [[d1_databases]]
 binding = "DB"
 database_name = "opl-gen4"
-database_id = "placeholder-replace-after-creation"
+database_id = "71f6b523-36a9-4483-9f33-7df365cbe4ce"
