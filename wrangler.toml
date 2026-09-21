@@ -1,0 +1,20 @@
+# Cloudflare Worker + Static Assets
+#
+# Statische Dateien kommen aus dem Repo-Root.
+# Der Worker handelt nur /api/*-Requests (D1-Backend).
+# Alles andere (index.html, css/, js/, assets/) wird direkt als Asset ausgeliefert.
+
+name = "opl-gen4-overview"
+main = "worker/index.js"
+compatibility_date = "2024-09-25"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "opl-gen4"
+database_id = "71f6b523-36a9-4483-9f33-7df365cbe4ce"

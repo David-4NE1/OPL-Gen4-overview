@@ -34,7 +34,7 @@ jobs:
       # Kein Build-Step: die Seite ist statisch, das Repo-Root ist das Artefakt.
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: ./public
 
       - id: deployment
         uses: actions/deploy-pages@v4
