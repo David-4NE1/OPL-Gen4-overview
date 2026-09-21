@@ -1,0 +1,18 @@
+# Cloudflare Pages Konfiguration
+#
+# Das Projekt wird als Cloudflare Pages ausgeliefert:
+# - Statische Dateien (index.html, css/, js/, assets/) direkt
+# - API über Pages Functions (functions/api/)
+# - D1-Datenbank für den gemeinsamen Stand
+#
+# Im Cloudflare-Dashboard unter Workers & Pages:
+#   Settings → Functions → D1 database bindings → Variable: DB → Database: opl-gen4
+
+name = "opl-gen4-overview"
+compatibility_date = "2024-09-25"
+pages_build_output_dir = "."
+
+[[d1_databases]]
+binding = "DB"
+database_name = "opl-gen4"
+database_id = "71f6b523-36a9-4483-9f33-7df365cbe4ce"
