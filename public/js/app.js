@@ -435,6 +435,10 @@
     liste.forEach(function (t) { sel.appendChild(new Option(t, t)); });
     sel.value = liste.indexOf(aktuell) >= 0 ? aktuell : '';
     if (sel.value !== aktuell) filter.thema = sel.value;
+
+    var dl = $('#themenListe');
+    dl.textContent = '';
+    liste.forEach(function (t) { dl.appendChild(new Option(t)); });
   }
 
   /* ---------------------------------------------------------- Lightbox */

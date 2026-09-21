@@ -100,7 +100,8 @@
         <select name="bereich" id="fmBereich" required></select>
       </label>
       <label>Thema/Aufgabe
-        <input name="thema" id="fmThema" type="text" required placeholder="z. B. Lagerkonzept Kugellager">
+        <input name="thema" id="fmThema" type="text" required list="themenListe" placeholder="z. B. Lagerkonzept Kugellager" autocomplete="off">
+        <datalist id="themenListe"></datalist>
       </label>
       <label>Prio
         <select name="prio" id="fmPrio"></select>
