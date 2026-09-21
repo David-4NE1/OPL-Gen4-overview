@@ -1,16 +1,18 @@
-# Cloudflare Pages Konfiguration
+# Cloudflare Worker + Static Assets
 #
-# Das Projekt wird als Cloudflare Pages ausgeliefert:
-# - Statische Dateien (index.html, css/, js/, assets/) direkt
-# - API über Pages Functions (functions/api/)
-# - D1-Datenbank für den gemeinsamen Stand
-#
-# Im Cloudflare-Dashboard unter Workers & Pages:
-#   Settings → Functions → D1 database bindings → Variable: DB → Database: opl-gen4
+# Statische Dateien kommen aus dem Repo-Root.
+# Der Worker handelt nur /api/*-Requests (D1-Backend).
+# Alles andere (index.html, css/, js/, assets/) wird direkt als Asset ausgeliefert.
 
 name = "opl-gen4-overview"
+main = "worker/index.js"
 compatibility_date = "2024-09-25"
-pages_build_output_dir = "."
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "."
+binding = "ASSETS"
+not_found_handling = "none"
 
 [[d1_databases]]
 binding = "DB"

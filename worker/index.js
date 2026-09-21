@@ -34,12 +34,14 @@ export default {
       }
     }
 
-    // --- Static assets (Pages serves these, Worker only handles /api/) ---
-    // If deployed as Pages Function, return nothing here; Pages handles static.
-    // If deployed standalone, return a hint.
-    return new Response('OPL Gen4 API – static files are served by Cloudflare Pages.', {
-      status: 200, headers: { 'content-type': 'text/plain' }
-    });
+    // --- Static assets ---
+    // Nicht-API-Requests an den Asset-Binding weiterleiten.
+    // Wrangler [assets] bedient sie normalerweise automatisch, aber
+    // falls der Request hier ankommt, explizit durchreichen.
+    if (env.ASSETS) {
+      return env.ASSETS.fetch(request);
+    }
+    return new Response('Not found', { status: 404 });
   }
 };
 
@@ -151,7 +153,7 @@ async function handleAPI(url, method, request, env) {
 
   // POST /api/reset
   if (path === '/api/reset' && method === 'POST') {
-    const seed = (await import('./seed.json', { assert: { type: 'json' } })).default;
+    const seed = (await import('./seed.json', { with: { type: 'json' } })).default;
     await db.prepare('DELETE FROM entries').run();
     await db.prepare('DELETE FROM changelog').run();
     const stmts = seed.map(raw => insertStmt(db, normalize(raw)));
