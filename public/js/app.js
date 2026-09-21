@@ -395,6 +395,7 @@
 
   var editNr = null;
   var editBilder = [];
+  var editListe = [];
 
   function fuelleSelect(sel, werte) {
     sel.textContent = '';
@@ -417,12 +418,55 @@
     editBilder = e ? Store.clone(e.bilder) : [];
     renderEditBilder();
     $('#btnDelete').hidden = !e;
-    $('#dlgEdit').showModal();
+
+    if (e && !editListe.length) {
+      editListe = Store.state.entries.filter(sichtbar).map(function (x) { return x.nr; });
+    }
+    var hasNav = e && editListe.length > 1;
+    $('#editNav').hidden = !hasNav;
+    $('#btnSaveNext').hidden = !hasNav;
+    if (hasNav) {
+      var idx = editListe.indexOf(nr);
+      $('#editPos').textContent = (idx + 1) + ' von ' + editListe.length;
+    }
+
+    if (!$('#dlgEdit').open) $('#dlgEdit').showModal();
     setTimeout(function () {
       if (fokus === 'faellig') $('#fmFaellig').focus();
       else if (fokus === 'verant') $('#fmVerant').focus();
       else $('#fmThema').focus();
     }, 30);
+  }
+
+  function editSpeichern() {
+    var data = {
+      bereich: $('#fmBereich').value,
+      thema: $('#fmThema').value.trim(),
+      prio: $('#fmPrio').value,
+      status: $('#fmStatus').value,
+      verantwortlicher: $('#fmVerant').value.trim(),
+      faellig: $('#fmFaellig').value,
+      todo: $('#fmTodo').value.trim(),
+      notiz: $('#fmNotiz').value.trim(),
+      bilder: editBilder
+    };
+    if (!data.thema) { toast('Bitte ein Thema angeben.', true); return false; }
+    if (editNr == null) {
+      var neu = Store.add(data);
+      toast('Punkt #' + neu.nr + ' angelegt.');
+    } else {
+      Store.update(editNr, data);
+    }
+    return true;
+  }
+
+  function editNavigiere(richtung) {
+    if (!editListe.length) return;
+    var idx = editListe.indexOf(editNr);
+    var next = idx + richtung;
+    if (next < 0) next = editListe.length - 1;
+    if (next >= editListe.length) next = 0;
+    oeffneEdit(editListe[next]);
   }
 
   function renderEditBilder() {
@@ -679,33 +723,35 @@
 
     $('#formEdit').addEventListener('submit', function (ev) {
       ev.preventDefault();
-      var data = {
-        bereich: $('#fmBereich').value,
-        thema: $('#fmThema').value.trim(),
-        prio: $('#fmPrio').value,
-        status: $('#fmStatus').value,
-        verantwortlicher: $('#fmVerant').value.trim(),
-        faellig: $('#fmFaellig').value,
-        todo: $('#fmTodo').value.trim(),
-        notiz: $('#fmNotiz').value.trim(),
-        bilder: editBilder
-      };
-      if (!data.thema) { toast('Bitte ein Thema angeben.', true); return; }
-      if (editNr == null) {
-        var neu = Store.add(data);
-        toast('Punkt #' + neu.nr + ' angelegt.');
-      } else {
-        Store.update(editNr, data);
+      if (editSpeichern()) {
         toast('Punkt #' + editNr + ' gespeichert.');
+        editListe = [];
+        $('#dlgEdit').close();
       }
-      $('#dlgEdit').close();
+    });
+
+    $('#btnSaveNext').addEventListener('click', function () {
+      if (editSpeichern()) {
+        editNavigiere(1);
+      }
+    });
+
+    $('#btnPrev').addEventListener('click', function () { editNavigiere(-1); });
+    $('#btnNext').addEventListener('click', function () { editNavigiere(1); });
+
+    $('#dlgEdit').addEventListener('keydown', function (ev) {
+      var tag = document.activeElement.tagName;
+      if (tag === 'TEXTAREA') return;
+      if (ev.altKey && ev.key === 'ArrowLeft') { ev.preventDefault(); editNavigiere(-1); }
+      if (ev.altKey && ev.key === 'ArrowRight') { ev.preventDefault(); editNavigiere(1); }
     });
 
     $('#btnDelete').addEventListener('click', function () {
       if (editNr == null) return;
       if (!confirm('Punkt #' + editNr + ' wirklich löschen? ' +
-                   'Tipp: Status „Erledigt“ behält die Historie.')) return;
+                   'Tipp: Status „Erledigt” behält die Historie.')) return;
       Store.remove(editNr);
+      editListe = [];
       $('#dlgEdit').close();
       toast('Punkt gelöscht.');
     });

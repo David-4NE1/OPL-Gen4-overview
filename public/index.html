@@ -77,7 +77,15 @@
 <!-- Dialog: Punkt anlegen/bearbeiten -->
 <dialog id="dlgEdit" class="dialog">
   <form id="formEdit" method="dialog">
-    <h2 id="dlgEditTitle">Neuer Punkt</h2>
+    <div class="dialog__nav">
+      <h2 id="dlgEditTitle">Neuer Punkt</h2>
+      <span class="spacer"></span>
+      <span id="editNav" hidden>
+        <button type="button" id="btnPrev" class="btn btn--ghost btn--nav" title="Vorheriger (←)">&#8249;</button>
+        <span id="editPos" class="edit-pos"></span>
+        <button type="button" id="btnNext" class="btn btn--ghost btn--nav" title="Nächster (→)">&#8250;</button>
+      </span>
+    </div>
     <div class="grid2">
       <label>Bereich
         <select name="bereich" id="fmBereich" required></select>
@@ -114,6 +122,7 @@
       <span class="spacer"></span>
       <button type="button" class="btn btn--ghost" data-close>Abbrechen</button>
       <button type="submit" class="btn btn--primary">Speichern</button>
+      <button type="button" id="btnSaveNext" class="btn btn--primary" hidden>Speichern &amp; weiter ›</button>
     </footer>
   </form>
 </dialog>
