@@ -21,11 +21,13 @@ Kein Build-Step, keine Abhängigkeiten, kein Internet nötig:
 `.github/workflows/pages.yml` deployt das Repo-Root bei jedem Push als statische
 Seite – kein Build, keine Abhängigkeiten. Einmalig nötig:
 
-1. Push auf `main` (oder einen `claude/**`-Branch) bzw. **Actions → Deploy to
-   GitHub Pages → Run workflow** manuell auslösen. Pages wird dabei per
-   `enablement: true` automatisch auf „GitHub Actions” gestellt – kein Klick in
-   den Settings nötig.
-2. Die URL steht danach unter Settings → Pages bzw. am Deploy-Job:
+1. **Settings → Pages → Build and deployment → Source: „GitHub Actions”** setzen.
+   Ohne diesen Schritt bricht der Deploy mit `Get Pages site failed … Not Found`
+   ab. Das lässt sich nicht im Workflow erledigen – der `GITHUB_TOKEN` darf die
+   Pages-Site nicht anlegen (`Resource not accessible by integration`).
+2. Push auf `main` (oder einen `claude/**`-Branch) bzw. **Actions → Deploy to
+   GitHub Pages → Run workflow** manuell auslösen.
+3. Die URL steht danach unter Settings → Pages bzw. am Deploy-Job:
    `https://<user>.github.io/OPL-Gen4-overview/`
 
 Hinweise:
