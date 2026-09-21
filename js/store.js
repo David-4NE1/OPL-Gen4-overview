@@ -1,12 +1,29 @@
 /*
- * store.js – Datenhaltung, Persistenz und Änderungsprotokoll.
+ * store.js – Datenhaltung mit Cloudflare D1 als Backend.
  *
- * Persistiert wird sofort nach jeder Änderung im localStorage.
- * Der Abgleich zwischen mehreren Bearbeitern läuft über
- * Excel-Export/-Import (siehe README).
+ * Lädt beim Start alle Einträge per API, hält sie im Speicher und
+ * synchronisiert Änderungen im Hintergrund zurück an die API.
+ * localStorage dient als Offline-Fallback und Zwischenspeicher.
  */
 (function (global) {
   'use strict';
+
+  var API = (function () {
+    // Wenn die Seite direkt vom Worker/Pages kommt, ist die API relativ.
+    // Ansonsten konfigurierbar:
+    var base = global.__OPL_API_BASE || '';
+    return {
+      get:    function (p) { return fetch(base + p).then(toJSON); },
+      post:   function (p, d) { return fetch(base + p, { method: 'POST', headers: CT, body: JSON.stringify(d) }).then(toJSON); },
+      put:    function (p, d) { return fetch(base + p, { method: 'PUT', headers: CT, body: JSON.stringify(d) }).then(toJSON); },
+      del:    function (p) { return fetch(base + p, { method: 'DELETE' }).then(toJSON); }
+    };
+    function toJSON(r) {
+      if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || r.statusText); });
+      return r.json();
+    }
+  })();
+  var CT = { 'content-type': 'application/json' };
 
   var KEY = 'opl.4ne1.gen4.v1';
 
@@ -19,6 +36,7 @@
 
   var state = { entries: [], log: [], user: '' };
   var listeners = [];
+  var online = true;  // ob die API erreichbar ist
 
   function heute() { return new Date().toISOString().slice(0, 10); }
   function jetzt() { return new Date().toISOString(); }
@@ -42,37 +60,81 @@
     };
   }
 
-  function load() {
-    var raw = null;
-    try { raw = global.localStorage.getItem(KEY); } catch (err) { raw = null; }
-    if (raw) {
-      try {
-        var parsed = JSON.parse(raw);
-        state.entries = (parsed.entries || []).map(normalizeEntry);
-        state.log = parsed.log || [];
-        state.user = parsed.user || '';
-        if (state.entries.length) return;
-      } catch (err) {
-        console.warn('Gespeicherter Stand unlesbar, starte mit Seed-Daten.', err);
-      }
-    }
-    state.entries = (global.OPL_SEED || []).map(normalizeEntry);
-    state.log = [];
-    save();
-  }
+  /* ---- Persistenz: lokal als Fallback ---- */
 
-  function save() {
+  function saveLocal() {
     try {
       global.localStorage.setItem(KEY, JSON.stringify({
         entries: state.entries, log: state.log.slice(-500), user: state.user
       }));
-      return true;
-    } catch (err) {
-      console.error('Speichern fehlgeschlagen', err);
-      notifyError('Speichern fehlgeschlagen – vermutlich ist der lokale Speicher voll ' +
-        '(zu viele/zu große Bilder). Bitte exportieren und Bilder verkleinern.');
-      return false;
+    } catch (err) { /* voll – ignorieren */ }
+  }
+
+  function loadLocal() {
+    try {
+      var raw = global.localStorage.getItem(KEY);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        state.entries = (parsed.entries || []).map(normalizeEntry);
+        state.log = parsed.log || [];
+        state.user = parsed.user || '';
+        return state.entries.length > 0;
+      }
+    } catch (err) { /* ignorieren */ }
+    return false;
+  }
+
+  /* ---- API-Sync ---- */
+
+  function syncToAPI(method, path, data) {
+    var p;
+    if (method === 'POST') p = API.post(path, data);
+    else if (method === 'PUT') p = API.put(path, data);
+    else if (method === 'DELETE') p = API.del(path);
+    else return;
+
+    p.catch(function (err) {
+      console.warn('API-Sync fehlgeschlagen:', err.message);
+      online = false;
+    });
+  }
+
+  function load() {
+    // Erst lokal laden (für sofortige Anzeige)
+    var hadLocal = loadLocal();
+
+    // Dann von API laden
+    API.get('/api/entries')
+      .then(function (entries) {
+        online = true;
+        state.entries = entries.map(normalizeEntry);
+        saveLocal();
+        emit();
+      })
+      .catch(function (err) {
+        console.warn('API nicht erreichbar, verwende lokalen Stand:', err.message);
+        online = false;
+        if (!hadLocal) {
+          // Seed-Daten als letzter Fallback
+          state.entries = (global.OPL_SEED || []).map(normalizeEntry);
+          saveLocal();
+        }
+      })
+      .finally(function () {
+        emit();
+      });
+
+    // Falls es lokale Daten gab, sofort rendern (API-Update kommt nach)
+    if (hadLocal) emit();
+    else if (global.OPL_SEED) {
+      state.entries = (global.OPL_SEED || []).map(normalizeEntry);
+      emit();
     }
+  }
+
+  function save() {
+    saveLocal();
+    return true;
   }
 
   var errorHandler = null;
@@ -82,7 +144,7 @@
   function subscribe(fn) { listeners.push(fn); }
   function emit() { listeners.forEach(function (fn) { fn(state); }); }
 
-  function log(nr, text) {
+  function logEntry(nr, text) {
     state.log.push({ nr: nr, text: text, wann: jetzt(), wer: state.user || 'unbekannt' });
   }
 
@@ -104,8 +166,9 @@
     e.geaendertAm = jetzt();
     e.geaendertVon = state.user || 'unbekannt';
     state.entries.push(e);
-    log(e.nr, 'angelegt');
+    logEntry(e.nr, 'angelegt');
     commit();
+    syncToAPI('POST', '/api/entries', Object.assign({}, e, { user: state.user }));
     return e;
   }
 
@@ -115,13 +178,14 @@
     Object.keys(patch).forEach(function (k) {
       if (e[k] === patch[k]) return;
       if (k === 'bilder' || k === 'geaendertAm' || k === 'geaendertVon') { e[k] = patch[k]; return; }
-      log(nr, k + ': "' + (e[k] || '–') + '" → "' + (patch[k] || '–') + '"');
+      logEntry(nr, k + ': "' + (e[k] || '–') + '" → "' + (patch[k] || '–') + '"');
       e[k] = patch[k];
     });
     Object.assign(e, normalizeEntry(e));
     e.geaendertAm = jetzt();
     e.geaendertVon = state.user || 'unbekannt';
     commit();
+    syncToAPI('PUT', '/api/entries/' + nr, Object.assign({}, e, { user: state.user }));
     return e;
   }
 
@@ -129,8 +193,9 @@
     var i = state.entries.findIndex(function (e) { return e.nr === nr; });
     if (i < 0) return false;
     state.entries.splice(i, 1);
-    log(nr, 'gelöscht');
+    logEntry(nr, 'gelöscht');
     commit();
+    syncToAPI('DELETE', '/api/entries/' + nr);
     return true;
   }
 
@@ -149,11 +214,6 @@
     save();
   }
 
-  /**
-   * Import: ersetzt entweder alles oder führt per Nr zusammen.
-   * @param {Array} entries  eingelesene Einträge
-   * @param {string} modus   'ersetzen' | 'zusammenfuehren'
-   */
   function applyImport(entries, modus) {
     var vorher = state.entries.length;
     var bilderProNr = {};
@@ -165,12 +225,11 @@
     if (modus === 'ersetzen') {
       state.entries = entries.map(function (e) {
         var n = normalizeEntry(e);
-        // Bilder liegen nicht in der Excel – lokal vorhandene je Nr erhalten
         if (!n.bilder.length && bilderProNr[n.nr]) n.bilder = bilderProNr[n.nr];
         return n;
       });
       neu = state.entries.length;
-      log(0, 'Excel-Import (ersetzen): ' + vorher + ' → ' + neu + ' Einträge');
+      logEntry(0, 'Excel-Import (ersetzen): ' + vorher + ' → ' + neu + ' Einträge');
     } else {
       entries.forEach(function (raw) {
         var n = normalizeEntry(raw);
@@ -189,10 +248,16 @@
           neu++;
         }
       });
-      log(0, 'Excel-Import (zusammenführen): ' + aktualisiert + ' aktualisiert, ' + neu + ' neu');
+      logEntry(0, 'Excel-Import (zusammenführen): ' + aktualisiert + ' aktualisiert, ' + neu + ' neu');
     }
     state.entries.sort(function (a, b) { return a.nr - b.nr; });
     commit();
+
+    // Bulk-Sync an API
+    syncToAPI('POST', '/api/import', {
+      entries: state.entries, modus: modus, user: state.user
+    });
+
     return { neu: neu, aktualisiert: aktualisiert };
   }
 
@@ -200,6 +265,7 @@
     state.entries = (global.OPL_SEED || []).map(normalizeEntry);
     state.log = [];
     commit();
+    syncToAPI('POST', '/api/reset', {});
   }
 
   function istUeberfaellig(e) {
