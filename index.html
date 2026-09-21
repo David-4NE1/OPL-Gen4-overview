@@ -6,6 +6,16 @@
 <title>OPL 4NE1 Gen4</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#9679;</text></svg>">
 <link rel="stylesheet" href="css/app.css">
+<script>
+// Farbschema noch vor dem ersten Zeichnen setzen, sonst blitzt Hell kurz auf.
+(function () {
+  var wahl = null;
+  try { wahl = localStorage.getItem('opl.theme'); } catch (e) { /* egal */ }
+  var dunkel = wahl ? wahl === 'dunkel'
+    : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.setAttribute('data-theme', dunkel ? 'dark' : 'light');
+})();
+</script>
 </head>
 <body>
 
@@ -39,6 +49,8 @@
   <div class="topbar__actions">
     <input id="userName" class="user-input" type="text" placeholder="Dein Name" autocomplete="name"
            title="Wird im Änderungsprotokoll mitgeschrieben">
+    <button id="btnTheme" class="btn btn--ghost btn--rund" type="button"
+            aria-label="Farbschema wechseln"><span id="btnThemeIcon">◐</span></button>
     <button id="btnNeu" class="btn btn--primary" type="button">+ Neuer Punkt</button>
     <div class="menu">
       <button id="btnMenu" class="btn btn--ghost" type="button" aria-haspopup="true" aria-expanded="false"
@@ -83,10 +95,14 @@
       </div>
       <div class="blaettern" id="blaettern">
         <button type="button" id="btnPrev" title="Vorheriger Punkt (Alt + ←)"
-                aria-label="Vorheriger Punkt">◀</button>
+                aria-label="Vorheriger Punkt">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 7 12l8 8"/></svg>
+        </button>
         <span id="dlgPos">–</span>
         <button type="button" id="btnNext" title="Nächster Punkt (Alt + →)"
-                aria-label="Nächster Punkt">▶</button>
+                aria-label="Nächster Punkt">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4l8 8-8 8"/></svg>
+        </button>
       </div>
     </header>
     <div class="dialog__body">
@@ -131,7 +147,10 @@
       <span class="spacer"></span>
       <button type="button" class="btn btn--ghost" data-close>Abbrechen</button>
       <button type="submit" class="btn">Speichern</button>
-      <button type="button" id="btnWeiter" class="btn btn--primary">Speichern &amp; weiter ▶</button>
+      <button type="button" id="btnWeiter" class="btn btn--primary btn--icon">
+        <span id="btnWeiterText">Speichern &amp; weiter</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4l8 8-8 8"/></svg>
+      </button>
     </footer>
   </form>
 </dialog>

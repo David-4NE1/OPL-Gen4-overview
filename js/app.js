@@ -35,6 +35,66 @@
     return n;
   }
 
+  /** Pfeile & Co. als SVG statt als Zeichen – Unicode-Dreiecke fehlen in
+   *  manchen Systemschriften oder werden als Emoji gerendert. */
+  function icon(d, cls) {
+    var NS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    if (cls) svg.setAttribute('class', cls);
+    var pfad = document.createElementNS(NS, 'path');
+    pfad.setAttribute('d', d);
+    svg.appendChild(pfad);
+    return svg;
+  }
+  var PFEIL_RECHTS = 'M9 4l8 8-8 8';
+  var SONNE = 'M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10M12 1v2M12 21v2M4.2 4.2l1.4 1.4' +
+              'M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4';
+  var MOND = 'M20.5 14.8A8.5 8.5 0 0 1 9.2 3.5a8.5 8.5 0 1 0 11.3 11.3z';
+
+  /* -------------------------------------------------------- Farbschema */
+
+  var THEME_KEY = 'opl.theme';
+
+  function themeLesen() {
+    try { return localStorage.getItem(THEME_KEY); } catch (err) { return null; }
+  }
+  function systemDunkel() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }
+  function istDunkel() {
+    return document.documentElement.getAttribute('data-theme') === 'dark';
+  }
+
+  function themeAnwenden(dunkel) {
+    document.documentElement.setAttribute('data-theme', dunkel ? 'dark' : 'light');
+    var knopf = $('#btnTheme');
+    if (!knopf) return;
+    knopf.textContent = '';
+    knopf.appendChild(icon(dunkel ? SONNE : MOND));
+    knopf.title = dunkel ? 'Zu hellem Farbschema wechseln' : 'Zu dunklem Farbschema wechseln';
+  }
+
+  function themeInit() {
+    var wahl = themeLesen();
+    themeAnwenden(wahl ? wahl === 'dunkel' : systemDunkel());
+
+    // Ohne eigene Wahl der Systemeinstellung folgen, auch wenn sie sich aendert.
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+      var reagiere = function (ev) { if (!themeLesen()) themeAnwenden(ev.matches); };
+      if (mq.addEventListener) mq.addEventListener('change', reagiere);
+      else if (mq.addListener) mq.addListener(reagiere);
+    }
+
+    $('#btnTheme').addEventListener('click', function () {
+      var neu = !istDunkel();
+      themeAnwenden(neu);
+      try { localStorage.setItem(THEME_KEY, neu ? 'dunkel' : 'hell'); } catch (err) { /* egal */ }
+    });
+  }
+
   function slug(s) {
     return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
@@ -192,7 +252,7 @@
     var head = el('button', 'group__head');
     head.type = 'button';
     head.setAttribute('aria-expanded', String(offen));
-    head.appendChild(el('span', 'group__chev', '▶'));
+    head.appendChild(icon(PFEIL_RECHTS, 'group__chev'));
     head.appendChild(el('h2', null, istErledigtGruppe ? '✓ Erledigt' : titel));
 
     if (!istErledigtGruppe) {
@@ -530,8 +590,9 @@
     $('#dlgPos').textContent = (idx + 1) + ' von ' + reihenfolge.length;
     $('#btnPrev').disabled = idx === 0;
     $('#btnNext').disabled = idx === reihenfolge.length - 1;
-    $('#btnWeiter').textContent = idx === reihenfolge.length - 1
-      ? 'Speichern & schließen' : 'Speichern & weiter ▶';
+    var letzter = idx === reihenfolge.length - 1;
+    $('#btnWeiterText').textContent = letzter ? 'Speichern & schließen' : 'Speichern & weiter';
+    $('#btnWeiter').querySelector('svg').style.display = letzter ? 'none' : '';
   }
 
   function oeffneEdit(nr, fokus) {
@@ -703,6 +764,7 @@
   /* --------------------------------------------------------------- Init */
 
   function init() {
+    themeInit();
     fuelleSelect($('#fmBereich'), Store.BEREICHE);
     fuelleSelect($('#fmPrio'), Store.PRIOS);
     fuelleSelect($('#fmStatus'), Store.STATI);

@@ -58,6 +58,14 @@ rechts dient nur dem Änderungsprotokoll, nicht der Zugangskontrolle.
 - **Datum-/Personen-Chip anklicken** → Dialog springt direkt auf das Feld.
 - **KPI-Kacheln oben** sind Schnellfilter (z. B. nur überfällige Punkte).
 - **Taste `n`** legt einen neuen Punkt an.
+- **Sonne/Mond oben rechts** schaltet zwischen hellem und dunklem Farbschema.
+
+### Helles und dunkles Farbschema
+
+Ohne eigene Wahl folgt die App der Systemeinstellung und wechselt mit, wenn
+diese umschaltet. Ein Klick auf Sonne/Mond legt das Schema fest; die Wahl bleibt
+pro Browser gespeichert. Alle Farben laufen über CSS-Tokens, beide Sätze teilen
+sich denselben Regelsatz.
 
 ### Durchblättern statt Dialog auf, Dialog zu
 
