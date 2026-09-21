@@ -456,10 +456,23 @@
     werte.forEach(function (w) { sel.appendChild(new Option(w, w)); });
   }
 
+  function aktualisiereEditTitel() {
+    var thema = $('#fmThema').value.trim();
+    var bereich = $('#fmBereich').value;
+    $('#dlgEditTitle').textContent = thema || (editNr == null ? 'Neuer Punkt' : 'Punkt #' + editNr);
+    var sub = $('#dlgEditSub');
+    if (editNr == null) {
+      sub.textContent = bereich;
+      sub.hidden = false;
+    } else {
+      sub.textContent = '#' + editNr + ' · ' + bereich;
+      sub.hidden = false;
+    }
+  }
+
   function oeffneEdit(nr, fokus) {
     editNr = nr == null ? null : nr;
     var e = nr == null ? null : Store.byNr(nr);
-    $('#dlgEditTitle').textContent = e ? 'Punkt #' + e.nr + ' bearbeiten' : 'Neuer Punkt';
     $('#fmBereich').value = e ? e.bereich : (filter.bereich || Store.BEREICHE[0]);
     $('#fmThema').value = e ? e.thema : '';
     $('#fmPrio').value = e ? e.prio : 'Mittel';
@@ -469,6 +482,7 @@
     $('#fmTodo').value = e ? e.todo : '';
     $('#fmNotiz').value = e ? e.notiz : '';
     $('#fmBilder').value = '';
+    aktualisiereEditTitel();
     editBilder = e ? Store.clone(e.bilder) : [];
     renderEditBilder();
     $('#btnDelete').hidden = !e;
@@ -768,6 +782,9 @@
     $('#btnNeu').addEventListener('click', function () { oeffneEdit(null); });
 
     // Edit-Dialog
+    $('#fmThema').addEventListener('input', aktualisiereEditTitel);
+    $('#fmBereich').addEventListener('change', aktualisiereEditTitel);
+
     $('#fmBilder').addEventListener('change', function (ev) {
       var files = Array.prototype.slice.call(ev.target.files);
       Promise.all(files.map(ladeBild)).then(function (bilder) {

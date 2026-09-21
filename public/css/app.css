@@ -294,8 +294,11 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
   box-shadow: 0 24px 60px rgba(0, 0, 0, .4);
 }
 .dialog::backdrop { background: rgba(16, 24, 40, .45); }
-.dialog__nav { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-.dialog__nav h2 { margin: 0; font-size: 17px; }
+.dialog__nav { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
+.dialog__titlebox { min-width: 0; }
+.dialog__nav h2 { margin: 0; font-size: 17px; overflow-wrap: anywhere; }
+.dialog__sub { margin: 2px 0 0; font-size: 12px; color: var(--ink-soft); }
+.dialog__sub[hidden] { display: none; }
 .nav-group { display: flex; align-items: center; gap: 4px; }
 .btn--nav {
   width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
