@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OPL 4NE1 Gen4</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#9679;</text></svg>">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar__title">
+    <h1>OPL <span>·</span> 4NE1 Gen4</h1>
+    <p id="standLine">Open Point List – Humanoid Entwicklung</p>
+  </div>
+
+  <div class="kpis" id="kpis">
+    <button class="kpi" data-quick="offen" type="button">
+      <span class="kpi__value" id="kpiOffen">0</span><span class="kpi__label">offen</span>
+    </button>
+    <button class="kpi kpi--hoch" data-quick="hoch" type="button">
+      <span class="kpi__value" id="kpiHoch">0</span><span class="kpi__label">Prio hoch</span>
+    </button>
+    <button class="kpi kpi--mittel" data-quick="mittel" type="button">
+      <span class="kpi__value" id="kpiMittel">0</span><span class="kpi__label">mittel</span>
+    </button>
+    <button class="kpi kpi--niedrig" data-quick="niedrig" type="button">
+      <span class="kpi__value" id="kpiNiedrig">0</span><span class="kpi__label">niedrig</span>
+    </button>
+    <button class="kpi kpi--overdue" data-quick="ueberfaellig" type="button" id="kpiOverdueBox">
+      <span class="kpi__value" id="kpiOverdue">0</span><span class="kpi__label">überfällig</span>
+    </button>
+    <button class="kpi kpi--done" data-quick="erledigt" type="button">
+      <span class="kpi__value" id="kpiErledigt">0</span><span class="kpi__label">erledigt</span>
+    </button>
+  </div>
+
+  <div class="topbar__actions">
+    <input id="userName" class="user-input" type="text" placeholder="Dein Name" autocomplete="name"
+           title="Wird im Änderungsprotokoll mitgeschrieben">
+    <button id="btnNeu" class="btn btn--primary" type="button">+ Neuer Punkt</button>
+    <div class="menu">
+      <button id="btnMenu" class="btn btn--ghost" type="button" aria-haspopup="true" aria-expanded="false"
+              title="Excel &amp; mehr">⋯</button>
+      <div class="menu__panel" id="menuPanel" hidden>
+        <button type="button" data-act="export-xlsx">⬇ Excel-Export (.xlsx)</button>
+        <button type="button" data-act="export-csv">⬇ CSV-Export</button>
+        <hr>
+        <button type="button" data-act="import-xlsx">⬆ Excel-Import (.xlsx)</button>
+        <hr>
+        <button type="button" data-act="log">🕓 Änderungsprotokoll</button>
+        <button type="button" data-act="reset">↺ Auf Excel-Startstand zurücksetzen</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="filterbar">
+  <input id="suche" class="search" type="search" placeholder="Suchen in Thema, To Do, Verantwortlicher …">
+  <select id="fBereich" class="select"><option value="">Alle Bereiche</option></select>
+  <select id="fPrio" class="select"><option value="">Alle Prios</option></select>
+  <select id="fStatus" class="select"><option value="">Alle Status</option></select>
+  <select id="fVerant" class="select"><option value="">Alle Verantwortlichen</option></select>
+  <div class="viewswitch" role="group" aria-label="Ansicht">
+    <button type="button" class="is-active" data-view="karten" title="Karten-Ansicht">▤</button>
+    <button type="button" data-view="tabelle" title="Tabellen-Ansicht">☰</button>
+  </div>
+  <button id="btnFilterReset" class="btn btn--ghost" type="button" hidden>Filter zurücksetzen</button>
+</section>
+
+<main id="content"></main>
+
+<div id="toast" class="toast" hidden></div>
+
+<!-- Dialog: Punkt anlegen/bearbeiten -->
+<dialog id="dlgEdit" class="dialog">
+  <form id="formEdit" method="dialog">
+    <h2 id="dlgEditTitle">Neuer Punkt</h2>
+    <div class="grid2">
+      <label>Bereich
+        <select name="bereich" id="fmBereich" required></select>
+      </label>
+      <label>Thema/Aufgabe
+        <input name="thema" id="fmThema" type="text" required placeholder="z. B. Lagerkonzept Kugellager">
+      </label>
+      <label>Prio
+        <select name="prio" id="fmPrio"></select>
+      </label>
+      <label>Status
+        <select name="status" id="fmStatus"></select>
+      </label>
+      <label>Verantwortlicher
+        <input name="verantwortlicher" id="fmVerant" type="text" list="personen" placeholder="z. B. Thorsten Grelle">
+        <datalist id="personen"></datalist>
+      </label>
+      <label>Bis wann
+        <input name="faellig" id="fmFaellig" type="date">
+      </label>
+    </div>
+    <label>To Do
+      <textarea name="todo" id="fmTodo" rows="5" placeholder="Konkrete Beschreibung der Aufgabe"></textarea>
+    </label>
+    <label>Notiz zur Bildspalte (Excel, Spalte „Bild“)
+      <input name="notiz" id="fmNotiz" type="text" placeholder="z. B. s. Anhang Thorsten (2 Bilder)">
+    </label>
+    <label>Bilder
+      <input id="fmBilder" type="file" accept="image/*" multiple>
+    </label>
+    <div id="fmBilderListe" class="thumbrow"></div>
+    <footer class="dialog__footer">
+      <button type="button" id="btnDelete" class="btn btn--danger" hidden>Löschen</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn btn--ghost" data-close>Abbrechen</button>
+      <button type="submit" class="btn btn--primary">Speichern</button>
+    </footer>
+  </form>
+</dialog>
+
+<!-- Dialog: Excel-Import -->
+<dialog id="dlgImport" class="dialog">
+  <h2>Excel-Import</h2>
+  <p class="hint">Erwartet wird das gewohnte OPL-Schema: Kopfzeile mit <b>Nr | Bereich |
+    Thema/Aufgabe | Prio | Verantwortlicher | Bis wann | Status | To Do | Bild</b>,
+    Daten darunter. Titel- und KPI-Zeilen darüber werden ignoriert.</p>
+  <label>Datei
+    <input id="impFile" type="file" accept=".xlsx">
+  </label>
+  <fieldset class="radios">
+    <legend>Wie einspielen?</legend>
+    <label><input type="radio" name="impModus" value="zusammenfuehren" checked>
+      <b>Zusammenführen</b> – Einträge mit gleicher Nr werden aktualisiert, neue kommen dazu.</label>
+    <label><input type="radio" name="impModus" value="ersetzen">
+      <b>Ersetzen</b> – der aktuelle Stand wird komplett durch die Datei ersetzt.</label>
+  </fieldset>
+  <div id="impVorschau" class="imp-preview" hidden></div>
+  <footer class="dialog__footer">
+    <span class="spacer"></span>
+    <button type="button" class="btn btn--ghost" data-close>Abbrechen</button>
+    <button type="button" id="btnImportGo" class="btn btn--primary" disabled>Importieren</button>
+  </footer>
+</dialog>
+
+<!-- Dialog: Protokoll -->
+<dialog id="dlgLog" class="dialog">
+  <h2>Änderungsprotokoll</h2>
+  <div id="logList" class="loglist"></div>
+  <footer class="dialog__footer">
+    <span class="spacer"></span>
+    <button type="button" class="btn btn--ghost" data-close>Schließen</button>
+  </footer>
+</dialog>
+
+<!-- Lightbox -->
+<div id="lightbox" class="lightbox" hidden>
+  <button class="lightbox__close" type="button" aria-label="Schließen">✕</button>
+  <img id="lightboxImg" alt="">
+</div>
+
+<script src="js/seed.js"></script>
+<script src="js/xlsx-io.js"></script>
+<script src="js/store.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
