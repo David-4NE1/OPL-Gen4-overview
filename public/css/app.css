@@ -266,6 +266,7 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 .card__edit { border: 0; background: none; cursor: pointer; opacity: .4; padding: 2px 4px; border-radius: 6px; }
 .card__edit:hover { opacity: 1; background: var(--bg); }
 
+.card__created { font-size: 11px; color: var(--ink-soft); margin: 0; }
 .card__todo { font-size: 13.5px; color: var(--ink); white-space: pre-wrap; }
 
 .card__meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }

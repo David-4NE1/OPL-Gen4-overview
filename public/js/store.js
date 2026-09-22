@@ -55,6 +55,7 @@
       todo: e.todo || '',
       bilder: Array.isArray(e.bilder) ? e.bilder : [],
       notiz: e.notiz || '',
+      erstelltAm: e.erstelltAm || '',
       geaendertAm: e.geaendertAm || '',
       geaendertVon: e.geaendertVon || ''
     };
@@ -197,6 +198,7 @@
   function add(data) {
     var e = normalizeEntry(data);
     e.nr = nextNr();
+    e.erstelltAm = heute();
     e.geaendertAm = jetzt();
     e.geaendertVon = state.user || 'unbekannt';
     state.entries.push(e);

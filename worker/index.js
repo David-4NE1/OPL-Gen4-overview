@@ -148,7 +148,7 @@ async function handleAPI(url, method, request, env) {
     const maxRow = await db.prepare('SELECT MAX(nr) AS m FROM entries').first();
     const nr = (maxRow?.m || 0) + 1;
     const now = new Date().toISOString();
-    const e = normalize({ ...data, nr, geaendertAm: now, geaendertVon: data.user || 'unbekannt' });
+    const e = normalize({ ...data, nr, erstelltAm: now.slice(0, 10), geaendertAm: now, geaendertVon: data.user || 'unbekannt' });
     await insertEntry(db, e);
     await logChange(db, nr, 'angelegt', e.geaendertVon);
     return json(e, 201);
@@ -267,6 +267,7 @@ function normalize(e) {
     todo: e.todo || '',
     bilder: Array.isArray(e.bilder) ? e.bilder : [],
     notiz: e.notiz || '',
+    erstelltAm: e.erstelltAm || '',
     geaendertAm: e.geaendertAm || '',
     geaendertVon: e.geaendertVon || ''
   };
@@ -286,6 +287,7 @@ function dbToEntry(row) {
     todo: row.todo,
     bilder,
     notiz: row.notiz,
+    erstelltAm: row.erstellt_am || '',
     geaendertAm: row.geaendert_am,
     geaendertVon: row.geaendert_von
   };
@@ -293,10 +295,10 @@ function dbToEntry(row) {
 
 function insertStmt(db, e) {
   return db.prepare(
-    `INSERT INTO entries (nr, bereich, thema, prio, verantwortlicher, faellig, status, todo, bilder, notiz, geaendert_am, geaendert_von)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO entries (nr, bereich, thema, prio, verantwortlicher, faellig, status, todo, bilder, notiz, erstellt_am, geaendert_am, geaendert_von)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher, e.faellig, e.status, e.todo,
-         JSON.stringify(e.bilder), e.notiz, e.geaendertAm, e.geaendertVon);
+         JSON.stringify(e.bilder), e.notiz, e.erstelltAm, e.geaendertAm, e.geaendertVon);
 }
 
 async function insertEntry(db, e) { await insertStmt(db, e).run(); }

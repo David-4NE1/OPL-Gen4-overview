@@ -261,6 +261,10 @@
     top.appendChild(edit);
     c.appendChild(top);
 
+    if (e.erstelltAm) {
+      c.appendChild(el('p', 'card__created', 'Erstellt: ' + Xlsx.ddmmyyyy(e.erstelltAm)));
+    }
+
     if (e.todo) c.appendChild(el('p', 'card__todo', e.todo));
 
     var meta = el('div', 'card__meta');
