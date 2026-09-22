@@ -16,6 +16,16 @@
  *   GET    /api/log               → Änderungsprotokoll (neueste zuerst, max 500)
  */
 
+const ALLOWED_EMAILS = [
+  'david.rybinski@neura-robotics.com',
+  'thorsten.grelle@neura-robotics.com',
+  'marcellinus.meyer@neura-robotics.com',
+  'jannik.goez@neura-robotics.com',
+  'marc.zinner@neura-robotics.com',
+  'jan.buehler@neura-robotics.com',
+  'sebastian.lein@neura-robotics.com',
+];
+
 const AUTH_COOKIE = 'opl_auth';
 const TOKEN = 'c4f8a2e1b7d9';
 
@@ -79,8 +89,8 @@ async function handleAPI(url, method, request, env) {
   if (path === '/api/login' && method === 'POST') {
     const data = await request.json();
     const email = (data.email || '').trim().toLowerCase();
-    if (!email.endsWith('@neura-robotics.com')) {
-      return json({ error: 'Nur @neura-robotics.com Adressen erlaubt' }, 403);
+    if (!ALLOWED_EMAILS.includes(email)) {
+      return json({ error: 'Diese E-Mail-Adresse ist nicht zugelassen' }, 403);
     }
     if (data.password === getPassword(env)) {
       const userName = nameFromEmail(data.email);
