@@ -28,6 +28,25 @@ function isAuthenticated(request) {
   return cookie.split(';').some(c => c.trim() === `${AUTH_COOKIE}=${TOKEN}`);
 }
 
+const USER_COOKIE = 'opl_user';
+
+function nameFromEmail(email) {
+  if (!email) return '';
+  const local = email.split('@')[0] || '';
+  return local.split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+}
+
+function getUserName(request) {
+  const cookie = request.headers.get('cookie') || '';
+  for (const c of cookie.split(';')) {
+    const trimmed = c.trim();
+    if (trimmed.startsWith(USER_COOKIE + '=')) {
+      return decodeURIComponent(trimmed.slice(USER_COOKIE.length + 1));
+    }
+  }
+  return '';
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -60,32 +79,31 @@ async function handleAPI(url, method, request, env) {
   if (path === '/api/login' && method === 'POST') {
     const data = await request.json();
     if (data.password === getPassword(env)) {
-      return new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: {
-          'content-type': 'application/json',
-          'set-cookie': `${AUTH_COOKIE}=${TOKEN}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000`
-        }
-      });
+      const userName = nameFromEmail(data.email);
+      const headers = new Headers({ 'content-type': 'application/json' });
+      headers.append('set-cookie', `${AUTH_COOKIE}=${TOKEN}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000`);
+      if (userName) {
+        headers.append('set-cookie', `${USER_COOKIE}=${encodeURIComponent(userName)}; Path=/; SameSite=Strict; Max-Age=2592000`);
+      }
+      return new Response(JSON.stringify({ ok: true, user: userName }), { status: 200, headers });
     }
     return json({ error: 'Falsches Passwort' }, 401);
   }
 
   // GET /api/auth (kein Auth noetig – prüft nur ob Cookie da ist)
   if (path === '/api/auth' && method === 'GET') {
-    if (isAuthenticated(request)) return json({ authenticated: true });
+    if (isAuthenticated(request)) {
+      return json({ authenticated: true, user: getUserName(request) });
+    }
     return json({ authenticated: false }, 401);
   }
 
   // GET /api/logout
   if (path === '/api/logout') {
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: {
-        'content-type': 'application/json',
-        'set-cookie': `${AUTH_COOKIE}=; Path=/; HttpOnly; Max-Age=0`
-      }
-    });
+    const headers = new Headers({ 'content-type': 'application/json' });
+    headers.append('set-cookie', `${AUTH_COOKIE}=; Path=/; HttpOnly; Max-Age=0`);
+    headers.append('set-cookie', `${USER_COOKIE}=; Path=/; Max-Age=0`);
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
   }
 
   // --- Ab hier: Auth erforderlich ---
