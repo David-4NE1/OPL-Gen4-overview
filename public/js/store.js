@@ -130,6 +130,40 @@
       state.entries = (global.OPL_SEED || []).map(normalizeEntry);
       emit();
     }
+
+    startPolling();
+  }
+
+  /* ---- Live-Sync: periodisch pruefen, ob andere etwas geaendert haben ---- */
+
+  var POLL_MS = 6000;
+  var pollTimer = null;
+
+  function istDialogOffen() {
+    return !!document.querySelector('dialog[open]');
+  }
+
+  function poll() {
+    if (document.hidden || istDialogOffen()) return;
+    API.get('/api/entries')
+      .then(function (entries) {
+        online = true;
+        var neu = entries.map(normalizeEntry);
+        if (JSON.stringify(neu) !== JSON.stringify(state.entries)) {
+          state.entries = neu;
+          saveLocal();
+          emit();
+        }
+      })
+      .catch(function () { online = false; });
+  }
+
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(poll, POLL_MS);
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) poll();
+    });
   }
 
   function save() {
