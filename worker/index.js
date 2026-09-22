@@ -78,6 +78,10 @@ async function handleAPI(url, method, request, env) {
   // POST /api/login (kein Auth noetig)
   if (path === '/api/login' && method === 'POST') {
     const data = await request.json();
+    const email = (data.email || '').trim().toLowerCase();
+    if (!email.endsWith('@neura-robotics.com')) {
+      return json({ error: 'Nur @neura-robotics.com Adressen erlaubt' }, 403);
+    }
     if (data.password === getPassword(env)) {
       const userName = nameFromEmail(data.email);
       const headers = new Headers({ 'content-type': 'application/json' });

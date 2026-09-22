@@ -17,7 +17,8 @@
     <p id="loginError" class="login-err" hidden>Falsches Passwort</p>
     <form id="loginForm">
       <label for="loginEmail">E-Mail</label>
-      <input id="loginEmail" type="email" required placeholder="vorname.nachname@neura-robotics.com" autocomplete="email" autofocus>
+      <input id="loginEmail" type="email" required placeholder="vorname.nachname@neura-robotics.com" autocomplete="email" autofocus
+             pattern=".+@neura-robotics\.com$" title="Nur @neura-robotics.com Adressen erlaubt">
       <label for="loginPw">Passwort</label>
       <input id="loginPw" type="password" required>
       <button type="submit" class="btn btn--primary login-btn">Anmelden</button>
@@ -242,17 +243,12 @@
       body: JSON.stringify({ password: pw, email: email })
     }).then(function(r) {
       if (r.ok) return r.json();
-      throw new Error('auth');
+      return r.json().then(function(e) { throw new Error(e.error || 'Fehler'); });
     }).then(function(data) {
       showApp(data.user);
     }).catch(function(err) {
-      if (err.message === 'auth') {
-        errEl.hidden = false;
-        document.getElementById('loginPw').select();
-      } else {
-        errEl.textContent = 'Verbindungsfehler';
-        errEl.hidden = false;
-      }
+      errEl.textContent = err.message || 'Verbindungsfehler';
+      errEl.hidden = false;
     });
   });
 })();
