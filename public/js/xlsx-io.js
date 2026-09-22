@@ -272,7 +272,7 @@
   /* ------------------------------------------------------------------ */
 
   var HEADERS = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                 'Bis wann', 'Status', 'To Do', 'Bild'];
+                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am'];
 
   var PRIO_STYLE = { 'Hoch': S.PRIO_HOCH, 'Mittel': S.PRIO_MITTEL, 'Niedrig': S.PRIO_NIEDRIG };
   var STATUS_STYLE = { 'Offen': S.ST_OFFEN, 'In Arbeit': S.ST_ARBEIT, 'Erledigt': S.ST_ERLEDIGT };
@@ -351,7 +351,8 @@
         cellStr('F' + r, overdue ? S.UEBERFAELLIG : (e.faellig ? S.CELL : S.PFLEGE), ddmmyyyy(e.faellig)),
         cellStr('G' + r, STATUS_STYLE[e.status] != null ? STATUS_STYLE[e.status] : S.CELL, e.status),
         cellStr('H' + r, S.CELL, e.todo),
-        cellStr('I' + r, S.CELL, bildSpalte(e))
+        cellStr('I' + r, S.CELL, bildSpalte(e)),
+        cellStr('J' + r, S.CELL, ddmmyyyy(e.erstelltAm))
       ];
       rows.push('<row r="' + r + '" ht="31.5" customHeight="1">' + cells.join('') + '</row>');
     });
@@ -360,7 +361,7 @@
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
       '<sheetPr><outlinePr summaryBelow="1" summaryRight="1"/></sheetPr>' +
-      '<dimension ref="A1:I' + last + '"/>' +
+      '<dimension ref="A1:J' + last + '"/>' +
       '<sheetViews><sheetView tabSelected="1" workbookViewId="0">' +
         '<pane ySplit="7" topLeftCell="A8" activePane="bottomLeft" state="frozen"/>' +
       '</sheetView></sheetViews>' +
@@ -375,11 +376,12 @@
         '<col min="7" max="7" width="12" customWidth="1"/>' +
         '<col min="8" max="8" width="60" customWidth="1"/>' +
         '<col min="9" max="9" width="22" customWidth="1"/>' +
+        '<col min="10" max="10" width="14" customWidth="1"/>' +
       '</cols>' +
       '<sheetData>' + rows.join('') + '</sheetData>' +
-      '<autoFilter ref="A7:I' + last + '"/>' +
+      '<autoFilter ref="A7:J' + last + '"/>' +
       '<mergeCells count="3">' +
-        '<mergeCell ref="A1:I1"/><mergeCell ref="A2:I2"/><mergeCell ref="H5:I5"/>' +
+        '<mergeCell ref="A1:J1"/><mergeCell ref="A2:J2"/><mergeCell ref="H5:I5"/>' +
       '</mergeCells>' +
       '<dataValidations count="3">' +
         validation('list', 'D' + first + ':D' + last, '"Hoch,Mittel,Niedrig"') +

@@ -607,13 +607,14 @@
 
   function exportCsv() {
     var kopf = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                'Bis wann', 'Status', 'To Do', 'Bild'];
+                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am'];
     function q(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
     var zeilen = [kopf.map(q).join(';')];
     Store.state.entries.forEach(function (e) {
       zeilen.push([e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher,
         Xlsx.ddmmyyyy(e.faellig), e.status, e.todo,
-        e.notiz || (e.bilder.length ? e.bilder.length + ' Bild(er) im Tool' : '')
+        e.notiz || (e.bilder.length ? e.bilder.length + ' Bild(er) im Tool' : ''),
+        Xlsx.ddmmyyyy(e.erstelltAm)
       ].map(q).join(';'));
     });
     // BOM, damit Excel UTF-8 erkennt
