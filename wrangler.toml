@@ -1,8 +1,8 @@
 # Cloudflare Worker + Static Assets
 #
-# Statische Dateien kommen aus dem Repo-Root.
-# Der Worker handelt nur /api/*-Requests (D1-Backend).
-# Alles andere (index.html, css/, js/, assets/) wird direkt als Asset ausgeliefert.
+# serve_directly = false: ALLE Requests laufen durch den Worker,
+# damit die Passwort-Pruefung greift. Der Worker reicht statische
+# Dateien nach Auth-Check ueber env.ASSETS.fetch() weiter.
 
 name = "opl-gen4-overview"
 main = "worker/index.js"
@@ -13,6 +13,7 @@ compatibility_flags = ["nodejs_compat"]
 directory = "./public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
+serve_directly = false
 
 [[d1_databases]]
 binding = "DB"
