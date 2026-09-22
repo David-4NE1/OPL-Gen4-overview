@@ -13,11 +13,13 @@
 <div id="loginGate" class="login-gate">
   <div class="login-box">
     <h1>OPL · 4NE1 Gen4</h1>
-    <p class="login-sub">Bitte Passwort eingeben</p>
+    <p class="login-sub">Anmeldung</p>
     <p id="loginError" class="login-err" hidden>Falsches Passwort</p>
     <form id="loginForm">
+      <label for="loginEmail">E-Mail</label>
+      <input id="loginEmail" type="email" required placeholder="vorname.nachname@neura-robotics.com" autocomplete="email" autofocus>
       <label for="loginPw">Passwort</label>
-      <input id="loginPw" type="password" autofocus required>
+      <input id="loginPw" type="password" required>
       <button type="submit" class="btn btn--primary login-btn">Anmelden</button>
     </form>
   </div>
@@ -232,21 +234,25 @@
   form.addEventListener('submit', function(e) {
     e.preventDefault();
     errEl.hidden = true;
+    var email = document.getElementById('loginEmail').value.trim();
     var pw = document.getElementById('loginPw').value;
     fetch('/api/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ password: pw })
+      body: JSON.stringify({ password: pw, email: email })
     }).then(function(r) {
-      if (r.ok) {
-        showApp();
-      } else {
+      if (r.ok) return r.json();
+      throw new Error('auth');
+    }).then(function(data) {
+      showApp(data.user);
+    }).catch(function(err) {
+      if (err.message === 'auth') {
         errEl.hidden = false;
         document.getElementById('loginPw').select();
+      } else {
+        errEl.textContent = 'Verbindungsfehler';
+        errEl.hidden = false;
       }
-    }).catch(function() {
-      errEl.textContent = 'Verbindungsfehler';
-      errEl.hidden = false;
     });
   });
 })();

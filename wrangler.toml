@@ -1,8 +1,9 @@
 # Cloudflare Worker + Static Assets
 #
-# Statische Dateien kommen aus dem Repo-Root.
-# Der Worker handelt nur /api/*-Requests (D1-Backend).
-# Alles andere (index.html, css/, js/, assets/) wird direkt als Asset ausgeliefert.
+# Statische Dateien werden vom CDN ausgeliefert.
+# Der Worker handelt /api/*-Routen (D1 + Auth).
+# Passwortschutz: Frontend prueft Auth via /api/auth,
+# alle Daten-Endpunkte erfordern Session-Cookie.
 
 name = "opl-gen4-overview"
 main = "worker/index.js"
