@@ -24,6 +24,7 @@ const ALLOWED_EMAILS = [
   'marc.zinner@neura-robotics.com',
   'jan.buehler@neura-robotics.com',
   'sebastian.lein@neura-robotics.com',
+  'josef.mecid@neura-robotics.com',
 ];
 
 const AUTH_COOKIE = 'opl_auth';
