@@ -655,20 +655,28 @@
   function zeigeLog() {
     var box = $('#logList');
     box.textContent = '';
-    var eintraege = Store.state.log.slice().reverse();
-    if (!eintraege.length) {
-      box.appendChild(el('div', null, 'Noch keine Änderungen protokolliert.'));
-    }
-    eintraege.forEach(function (l) {
-      var d = el('div');
-      var b = el('b', null, l.nr ? '#' + l.nr + ' ' : 'Liste ');
-      d.appendChild(b);
-      d.appendChild(document.createTextNode(l.text + ' '));
-      d.appendChild(el('span', null, '— ' + l.wer + ', ' +
-        new Date(l.wann).toLocaleString('de-DE')));
-      box.appendChild(d);
-    });
+    box.appendChild(el('div', null, 'Lade …'));
     $('#dlgLog').showModal();
+
+    fetch('/api/log').then(function (r) { return r.json(); }).then(function (eintraege) {
+      box.textContent = '';
+      if (!eintraege.length) {
+        box.appendChild(el('div', null, 'Noch keine Änderungen protokolliert.'));
+        return;
+      }
+      eintraege.forEach(function (l) {
+        var d = el('div');
+        var b = el('b', null, l.nr ? '#' + l.nr + ' ' : 'Liste ');
+        d.appendChild(b);
+        d.appendChild(document.createTextNode(l.text + ' '));
+        d.appendChild(el('span', null, '— ' + (l.wer || 'unbekannt') + ', ' +
+          new Date(l.wann).toLocaleString('de-DE')));
+        box.appendChild(d);
+      });
+    }).catch(function () {
+      box.textContent = '';
+      box.appendChild(el('div', null, 'Protokoll konnte nicht geladen werden.'));
+    });
   }
 
   /* --------------------------------------------------------------- Init */
@@ -682,12 +690,12 @@
     Store.STATI.forEach(function (s) { $('#fStatus').appendChild(new Option(s, s)); });
 
     Store.onError(function (msg) { toast(msg, true); });
+    Store.load();
     if (window.__OPL_LOGIN_USER) {
       Store.setUser(window.__OPL_LOGIN_USER);
     }
-    Store.load();
     Store.subscribe(render);
-    $('#userName').value = Store.state.user || window.__OPL_LOGIN_USER || '';
+    $('#userName').value = Store.state.user || '';
 
     // Filter
     var t;
