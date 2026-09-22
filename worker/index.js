@@ -3,17 +3,17 @@
  *
  * D1 database binding: DB
  * Routes:
- *   GET    /api/entries         → alle Einträge
- *   GET    /api/entries/:nr     → ein Eintrag
- *   POST   /api/entries         → neuen Eintrag anlegen
- *   PUT    /api/entries/:nr     → Eintrag aktualisieren (Patch)
- *   DELETE /api/entries/:nr     → Eintrag löschen
- *   POST   /api/import          → Bulk-Import (ersetzen / zusammenführen)
- *   POST   /api/reset           → auf Seed-Stand zurücksetzen
- *   GET    /api/log             → Änderungsprotokoll (neueste zuerst, max 500)
- *   GET    /                    → statisches Frontend (aus Assets)
- *
- * CORS: offen (Access-Control-Allow-Origin: *), da internes Tool.
+ *   POST   /api/login            → Anmeldung (setzt Cookie)
+ *   GET    /api/auth              → Auth-Status prüfen
+ *   GET    /api/logout            → Abmelden (löscht Cookie)
+ *   GET    /api/entries           → alle Einträge
+ *   GET    /api/entries/:nr       → ein Eintrag
+ *   POST   /api/entries           → neuen Eintrag anlegen
+ *   PUT    /api/entries/:nr       → Eintrag aktualisieren (Patch)
+ *   DELETE /api/entries/:nr       → Eintrag löschen
+ *   POST   /api/import            → Bulk-Import (ersetzen / zusammenführen)
+ *   POST   /api/reset             → auf Seed-Stand zurücksetzen
+ *   GET    /api/log               → Änderungsprotokoll (neueste zuerst, max 500)
  */
 
 const AUTH_COOKIE = 'opl_auth';
@@ -28,43 +28,6 @@ function isAuthenticated(request) {
   return cookie.split(';').some(c => c.trim() === `${AUTH_COOKIE}=${TOKEN}`);
 }
 
-function loginPage(error) {
-  const msg = error ? '<p class="err">Falsches Passwort</p>' : '';
-  return new Response(`<!DOCTYPE html>
-<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OPL Login</title>
-<style>
-  *{margin:0;box-sizing:border-box}
-  body{min-height:100vh;display:flex;align-items:center;justify-content:center;
-       font-family:system-ui,sans-serif;background:#13171c;color:#d1d5db}
-  .box{background:#1c2128;padding:2.5rem;border-radius:12px;width:min(380px,90vw);
-       box-shadow:0 8px 32px rgba(0,0,0,.4)}
-  h1{font-size:1.3rem;margin-bottom:.3rem;color:#fff}
-  p.sub{font-size:.85rem;color:#8b949e;margin-bottom:1.5rem}
-  label{display:block;font-size:.85rem;margin-bottom:.4rem;color:#8b949e}
-  input{width:100%;padding:.65rem .8rem;border:1px solid #30363d;border-radius:6px;
-        background:#0d1117;color:#d1d5db;font-size:1rem;outline:none}
-  input:focus{border-color:#58a6ff}
-  button{width:100%;margin-top:1rem;padding:.7rem;border:none;border-radius:6px;
-         background:#238636;color:#fff;font-size:1rem;font-weight:600;cursor:pointer}
-  button:hover{background:#2ea043}
-  .err{color:#f85149;font-size:.85rem;margin-bottom:1rem}
-</style></head><body>
-<div class="box">
-  <h1>OPL · 4NE1 Gen4</h1>
-  <p class="sub">Bitte Passwort eingeben</p>
-  ${msg}
-  <form method="POST" action="/login">
-    <label for="pw">Passwort</label>
-    <input id="pw" name="password" type="password" autofocus required>
-    <button type="submit">Anmelden</button>
-  </form>
-</div></body></html>`, {
-    status: error ? 401 : 200,
-    headers: { 'content-type': 'text/html; charset=utf-8' }
-  });
-}
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -73,60 +36,64 @@ export default {
     // CORS preflight
     if (method === 'OPTIONS') return corsResponse(new Response(null, { status: 204 }));
 
-    // --- Login route ---
-    if (url.pathname === '/login' && method === 'POST') {
-      const form = await request.formData();
-      if (form.get('password') === getPassword(env)) {
-        return new Response(null, {
-          status: 302,
-          headers: {
-            'location': '/',
-            'set-cookie': `${AUTH_COOKIE}=${TOKEN}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000`
-          }
-        });
-      }
-      return loginPage(true);
+    // --- Nur API-Routen laufen durch den Worker ---
+    if (!url.pathname.startsWith('/api/')) {
+      if (env.ASSETS) return env.ASSETS.fetch(request);
+      return new Response('Not found', { status: 404 });
     }
 
-    // --- Logout route ---
-    if (url.pathname === '/logout') {
-      return new Response(null, {
-        status: 302,
-        headers: {
-          'location': '/',
-          'set-cookie': `${AUTH_COOKIE}=; Path=/; HttpOnly; Max-Age=0`
-        }
-      });
+    try {
+      const res = await handleAPI(url, method, request, env);
+      return corsResponse(res);
+    } catch (err) {
+      return corsResponse(json({ error: err.message }, 500));
     }
-
-    // --- Auth check ---
-    if (!isAuthenticated(request)) {
-      return loginPage(false);
-    }
-
-    // --- API routes ---
-    if (url.pathname.startsWith('/api/')) {
-      try {
-        const res = await handleAPI(url, method, request, env);
-        return corsResponse(res);
-      } catch (err) {
-        return corsResponse(json({ error: err.message }, 500));
-      }
-    }
-
-    // --- Static assets ---
-    if (env.ASSETS) {
-      return env.ASSETS.fetch(request);
-    }
-    return new Response('Not found', { status: 404 });
   }
 };
 
 /* ------------------------------------------------------------------ API */
 
 async function handleAPI(url, method, request, env) {
-  const db = env.DB;
   const path = url.pathname.replace(/\/+$/, '');
+
+  // POST /api/login (kein Auth noetig)
+  if (path === '/api/login' && method === 'POST') {
+    const data = await request.json();
+    if (data.password === getPassword(env)) {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+          'set-cookie': `${AUTH_COOKIE}=${TOKEN}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000`
+        }
+      });
+    }
+    return json({ error: 'Falsches Passwort' }, 401);
+  }
+
+  // GET /api/auth (kein Auth noetig – prüft nur ob Cookie da ist)
+  if (path === '/api/auth' && method === 'GET') {
+    if (isAuthenticated(request)) return json({ authenticated: true });
+    return json({ authenticated: false }, 401);
+  }
+
+  // GET /api/logout
+  if (path === '/api/logout') {
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'set-cookie': `${AUTH_COOKIE}=; Path=/; HttpOnly; Max-Age=0`
+      }
+    });
+  }
+
+  // --- Ab hier: Auth erforderlich ---
+  if (!isAuthenticated(request)) {
+    return json({ error: 'Nicht angemeldet' }, 401);
+  }
+
+  const db = env.DB;
 
   // GET /api/entries
   if (path === '/api/entries' && method === 'GET') {
@@ -145,7 +112,6 @@ async function handleAPI(url, method, request, env) {
   // POST /api/entries  (neuer Eintrag)
   if (path === '/api/entries' && method === 'POST') {
     const data = await request.json();
-    // Nächste Nr
     const maxRow = await db.prepare('SELECT MAX(nr) AS m FROM entries').first();
     const nr = (maxRow?.m || 0) + 1;
     const now = new Date().toISOString();
@@ -209,7 +175,6 @@ async function handleAPI(url, method, request, env) {
       return json({ neu: entries.length, aktualisiert: 0 });
     }
 
-    // zusammenführen
     let neu = 0, aktualisiert = 0;
     const stmts = [];
     for (const raw of entries) {

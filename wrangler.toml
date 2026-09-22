@@ -1,8 +1,9 @@
 # Cloudflare Worker + Static Assets
 #
-# serve_directly = false: ALLE Requests laufen durch den Worker,
-# damit die Passwort-Pruefung greift. Der Worker reicht statische
-# Dateien nach Auth-Check ueber env.ASSETS.fetch() weiter.
+# Statische Dateien werden vom CDN ausgeliefert.
+# Der Worker handelt /api/*-Routen (D1 + Auth).
+# Passwortschutz: Frontend prueft Auth via /api/auth,
+# alle Daten-Endpunkte erfordern Session-Cookie.
 
 name = "opl-gen4-overview"
 main = "worker/index.js"
@@ -13,7 +14,6 @@ compatibility_flags = ["nodejs_compat"]
 directory = "./public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-serve_directly = false
 
 [[d1_databases]]
 binding = "DB"
