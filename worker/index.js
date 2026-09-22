@@ -16,9 +16,12 @@
  * CORS: offen (Access-Control-Allow-Origin: *), da internes Tool.
  */
 
-const OPL_PASSWORD = 'OPL-FORANYONE';
 const AUTH_COOKIE = 'opl_auth';
 const TOKEN = 'c4f8a2e1b7d9';
+
+function getPassword(env) {
+  return env.OPL_PASSWORD || 'OPL-FORANYONE';
+}
 
 function isAuthenticated(request) {
   const cookie = request.headers.get('cookie') || '';
@@ -73,7 +76,7 @@ export default {
     // --- Login route ---
     if (url.pathname === '/login' && method === 'POST') {
       const form = await request.formData();
-      if (form.get('password') === OPL_PASSWORD) {
+      if (form.get('password') === getPassword(env)) {
         return new Response(null, {
           status: 302,
           headers: {
