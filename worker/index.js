@@ -16,6 +16,52 @@
  * CORS: offen (Access-Control-Allow-Origin: *), da internes Tool.
  */
 
+const OPL_PASSWORD = 'OPL-FORANYONE';
+const AUTH_COOKIE = 'opl_auth';
+const TOKEN = 'c4f8a2e1b7d9';
+
+function isAuthenticated(request) {
+  const cookie = request.headers.get('cookie') || '';
+  return cookie.split(';').some(c => c.trim() === `${AUTH_COOKIE}=${TOKEN}`);
+}
+
+function loginPage(error) {
+  const msg = error ? '<p class="err">Falsches Passwort</p>' : '';
+  return new Response(`<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OPL Login</title>
+<style>
+  *{margin:0;box-sizing:border-box}
+  body{min-height:100vh;display:flex;align-items:center;justify-content:center;
+       font-family:system-ui,sans-serif;background:#13171c;color:#d1d5db}
+  .box{background:#1c2128;padding:2.5rem;border-radius:12px;width:min(380px,90vw);
+       box-shadow:0 8px 32px rgba(0,0,0,.4)}
+  h1{font-size:1.3rem;margin-bottom:.3rem;color:#fff}
+  p.sub{font-size:.85rem;color:#8b949e;margin-bottom:1.5rem}
+  label{display:block;font-size:.85rem;margin-bottom:.4rem;color:#8b949e}
+  input{width:100%;padding:.65rem .8rem;border:1px solid #30363d;border-radius:6px;
+        background:#0d1117;color:#d1d5db;font-size:1rem;outline:none}
+  input:focus{border-color:#58a6ff}
+  button{width:100%;margin-top:1rem;padding:.7rem;border:none;border-radius:6px;
+         background:#238636;color:#fff;font-size:1rem;font-weight:600;cursor:pointer}
+  button:hover{background:#2ea043}
+  .err{color:#f85149;font-size:.85rem;margin-bottom:1rem}
+</style></head><body>
+<div class="box">
+  <h1>OPL · 4NE1 Gen4</h1>
+  <p class="sub">Bitte Passwort eingeben</p>
+  ${msg}
+  <form method="POST" action="/login">
+    <label for="pw">Passwort</label>
+    <input id="pw" name="password" type="password" autofocus required>
+    <button type="submit">Anmelden</button>
+  </form>
+</div></body></html>`, {
+    status: error ? 401 : 200,
+    headers: { 'content-type': 'text/html; charset=utf-8' }
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -23,6 +69,37 @@ export default {
 
     // CORS preflight
     if (method === 'OPTIONS') return corsResponse(new Response(null, { status: 204 }));
+
+    // --- Login route ---
+    if (url.pathname === '/login' && method === 'POST') {
+      const form = await request.formData();
+      if (form.get('password') === OPL_PASSWORD) {
+        return new Response(null, {
+          status: 302,
+          headers: {
+            'location': '/',
+            'set-cookie': `${AUTH_COOKIE}=${TOKEN}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000`
+          }
+        });
+      }
+      return loginPage(true);
+    }
+
+    // --- Logout route ---
+    if (url.pathname === '/logout') {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          'location': '/',
+          'set-cookie': `${AUTH_COOKIE}=; Path=/; HttpOnly; Max-Age=0`
+        }
+      });
+    }
+
+    // --- Auth check ---
+    if (!isAuthenticated(request)) {
+      return loginPage(false);
+    }
 
     // --- API routes ---
     if (url.pathname.startsWith('/api/')) {
@@ -35,9 +112,6 @@ export default {
     }
 
     // --- Static assets ---
-    // Nicht-API-Requests an den Asset-Binding weiterleiten.
-    // Wrangler [assets] bedient sie normalerweise automatisch, aber
-    // falls der Request hier ankommt, explizit durchreichen.
     if (env.ASSETS) {
       return env.ASSETS.fetch(request);
     }
