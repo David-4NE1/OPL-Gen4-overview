@@ -3,18 +3,37 @@
  *
  * D1 database binding: DB
  * Routes:
- *   GET    /api/entries         → alle Einträge
- *   GET    /api/entries/:nr     → ein Eintrag
- *   POST   /api/entries         → neuen Eintrag anlegen
- *   PUT    /api/entries/:nr     → Eintrag aktualisieren (Patch)
- *   DELETE /api/entries/:nr     → Eintrag löschen
- *   POST   /api/import          → Bulk-Import (ersetzen / zusammenführen)
- *   POST   /api/reset           → auf Seed-Stand zurücksetzen
- *   GET    /api/log             → Änderungsprotokoll (neueste zuerst, max 500)
- *   GET    /                    → statisches Frontend (aus Assets)
- *
- * CORS: offen (Access-Control-Allow-Origin: *), da internes Tool.
+ *   POST   /api/login            → Anmeldung (setzt Cookie)
+ *   GET    /api/auth              → Auth-Status prüfen
+ *   GET    /api/logout            → Abmelden (löscht Cookie)
+ *   GET    /api/entries           → alle Einträge
+ *   GET    /api/entries/:nr       → ein Eintrag
+ *   POST   /api/entries           → neuen Eintrag anlegen
+ *   PUT    /api/entries/:nr       → Eintrag aktualisieren (Patch)
+ *   DELETE /api/entries/:nr       → Eintrag löschen
+ *   POST   /api/import            → Bulk-Import (ersetzen / zusammenführen)
+ *   POST   /api/reset             → auf Seed-Stand zurücksetzen
+ *   GET    /api/log               → Änderungsprotokoll (neueste zuerst, max 500)
  */
+
+const AUTH_COOKIE = 'opl_auth';
+const TOKEN = 'c4f8a2e1b7d9';
+
+function getPassword(env) {
+  return env.OPL_PASSWORD || 'OPL-FORANYONE';
+}
+
+function isAuthenticated(request) {
+  const cookie = request.headers.get('cookie') || '';
+  return cookie.split(';').some(c => c.trim() === `${AUTH_COOKIE}=${TOKEN}`);
+}
+
+function getUserFromEmail(request) {
+  const email = request.headers.get('cf-access-authenticated-user-email') || '';
+  if (!email) return '';
+  const local = email.split('@')[0] || '';
+  return local.split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+}
 
 export default {
   async fetch(request, env) {
@@ -24,32 +43,66 @@ export default {
     // CORS preflight
     if (method === 'OPTIONS') return corsResponse(new Response(null, { status: 204 }));
 
-    // --- API routes ---
-    if (url.pathname.startsWith('/api/')) {
-      try {
-        const res = await handleAPI(url, method, request, env);
-        return corsResponse(res);
-      } catch (err) {
-        return corsResponse(json({ error: err.message }, 500));
-      }
+    // --- Nur API-Routen laufen durch den Worker ---
+    if (!url.pathname.startsWith('/api/')) {
+      if (env.ASSETS) return env.ASSETS.fetch(request);
+      return new Response('Not found', { status: 404 });
     }
 
-    // --- Static assets ---
-    // Nicht-API-Requests an den Asset-Binding weiterleiten.
-    // Wrangler [assets] bedient sie normalerweise automatisch, aber
-    // falls der Request hier ankommt, explizit durchreichen.
-    if (env.ASSETS) {
-      return env.ASSETS.fetch(request);
+    try {
+      const res = await handleAPI(url, method, request, env);
+      return corsResponse(res);
+    } catch (err) {
+      return corsResponse(json({ error: err.message }, 500));
     }
-    return new Response('Not found', { status: 404 });
   }
 };
 
 /* ------------------------------------------------------------------ API */
 
 async function handleAPI(url, method, request, env) {
-  const db = env.DB;
   const path = url.pathname.replace(/\/+$/, '');
+
+  // POST /api/login (kein Auth noetig)
+  if (path === '/api/login' && method === 'POST') {
+    const data = await request.json();
+    if (data.password === getPassword(env)) {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          'content-type': 'application/json',
+          'set-cookie': `${AUTH_COOKIE}=${TOKEN}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000`
+        }
+      });
+    }
+    return json({ error: 'Falsches Passwort' }, 401);
+  }
+
+  // GET /api/auth (kein Auth noetig – prüft nur ob Cookie da ist)
+  if (path === '/api/auth' && method === 'GET') {
+    if (isAuthenticated(request)) {
+      return json({ authenticated: true, user: getUserFromEmail(request) });
+    }
+    return json({ authenticated: false }, 401);
+  }
+
+  // GET /api/logout
+  if (path === '/api/logout') {
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'set-cookie': `${AUTH_COOKIE}=; Path=/; HttpOnly; Max-Age=0`
+      }
+    });
+  }
+
+  // --- Ab hier: Auth erforderlich ---
+  if (!isAuthenticated(request)) {
+    return json({ error: 'Nicht angemeldet' }, 401);
+  }
+
+  const db = env.DB;
 
   // GET /api/entries
   if (path === '/api/entries' && method === 'GET') {
@@ -68,7 +121,6 @@ async function handleAPI(url, method, request, env) {
   // POST /api/entries  (neuer Eintrag)
   if (path === '/api/entries' && method === 'POST') {
     const data = await request.json();
-    // Nächste Nr
     const maxRow = await db.prepare('SELECT MAX(nr) AS m FROM entries').first();
     const nr = (maxRow?.m || 0) + 1;
     const now = new Date().toISOString();
@@ -132,7 +184,6 @@ async function handleAPI(url, method, request, env) {
       return json({ neu: entries.length, aktualisiert: 0 });
     }
 
-    // zusammenführen
     let neu = 0, aktualisiert = 0;
     const stmts = [];
     for (const raw of entries) {

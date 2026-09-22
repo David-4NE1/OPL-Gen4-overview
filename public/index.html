@@ -9,6 +9,23 @@
 </head>
 <body>
 
+<!-- Login-Gate: wird ausgeblendet sobald authentifiziert -->
+<div id="loginGate" class="login-gate">
+  <div class="login-box">
+    <h1>OPL · 4NE1 Gen4</h1>
+    <p class="login-sub">Bitte Passwort eingeben</p>
+    <p id="loginError" class="login-err" hidden>Falsches Passwort</p>
+    <form id="loginForm">
+      <label for="loginPw">Passwort</label>
+      <input id="loginPw" type="password" autofocus required>
+      <button type="submit" class="btn btn--primary login-btn">Anmelden</button>
+    </form>
+  </div>
+</div>
+
+<!-- Dashboard-Inhalt: anfangs versteckt -->
+<div id="appContent" hidden>
+
 <header class="topbar">
   <div class="topbar__title">
     <h1>OPL <span>·</span> 4NE1 Gen4</h1>
@@ -177,9 +194,62 @@
   <img id="lightboxImg" alt="">
 </div>
 
-<script src="js/seed.js"></script>
-<script src="js/xlsx-io.js"></script>
-<script src="js/store.js"></script>
-<script src="js/app.js"></script>
+</div><!-- /appContent -->
+
+<script>
+(function() {
+  var gate = document.getElementById('loginGate');
+  var app = document.getElementById('appContent');
+  var form = document.getElementById('loginForm');
+  var errEl = document.getElementById('loginError');
+
+  function showApp(userName) {
+    gate.hidden = true;
+    app.hidden = false;
+    if (userName) window.__OPL_LOGIN_USER = userName;
+    loadScripts();
+  }
+
+  function loadScripts() {
+    var scripts = ['js/seed.js', 'js/xlsx-io.js', 'js/store.js', 'js/app.js'];
+    var i = 0;
+    function next() {
+      if (i >= scripts.length) return;
+      var s = document.createElement('script');
+      s.src = scripts[i++];
+      s.onload = next;
+      document.body.appendChild(s);
+    }
+    next();
+  }
+
+  fetch('/api/auth').then(function(r) {
+    if (r.ok) return r.json();
+  }).then(function(data) {
+    if (data && data.authenticated) showApp(data.user);
+  }).catch(function() {});
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    errEl.hidden = true;
+    var pw = document.getElementById('loginPw').value;
+    fetch('/api/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    }).then(function(r) {
+      if (r.ok) {
+        showApp();
+      } else {
+        errEl.hidden = false;
+        document.getElementById('loginPw').select();
+      }
+    }).catch(function() {
+      errEl.textContent = 'Verbindungsfehler';
+      errEl.hidden = false;
+    });
+  });
+})();
+</script>
 </body>
 </html>

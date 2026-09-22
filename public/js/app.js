@@ -682,9 +682,12 @@
     Store.STATI.forEach(function (s) { $('#fStatus').appendChild(new Option(s, s)); });
 
     Store.onError(function (msg) { toast(msg, true); });
+    if (window.__OPL_LOGIN_USER) {
+      Store.setUser(window.__OPL_LOGIN_USER);
+    }
     Store.load();
     Store.subscribe(render);
-    $('#userName').value = Store.state.user;
+    $('#userName').value = Store.state.user || window.__OPL_LOGIN_USER || '';
 
     // Filter
     var t;
