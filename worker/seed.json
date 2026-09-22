@@ -8,8 +8,13 @@
     "faellig": "",
     "status": "Offen",
     "todo": "Pruefen, ob Biegung/Kerbenbildung bei Stossbelastung am minimal ueberstehenden Lager auftritt; Schraubenverbindung nachrechnen.",
-    "bilder": [],
-    "notiz": ""
+    "bilder": [
+      {
+        "name": "Fussgelenk mit Lagerschraube (AMK Fig. 2)",
+        "src": "assets/img/fig02-fussgelenk-lagerschraube.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 2 – Lagerschraube mit Spalt zum Aluminium"
   },
   {
     "nr": 2,
@@ -44,8 +49,21 @@
     "faellig": "",
     "status": "Offen",
     "todo": "Dehnschraube fuer Shell-Befestigung auslegen – keine Scherbelastung zulaessig; Schraubensicherung (Nord-Lock) pruefen.",
-    "bilder": [],
-    "notiz": ""
+    "bilder": [
+      {
+        "name": "Schelle/Klemme am Aktuator-Adapter (AMK Fig. 7)",
+        "src": "assets/img/fig07-schelle-klemme.png"
+      },
+      {
+        "name": "Schelle Spaltmass 0,22 mm (AMK Fig. 8)",
+        "src": "assets/img/fig08-schelle-spalt-022mm.png"
+      },
+      {
+        "name": "Schelle 4NE1_D-4406 Al 7075 / M4 (AMK Fig. 14)",
+        "src": "assets/img/fig14-schelle-4406-al7075.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 7/8/14 – Schelle geht auf Block bei 0,22 mm Spalt"
   },
   {
     "nr": 5,
@@ -92,8 +110,13 @@
     "faellig": "",
     "status": "Offen",
     "todo": "Welche Teile sind aktuell KEINE Gleichteile (u. a. Schienbein gespiegelt)? Konzept glattziehen, um doppelte Druckgusskosten zu vermeiden.",
-    "bilder": [],
-    "notiz": ""
+    "bilder": [
+      {
+        "name": "Modellbaum Links/Rechts-Teilenummern (AMK Fig. 6)",
+        "src": "assets/img/fig06-modellbaum-links-rechts.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 6 – Schienbein 7911/7411, Huefte, Arm 4702/4402 gespiegelt"
   },
   {
     "nr": 9,
@@ -104,8 +127,13 @@
     "faellig": "",
     "status": "Offen",
     "todo": "Steckerfreigaenge/Positionen abstimmen, Kollisionspruefung im CAD mit Gotech; eigene Steckerentwicklung (Norm-Pin zu lang, Kabelabgang ungünstig).",
-    "bilder": [],
-    "notiz": ""
+    "bilder": [
+      {
+        "name": "Stecker im Aktuatorgehaeuse – Freigaenge fehlen (AMK Fig. 4)",
+        "src": "assets/img/fig04-stecker-aktuatorgehaeuse.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 4 – Stecker-Clearance nicht ausreichend"
   },
   {
     "nr": 10,
@@ -116,8 +144,13 @@
     "faellig": "",
     "status": "Offen",
     "todo": "Zugentlastung mechanisch statt Klebepads vorsehen; Poka Yoke fuer Elektrik/Mechanik definieren (Fehlmontage vermeiden).",
-    "bilder": [],
-    "notiz": ""
+    "bilder": [
+      {
+        "name": "Asymmetrischer Gelenkanschlag als Poka-Yoke (AMK Fig. 5)",
+        "src": "assets/img/fig05-gelenkanschlag-pokayoke.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 5 – Anschlag asymmetrisch, nur eine Einbaulage moeglich"
   },
   {
     "nr": 11,
@@ -164,8 +197,13 @@
     "faellig": "",
     "status": "Offen",
     "todo": "Hardstop definieren und Simulation fuer Lastfall \"Schraube reisst\" durchfuehren.",
-    "bilder": [],
-    "notiz": ""
+    "bilder": [
+      {
+        "name": "Hardstop-Stifte mit K/G7-Passung (AMK Fig. 11)",
+        "src": "assets/img/fig11-hardstop-stifte-k-g7.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 11 – K-Pressung + G7-Spielpassung in Durchgangsbohrung"
   },
   {
     "nr": 15,
@@ -176,8 +214,17 @@
     "faellig": "",
     "status": "Offen",
     "todo": "Konzept zur thermischen Kopplung/Waermeabfuhr ausarbeiten und simulieren; Kamerabelueftung (Helix-Kamera) sicherstellen.",
-    "bilder": [],
-    "notiz": ""
+    "bilder": [
+      {
+        "name": "Aktuator-Flanschmontage mit Luftspalt (AMK Fig. 10)",
+        "src": "assets/img/fig10-aktuator-flansch-luftspalt.png"
+      },
+      {
+        "name": "Waermetauscher mit Einzelluefter oben (AMK Fig. 17)",
+        "src": "assets/img/fig17-waermetauscher-luefter.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 10/17 – Luftspalt isoliert, Luefter oben statt unten"
   },
   {
     "nr": 16,
@@ -188,8 +235,17 @@
     "faellig": "",
     "status": "Offen",
     "todo": "Lager in eine Gehaeusehaelfte verlegen (statt Sprengring in zwei Haelften); Verformungsrisiko Innenring eliminieren.",
-    "bilder": [],
-    "notiz": ""
+    "bilder": [
+      {
+        "name": "Kugellager ueber zwei Gehaeusehaelften (AMK Fig. 12)",
+        "src": "assets/img/fig12-lager-zwei-haelften.png"
+      },
+      {
+        "name": "Armgelenk – Vorschlag Trennebene versetzen (AMK Fig. 13)",
+        "src": "assets/img/fig13-armgelenk-trennebene.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 12/13 – Lagersitz in einer Haelfte, Trennebene verschieben"
   },
   {
     "nr": 17,
@@ -224,8 +280,13 @@
     "faellig": "",
     "status": "Offen",
     "todo": "Montagereihenfolge (Massembly-Schritte) detailliert dokumentieren; Zugaenglichkeit aller Komponenten pruefen.",
-    "bilder": [],
-    "notiz": ""
+    "bilder": [
+      {
+        "name": "Montagereihenfolge 7100-Beinaktuator (AMK Fig. 9)",
+        "src": "assets/img/fig09-montage-7100-gruppe.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 9 – Motor, Schelle, Hardstop, Huelsen, Gelenkst."
   },
   {
     "nr": 20,
@@ -236,8 +297,13 @@
     "faellig": "",
     "status": "Offen",
     "todo": "Eignung fuer Hot-Swap unter Last pruefen (fruehere Kontakte \"abgeraucht\" – Brandgefahr).",
-    "bilder": [],
-    "notiz": ""
+    "bilder": [
+      {
+        "name": "Torso mit seitlich geladenen Batterien (AMK Fig. 15)",
+        "src": "assets/img/fig15-torso-batterien.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 15 – Batterien seitlich, Kontakte unter Last abgeraucht"
   },
   {
     "nr": 21,
@@ -248,8 +314,13 @@
     "faellig": "",
     "status": "Offen",
     "todo": "Oesen wirken duenn – Festigkeitsrechnung fuer Aufhaengung durchfuehren (Zugkraft > 120 kg); zusaetzlich klaeren, ob eine Bajonett-Loesung zum Loesen/Loslassen des Gehaenges vorgesehen ist.",
-    "bilder": [],
-    "notiz": ""
+    "bilder": [
+      {
+        "name": "Aufhaengeoese / Bajonett-Schnellkupplung (AMK Fig. 16)",
+        "src": "assets/img/fig16-aufhaengeoese-bajonett.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 16 – Oesen duenn, Sicherheitsanzeige wie Anhaengerkupplung"
   },
   {
     "nr": 22,
@@ -260,8 +331,13 @@
     "faellig": "",
     "status": "Offen",
     "todo": "IMU, Smartlink, Kondensatoren und SSD-Karte im CAD-Modell lokalisieren bzw. ergaenzen.",
-    "bilder": [],
-    "notiz": ""
+    "bilder": [
+      {
+        "name": "Mainboard und Compute Unit im Torso (AMK Fig. 18)",
+        "src": "assets/img/fig18-mainboard-compute-unit.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 18 – SSD nicht auffindbar, evtl. auf Compute Unit"
   },
   {
     "nr": 23,
@@ -284,8 +360,13 @@
     "faellig": "2026-09-25",
     "status": "Offen",
     "todo": "Alle Bauteile auf Montagefaehigkeit pruefen.",
-    "bilder": [],
-    "notiz": ""
+    "bilder": [
+      {
+        "name": "Torso-Struktur einteilig ca. 2,5 kg Al 6082 (AMK Fig. 19)",
+        "src": "assets/img/fig19-torso-struktur-al6082.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 19 – massives Torso-Einzelteil, Schrauben von unten vor Einschieben"
   },
   {
     "nr": 25,
@@ -353,7 +434,41 @@
     "faellig": "",
     "status": "Offen",
     "todo": "Design-Aesthetik/Proportionen (Beine bis Huefte) frueh mit Industriedesign abstimmen; Risiko bei enger Bekleidung (Konturen) beruecksichtigen.",
+    "bilder": [
+      {
+        "name": "Beine und Huefte – Proportionen (AMK Fig. 3)",
+        "src": "assets/img/fig03-beine-huefte-proportionen.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 3 – Hueftluecke und Beinproportionen unter Stoff kritisch"
+  },
+  {
+    "nr": 35,
+    "bereich": "Hardware/Mechanik",
+    "thema": "Passung",
+    "prio": "Mittel",
+    "verantwortlicher": "",
+    "faellig": "",
+    "status": "Offen",
+    "todo": "Obere/untere Gehaeusehaelfte treffen am Aktuator-Kopf als zwei duenne Bleche aufeinander ohne Freistellungsschnitt – Gefahr von Kontakt und Klappern. Freistellung konstruieren.",
     "bilder": [],
-    "notiz": ""
+    "notiz": "s. AMK 21.09.2026 Abschn. 4.10 – ueberlappende Bleche am Aktuator-Kopf"
+  },
+  {
+    "nr": 36,
+    "bereich": "Hardware/Mechanik",
+    "thema": "Kollision",
+    "prio": "Mittel",
+    "verantwortlicher": "",
+    "faellig": "",
+    "status": "Offen",
+    "todo": "Vollstaendige Kollisions- und Montagefaehigkeitspruefung des gesamten Roboters durchfuehren, idealerweise durch externen Reviewer. Bisherige Checks decken nur Teilbereiche ab (Bein, Kuehler).",
+    "bilder": [
+      {
+        "name": "GEN4 Gesamtbaugruppe 4NE1_D (AMK Fig. 1)",
+        "src": "assets/img/fig01-gesamtbaugruppe-4ne1d.png"
+      }
+    ],
+    "notiz": "s. AMK 21.09.2026 Fig. 1 – 1h Review reicht nicht fuer alle Punkte"
   }
 ]
