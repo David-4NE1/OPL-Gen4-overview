@@ -579,6 +579,9 @@
         var faellig = toIsoDate(row[6]);
         if (row[6] && !faellig) warnungen.push('Zeile ' + rn + ': Datum "' + row[6] + '" nicht lesbar – leer gelassen.');
 
+        var erstelltAm = toIsoDate(row[10]);
+        if (row[10] && !erstelltAm) warnungen.push('Zeile ' + rn + ': Erstellt-am-Datum "' + row[10] + '" nicht lesbar – leer gelassen.');
+
         entries.push({
           nr: nr,
           bereich: (row[2] || '').trim() || 'Hardware/Mechanik',
@@ -589,7 +592,8 @@
           status: status,
           todo: todo,
           bilder: [],
-          notiz: (row[9] || '').trim()
+          notiz: (row[9] || '').trim(),
+          erstelltAm: erstelltAm
         });
       });
 

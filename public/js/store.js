@@ -253,8 +253,10 @@
   function applyImport(entries, modus) {
     var vorher = state.entries.length;
     var bilderProNr = {};
+    var erstelltAmProNr = {};
     state.entries.forEach(function (e) {
       if (e.bilder && e.bilder.length) bilderProNr[e.nr] = e.bilder;
+      if (e.erstelltAm) erstelltAmProNr[e.nr] = e.erstelltAm;
     });
 
     var neu = 0, aktualisiert = 0;
@@ -262,6 +264,7 @@
       state.entries = entries.map(function (e) {
         var n = normalizeEntry(e);
         if (!n.bilder.length && bilderProNr[n.nr]) n.bilder = bilderProNr[n.nr];
+        n.erstelltAm = n.erstelltAm || erstelltAmProNr[n.nr] || heute();
         return n;
       });
       neu = state.entries.length;
@@ -272,12 +275,14 @@
         var vorhanden = byNr(n.nr);
         if (vorhanden) {
           if (!n.bilder.length) n.bilder = vorhanden.bilder;
+          n.erstelltAm = n.erstelltAm || vorhanden.erstelltAm || heute();
           Object.assign(vorhanden, n, {
             geaendertAm: jetzt(), geaendertVon: state.user || 'Excel-Import'
           });
           aktualisiert++;
         } else {
           if (!n.bilder.length && bilderProNr[n.nr]) n.bilder = bilderProNr[n.nr];
+          n.erstelltAm = n.erstelltAm || heute();
           n.geaendertAm = jetzt();
           n.geaendertVon = state.user || 'Excel-Import';
           state.entries.push(n);

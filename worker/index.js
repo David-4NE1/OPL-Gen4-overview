@@ -267,7 +267,7 @@ function normalize(e) {
     todo: e.todo || '',
     bilder: Array.isArray(e.bilder) ? e.bilder : [],
     notiz: e.notiz || '',
-    erstelltAm: e.erstelltAm || '',
+    erstelltAm: e.erstelltAm || new Date().toISOString().slice(0, 10),
     geaendertAm: e.geaendertAm || '',
     geaendertVon: e.geaendertVon || ''
   };
