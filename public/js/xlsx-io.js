@@ -3,7 +3,8 @@
  *
  * Schreibt und liest .xlsx-Dateien exakt im Schema der bestehenden
  * OPL-Excel (Titel, KPI-Block mit Formeln, Kopfzeile ab Zeile 7,
- * Daten ab Zeile 8, Spalten A-I).
+ * Daten ab Zeile 8, Spalten A-K). Spalte K enthaelt die Bilder als
+ * echte eingebettete Grafiken (Excel Drawing), nicht nur als Text.
  *
  * ZIP wird "stored" (unkomprimiert) geschrieben – das versteht Excel
  * problemlos. Beim Lesen wird deflate ueber die native
@@ -272,7 +273,28 @@
   /* ------------------------------------------------------------------ */
 
   var HEADERS = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am'];
+                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Bilder'];
+
+  // Feste Anzeigegroesse je eingebettetem Bild in Pixel (96 dpi).
+  var IMG_W_PX = 110, IMG_H_PX = 80, IMG_GAP_PX = 6;
+  var EMU_PER_PX = 9525; // 914400 EMU/inch / 96 dpi
+
+  function dataUrlToBytes(dataUrl) {
+    var m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl || '');
+    if (!m) return null;
+    var bin;
+    try { bin = atob(m[2]); } catch (err) { return null; }
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return { mime: m[1], bytes: bytes };
+  }
+
+  function extForMime(mime) {
+    if (mime === 'image/png') return 'png';
+    if (mime === 'image/gif') return 'gif';
+    if (mime === 'image/webp') return 'webp';
+    return 'jpeg';
+  }
 
   var PRIO_STYLE = { 'Hoch': S.PRIO_HOCH, 'Mittel': S.PRIO_MITTEL, 'Niedrig': S.PRIO_NIEDRIG };
   var STATUS_STYLE = { 'Offen': S.ST_OFFEN, 'In Arbeit': S.ST_ARBEIT, 'Erledigt': S.ST_ERLEDIGT };
@@ -337,6 +359,15 @@
       return cellStr(colName(i + 1) + '7', S.HEADER, h);
     }).join('') + '</row>');
 
+    // Bilder werden als echte eingebettete Grafiken in Spalte K platziert
+    // (Excel Drawing), nicht nur als Text. Mehrere Bilder pro Zeile werden
+    // untereinander gestapelt; die Zeilenhoehe waechst entsprechend mit.
+    var media = [];
+    var drawingRels = [];
+    var anchors = [];
+    var mediaCount = 0;
+    var K_COL_IDX = HEADERS.length - 1; // 0-basiert fuer xdr:col
+
     var today = new Date().toISOString().slice(0, 10);
     entries.forEach(function (e, idx) {
       var r = first + idx;
@@ -352,16 +383,60 @@
         cellStr('G' + r, STATUS_STYLE[e.status] != null ? STATUS_STYLE[e.status] : S.CELL, e.status),
         cellStr('H' + r, S.CELL, e.todo),
         cellStr('I' + r, S.CELL, bildSpalte(e)),
-        cellStr('J' + r, S.CELL, ddmmyyyy(e.erstelltAm))
+        cellStr('J' + r, S.CELL, ddmmyyyy(e.erstelltAm)),
+        cellStr('K' + r, S.CELL, '')
       ];
-      rows.push('<row r="' + r + '" ht="31.5" customHeight="1">' + cells.join('') + '</row>');
+
+      var bilder = (e.bilder || []).map(function (b) { return dataUrlToBytes(b.src); })
+        .filter(function (p) { return p != null; });
+
+      var rowHeightPt = 31.5;
+      if (bilder.length) {
+        rowHeightPt = Math.max(rowHeightPt,
+          (bilder.length * IMG_H_PX + (bilder.length - 1) * IMG_GAP_PX) * 0.75 + 8);
+
+        bilder.forEach(function (parsed, bi) {
+          mediaCount++;
+          var ext = extForMime(parsed.mime);
+          var mediaName = 'image' + mediaCount + '.' + ext;
+          media.push({ name: 'xl/media/' + mediaName, data: parsed.bytes });
+          var rId = 'rIdImg' + mediaCount;
+          drawingRels.push({ id: rId, target: '../media/' + mediaName });
+
+          var rowOffEmu = bi * (IMG_H_PX + IMG_GAP_PX) * EMU_PER_PX;
+          var cx = IMG_W_PX * EMU_PER_PX, cy = IMG_H_PX * EMU_PER_PX;
+          anchors.push(
+            '<xdr:oneCellAnchor>' +
+              '<xdr:from><xdr:col>' + K_COL_IDX + '</xdr:col><xdr:colOff>0</xdr:colOff>' +
+                '<xdr:row>' + (r - 1) + '</xdr:row><xdr:rowOff>' + rowOffEmu + '</xdr:rowOff></xdr:from>' +
+              '<xdr:ext cx="' + cx + '" cy="' + cy + '"/>' +
+              '<xdr:pic>' +
+                '<xdr:nvPicPr>' +
+                  '<xdr:cNvPr id="' + (mediaCount + 1) + '" name="Bild ' + mediaCount + '"/>' +
+                  '<xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr>' +
+                '</xdr:nvPicPr>' +
+                '<xdr:blipFill><a:blip r:embed="' + rId + '"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>' +
+                '<xdr:spPr>' +
+                  '<a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>' +
+                  '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' +
+                '</xdr:spPr>' +
+              '</xdr:pic>' +
+              '<xdr:clientData/>' +
+            '</xdr:oneCellAnchor>'
+          );
+        });
+      }
+
+      rows.push('<row r="' + r + '" ht="' + rowHeightPt + '" customHeight="1">' + cells.join('') + '</row>');
     });
+    var hatBilder = anchors.length > 0;
 
     var sheet =
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
       '<sheetPr><outlinePr summaryBelow="1" summaryRight="1"/></sheetPr>' +
-      '<dimension ref="A1:J' + last + '"/>' +
+      '<dimension ref="A1:K' + last + '"/>' +
       '<sheetViews><sheetView tabSelected="1" workbookViewId="0">' +
         '<pane ySplit="7" topLeftCell="A8" activePane="bottomLeft" state="frozen"/>' +
       '</sheetView></sheetViews>' +
@@ -377,11 +452,12 @@
         '<col min="8" max="8" width="60" customWidth="1"/>' +
         '<col min="9" max="9" width="22" customWidth="1"/>' +
         '<col min="10" max="10" width="14" customWidth="1"/>' +
+        '<col min="11" max="11" width="17" customWidth="1"/>' +
       '</cols>' +
       '<sheetData>' + rows.join('') + '</sheetData>' +
-      '<autoFilter ref="A7:J' + last + '"/>' +
+      '<autoFilter ref="A7:K' + last + '"/>' +
       '<mergeCells count="3">' +
-        '<mergeCell ref="A1:J1"/><mergeCell ref="A2:J2"/><mergeCell ref="H5:I5"/>' +
+        '<mergeCell ref="A1:K1"/><mergeCell ref="A2:K2"/><mergeCell ref="H5:I5"/>' +
       '</mergeCells>' +
       '<dataValidations count="3">' +
         validation('list', 'D' + first + ':D' + last, '"Hoch,Mittel,Niedrig"') +
@@ -390,6 +466,7 @@
           '"' + (opts.bereiche || []).join(',') + '"') +
       '</dataValidations>' +
       '<pageMargins left="0.4" right="0.4" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>' +
+      (hatBilder ? '<drawing r:id="rIdDrawing1"/>' : '') +
       '</worksheet>';
 
     var files = [
@@ -398,9 +475,16 @@
         '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
         '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
         '<Default Extension="xml" ContentType="application/xml"/>' +
+        (hatBilder ?
+          '<Default Extension="jpeg" ContentType="image/jpeg"/>' +
+          '<Default Extension="png" ContentType="image/png"/>' +
+          '<Default Extension="gif" ContentType="image/gif"/>' +
+          '<Default Extension="webp" ContentType="image/webp"/>' : '') +
         '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
         '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
         '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+        (hatBilder ?
+          '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : '') +
         '</Types>') },
       { name: '_rels/.rels', data: enc.encode(
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -423,6 +507,29 @@
       { name: 'xl/styles.xml', data: enc.encode(STYLES_XML) },
       { name: 'xl/worksheets/sheet1.xml', data: enc.encode(sheet) }
     ];
+
+    if (hatBilder) {
+      files.push({ name: 'xl/worksheets/_rels/sheet1.xml.rels', data: enc.encode(
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rIdDrawing1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>' +
+        '</Relationships>') });
+      files.push({ name: 'xl/drawings/drawing1.xml', data: enc.encode(
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" ' +
+        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+        anchors.join('') +
+        '</xdr:wsDr>') });
+      files.push({ name: 'xl/drawings/_rels/drawing1.xml.rels', data: enc.encode(
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        drawingRels.map(function (d) {
+          return '<Relationship Id="' + d.id + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="' + d.target + '"/>';
+        }).join('') +
+        '</Relationships>') });
+      media.forEach(function (m) { files.push(m); });
+    }
 
     return new Blob([zipBuild(files)], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
