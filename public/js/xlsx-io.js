@@ -660,6 +660,7 @@
 
       var entries = [];
       var warnungen = [];
+      var entryByRow = {}; // Zeilennummer (wie in Excel) -> Eintrag
       var rowNums = Object.keys(grid).map(Number).filter(function (n) { return n > headerRow; })
         .sort(function (a, b) { return a - b; });
 
@@ -689,7 +690,7 @@
         var erstelltAm = toIsoDate(row[10]);
         if (row[10] && !erstelltAm) warnungen.push('Zeile ' + rn + ': Erstellt-am-Datum "' + row[10] + '" nicht lesbar – leer gelassen.');
 
-        entries.push({
+        var eintrag = {
           nr: nr,
           bereich: (row[2] || '').trim() || 'Hardware/Mechanik',
           thema: thema,
@@ -701,12 +702,135 @@
           bilder: [],
           notiz: (row[9] || '').trim(),
           erstelltAm: erstelltAm
-        });
+        };
+        entries.push(eintrag);
+        entryByRow[rn] = eintrag;
       });
 
       if (!entries.length) throw new Error('Die Datei enthaelt keine lesbaren OPL-Zeilen.');
+
+      // Eingebettete Grafiken (per Insert > Bild in Excel eingefuegt) einlesen
+      // und ueber ihre Zeilenposition dem passenden Eintrag zuordnen.
+      var bildWarnungen = [];
+      try {
+        bildWarnungen = bilderEinlesen(zip, xml, sheetName, entryByRow);
+      } catch (err) {
+        warnungen.push('Eingebettete Bilder konnten nicht gelesen werden: ' + err.message);
+      }
+      warnungen = warnungen.concat(bildWarnungen);
+
       return { entries: entries, warnungen: warnungen };
     });
+  }
+
+  function resolveRelPath(baseDir, target) {
+    if (/^\//.test(target)) return target.slice(1);
+    var parts = baseDir.split('/').filter(Boolean);
+    target.split('/').forEach(function (p) {
+      if (p === '' || p === '.') return;
+      if (p === '..') parts.pop();
+      else parts.push(p);
+    });
+    return parts.join('/');
+  }
+
+  function mimeForExt(ext) {
+    ext = String(ext).toLowerCase();
+    if (ext === 'png') return 'image/png';
+    if (ext === 'gif') return 'image/gif';
+    if (ext === 'webp') return 'image/webp';
+    if (ext === 'bmp') return 'image/bmp';
+    return 'image/jpeg';
+  }
+
+  function bytesToBase64(bytes) {
+    var bin = '';
+    var chunk = 0x8000;
+    for (var i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(bin);
+  }
+
+  function getEmbedRid(el) {
+    if (!el) return null;
+    var v = el.getAttribute('r:embed');
+    if (v) return v;
+    for (var i = 0; i < el.attributes.length; i++) {
+      var a = el.attributes[i];
+      if (a.localName === 'embed' || /:embed$/.test(a.name)) return a.value;
+    }
+    return null;
+  }
+
+  /**
+   * Liest die im Tabellenblatt eingebetteten Grafiken (Excel-Drawing) ein
+   * und haengt sie dem Eintrag der jeweiligen Zeile an. Gibt Warnungen zurueck.
+   */
+  function bilderEinlesen(zip, xml, sheetName, entryByRow) {
+    var warnungen = [];
+    var sheetBase = sheetName.split('/').pop();
+    var sheetRelsPath = 'xl/worksheets/_rels/' + sheetBase + '.rels';
+    if (!zip[sheetRelsPath]) return warnungen; // keine Grafiken in dieser Datei
+
+    var sheetRelsDoc = xml(sheetRelsPath);
+    var relNodes = sheetRelsDoc.getElementsByTagName('Relationship');
+    var drawingTarget = null;
+    for (var i = 0; i < relNodes.length; i++) {
+      var type = relNodes[i].getAttribute('Type') || '';
+      if (/\/drawing$/.test(type)) {
+        drawingTarget = resolveRelPath('xl/worksheets', relNodes[i].getAttribute('Target'));
+        break;
+      }
+    }
+    if (!drawingTarget || !zip[drawingTarget]) return warnungen;
+
+    var drawingDoc = xml(drawingTarget);
+    var drawingDir = drawingTarget.split('/').slice(0, -1).join('/');
+    var drawingRelsPath = drawingDir + '/_rels/' + drawingTarget.split('/').pop() + '.rels';
+    var ridToTarget = {};
+    if (zip[drawingRelsPath]) {
+      var dRelsDoc = xml(drawingRelsPath);
+      var dRelNodes = dRelsDoc.getElementsByTagName('Relationship');
+      for (var j = 0; j < dRelNodes.length; j++) {
+        var id = dRelNodes[j].getAttribute('Id');
+        var target = resolveRelPath(drawingDir, dRelNodes[j].getAttribute('Target'));
+        ridToTarget[id] = target;
+      }
+    }
+
+    var anchors = [].slice.call(drawingDoc.getElementsByTagName('xdr:twoCellAnchor'))
+      .concat([].slice.call(drawingDoc.getElementsByTagName('xdr:oneCellAnchor')));
+
+    var gefunden = 0;
+    anchors.forEach(function (anchor) {
+      var fromEl = anchor.getElementsByTagName('xdr:from')[0];
+      var rowEl = fromEl && fromEl.getElementsByTagName('xdr:row')[0];
+      if (!rowEl) return;
+      var row0 = parseInt(rowEl.textContent, 10);
+      if (isNaN(row0)) return;
+      var rn = row0 + 1; // Excel-Zeile ist 1-basiert
+      var eintrag = entryByRow[rn];
+      if (!eintrag) return; // Bild ausserhalb einer erkannten Datenzeile
+
+      var blip = anchor.getElementsByTagName('a:blip')[0];
+      var rid = getEmbedRid(blip);
+      var mediaPath = rid && ridToTarget[rid];
+      if (!mediaPath || !zip[mediaPath]) return;
+
+      var ext = mediaPath.split('.').pop();
+      var b64 = bytesToBase64(zip[mediaPath]);
+      eintrag.bilder.push({
+        name: 'Bild ' + (eintrag.bilder.length + 1),
+        src: 'data:' + mimeForExt(ext) + ';base64,' + b64
+      });
+      gefunden++;
+    });
+
+    if (!gefunden && anchors.length) {
+      warnungen.push('In der Datei eingebettete Grafiken konnten keiner Zeile zugeordnet werden.');
+    }
+    return warnungen;
   }
 
   function normalize(value, allowed) {
