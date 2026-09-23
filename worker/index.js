@@ -304,11 +304,15 @@ function insertStmt(db, e) {
 async function insertEntry(db, e) { await insertStmt(db, e).run(); }
 
 function updateStmt(db, e) {
+  // erstellt_am ist unveraenderlich, sobald gesetzt – ein leerer/fehlender
+  // Wert in der DB wird aber mit dem mitgeschickten Wert aufgefuellt (Backfill).
   return db.prepare(
-    `UPDATE entries SET bereich=?, thema=?, prio=?, verantwortlicher=?, faellig=?, status=?, todo=?, bilder=?, notiz=?, geaendert_am=?, geaendert_von=?
+    `UPDATE entries SET bereich=?, thema=?, prio=?, verantwortlicher=?, faellig=?, status=?, todo=?, bilder=?, notiz=?,
+       erstellt_am = CASE WHEN erstellt_am IS NULL OR erstellt_am = '' THEN ? ELSE erstellt_am END,
+       geaendert_am=?, geaendert_von=?
      WHERE nr=?`
   ).bind(e.bereich, e.thema, e.prio, e.verantwortlicher, e.faellig, e.status, e.todo,
-         JSON.stringify(e.bilder), e.notiz, e.geaendertAm, e.geaendertVon, e.nr);
+         JSON.stringify(e.bilder), e.notiz, e.erstelltAm, e.geaendertAm, e.geaendertVon, e.nr);
 }
 
 async function updateEntry(db, e) { await updateStmt(db, e).run(); }
