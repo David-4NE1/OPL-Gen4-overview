@@ -6,7 +6,8 @@
  *   POST   /api/login            → Anmeldung (setzt Cookie)
  *   GET    /api/auth              → Auth-Status prüfen
  *   GET    /api/logout            → Abmelden (löscht Cookie)
- *   GET    /api/entries           → alle Einträge
+ *   GET    /api/health            → Erreichbarkeit (kein Auth, keine Daten)
+ *   GET    /api/entries           → alle Einträge (Cookie ODER Bearer READ_TOKEN)
  *   GET    /api/entries/:nr       → ein Eintrag
  *   POST   /api/entries           → neuen Eintrag anlegen
  *   PUT    /api/entries/:nr       → Eintrag aktualisieren (Patch)
@@ -56,6 +57,22 @@ function getUserName(request) {
     }
   }
   return '';
+}
+
+// Read-only Zugang fuer GET /api/entries per Bearer-Token (fuer maschinelle
+// Konsumenten wie den Planner). Konstante Zeit, damit die Antwortzeit nicht
+// Stueck fuer Stueck den richtigen Wert verraet. Greift NICHT, wenn
+// READ_TOKEN nicht gesetzt ist.
+function tokenGueltig(request, env) {
+  const kopf = request.headers.get('Authorization') || '';
+  const ist = kopf.startsWith('Bearer ') ? kopf.slice(7) : '';
+  const soll = env.READ_TOKEN || '';
+  if (!soll || ist.length !== soll.length) return false;
+  let abweichung = 0;
+  for (let i = 0; i < soll.length; i++) {
+    abweichung |= ist.charCodeAt(i) ^ soll.charCodeAt(i);
+  }
+  return abweichung === 0;
 }
 
 export default {
@@ -119,6 +136,19 @@ async function handleAPI(url, method, request, env) {
     headers.append('set-cookie', `${AUTH_COOKIE}=; Path=/; HttpOnly; Max-Age=0`);
     headers.append('set-cookie', `${USER_COOKIE}=; Path=/; Max-Age=0`);
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+  }
+
+  // GET /api/health (kein Auth noetig – keine Daten, nur Erreichbarkeit)
+  if (path === '/api/health' && method === 'GET') {
+    return json({ ok: true });
+  }
+
+  // GET /api/entries per Bearer-Token (read-only, fuer maschinelle Konsumenten).
+  // Gilt ausschliesslich fuer diese eine Route/Methode und ersetzt die
+  // Cookie-Pruefung nicht, sondern ergaenzt sie nur als Alternative.
+  if (path === '/api/entries' && method === 'GET' && tokenGueltig(request, env)) {
+    const { results } = await env.DB.prepare('SELECT * FROM entries ORDER BY nr').all();
+    return json(results.map(dbToEntry));
   }
 
   // --- Ab hier: Auth erforderlich ---
