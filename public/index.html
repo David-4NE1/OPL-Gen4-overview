@@ -73,6 +73,8 @@
         <button type="button" data-act="log">🕓 Änderungsprotokoll</button>
         <button type="button" data-act="amk-bilder">🖼 AMK-Bilder nachtragen</button>
         <button type="button" data-act="reset">↺ Auf Excel-Startstand zurücksetzen</button>
+        <hr id="adminMenuDivider" hidden>
+        <button type="button" data-act="admin" id="btnAdminMenu" hidden>🔐 Zugriff verwalten</button>
       </div>
     </div>
   </div>
@@ -192,6 +194,23 @@
   </footer>
 </dialog>
 
+<!-- Dialog: Admin – Zugriff verwalten -->
+<dialog id="dlgAdmin" class="dialog">
+  <h2>Zugriff verwalten</h2>
+  <p class="hint">Nur diese E-Mail-Adressen (@neura-robotics.com) dürfen sich anmelden.</p>
+  <div id="adminEmailListe" class="loglist"></div>
+  <form id="formAdminAdd" class="grid2" style="margin-top:12px">
+    <label style="grid-column:1/3">Neue E-Mail-Adresse
+      <input id="adminNeueEmail" type="email" placeholder="vorname.nachname@neura-robotics.com" required>
+    </label>
+  </form>
+  <footer class="dialog__footer">
+    <span class="spacer"></span>
+    <button type="button" class="btn btn--ghost" data-close>Schließen</button>
+    <button type="submit" form="formAdminAdd" id="btnAdminAdd" class="btn btn--primary">Hinzufügen</button>
+  </footer>
+</dialog>
+
 <!-- Lightbox -->
 <div id="lightbox" class="lightbox" hidden>
   <button class="lightbox__close" type="button" aria-label="Schließen">✕</button>
@@ -207,10 +226,11 @@
   var form = document.getElementById('loginForm');
   var errEl = document.getElementById('loginError');
 
-  function showApp(userName) {
+  function showApp(userName, isAdmin) {
     gate.hidden = true;
     app.hidden = false;
     if (userName) window.__OPL_LOGIN_USER = userName;
+    window.__OPL_IS_ADMIN = !!isAdmin;
     loadScripts();
   }
 
@@ -230,7 +250,7 @@
   fetch('/api/auth').then(function(r) {
     if (r.ok) return r.json();
   }).then(function(data) {
-    if (data && data.authenticated) showApp(data.user);
+    if (data && data.authenticated) showApp(data.user, data.isAdmin);
   }).catch(function() {});
 
   form.addEventListener('submit', function(e) {
@@ -246,7 +266,7 @@
       if (r.ok) return r.json();
       return r.json().then(function(e) { throw new Error(e.error || 'Fehler'); });
     }).then(function(data) {
-      showApp(data.user);
+      showApp(data.user, data.isAdmin);
     }).catch(function(err) {
       errEl.textContent = err.message || 'Verbindungsfehler';
       errEl.hidden = false;

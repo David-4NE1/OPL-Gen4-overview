@@ -15,18 +15,15 @@
  *   POST   /api/import            → Bulk-Import (ersetzen / zusammenführen)
  *   POST   /api/reset             → auf Seed-Stand zurücksetzen
  *   GET    /api/log               → Änderungsprotokoll (neueste zuerst, max 500)
+ *   GET    /api/admin/emails      → Freigabeliste lesen (nur Admin)
+ *   POST   /api/admin/emails      → E-Mail zur Freigabeliste hinzufuegen (nur Admin)
+ *   DELETE /api/admin/emails/:e   → E-Mail von der Freigabeliste entfernen (nur Admin)
+ *
+ * Freigegebene E-Mail-Adressen liegen in der D1-Tabelle "allowed_emails"
+ * (Migration: siehe migrations/002_allowed_emails.sql).
  */
 
-const ALLOWED_EMAILS = [
-  'david.rybinski@neura-robotics.com',
-  'thorsten.grelle@neura-robotics.com',
-  'marcellinus.meyer@neura-robotics.com',
-  'jannik.goez@neura-robotics.com',
-  'marc.zinner@neura-robotics.com',
-  'jan.buehler@neura-robotics.com',
-  'sebastian.lein@neura-robotics.com',
-  'josef.mecid@neura-robotics.com',
-];
+const ADMIN_EMAIL = 'david.rybinski@neura-robotics.com';
 
 const AUTH_COOKIE = 'opl_auth';
 const TOKEN = 'c4f8a2e1b7d9';
@@ -57,6 +54,23 @@ function getUserName(request) {
     }
   }
   return '';
+}
+
+const EMAIL_COOKIE = 'opl_email';
+
+function getEmail(request) {
+  const cookie = request.headers.get('cookie') || '';
+  for (const c of cookie.split(';')) {
+    const trimmed = c.trim();
+    if (trimmed.startsWith(EMAIL_COOKIE + '=')) {
+      return decodeURIComponent(trimmed.slice(EMAIL_COOKIE.length + 1));
+    }
+  }
+  return '';
+}
+
+function isAdmin(request) {
+  return isAuthenticated(request) && getEmail(request) === ADMIN_EMAIL;
 }
 
 // Read-only Zugang fuer GET /api/entries per Bearer-Token (fuer maschinelle
@@ -107,17 +121,22 @@ async function handleAPI(url, method, request, env) {
   if (path === '/api/login' && method === 'POST') {
     const data = await request.json();
     const email = (data.email || '').trim().toLowerCase();
-    if (!ALLOWED_EMAILS.includes(email)) {
+    const zugelassen = await env.DB.prepare(
+      'SELECT 1 FROM allowed_emails WHERE email = ?'
+    ).bind(email).first();
+    if (!zugelassen) {
       return json({ error: 'Diese E-Mail-Adresse ist nicht zugelassen' }, 403);
     }
     if (data.password === getPassword(env)) {
-      const userName = nameFromEmail(data.email);
+      const userName = nameFromEmail(email);
+      const admin = email === ADMIN_EMAIL;
       const headers = new Headers({ 'content-type': 'application/json' });
       headers.append('set-cookie', `${AUTH_COOKIE}=${TOKEN}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000`);
+      headers.append('set-cookie', `${EMAIL_COOKIE}=${encodeURIComponent(email)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000`);
       if (userName) {
         headers.append('set-cookie', `${USER_COOKIE}=${encodeURIComponent(userName)}; Path=/; SameSite=Strict; Max-Age=2592000`);
       }
-      return new Response(JSON.stringify({ ok: true, user: userName }), { status: 200, headers });
+      return new Response(JSON.stringify({ ok: true, user: userName, isAdmin: admin }), { status: 200, headers });
     }
     return json({ error: 'Falsches Passwort' }, 401);
   }
@@ -125,7 +144,11 @@ async function handleAPI(url, method, request, env) {
   // GET /api/auth (kein Auth noetig – prüft nur ob Cookie da ist)
   if (path === '/api/auth' && method === 'GET') {
     if (isAuthenticated(request)) {
-      return json({ authenticated: true, user: getUserName(request) });
+      return json({
+        authenticated: true,
+        user: getUserName(request),
+        isAdmin: getEmail(request) === ADMIN_EMAIL
+      });
     }
     return json({ authenticated: false }, 401);
   }
@@ -135,6 +158,7 @@ async function handleAPI(url, method, request, env) {
     const headers = new Headers({ 'content-type': 'application/json' });
     headers.append('set-cookie', `${AUTH_COOKIE}=; Path=/; HttpOnly; Max-Age=0`);
     headers.append('set-cookie', `${USER_COOKIE}=; Path=/; Max-Age=0`);
+    headers.append('set-cookie', `${EMAIL_COOKIE}=; Path=/; HttpOnly; Max-Age=0`);
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
   }
 
@@ -154,6 +178,14 @@ async function handleAPI(url, method, request, env) {
   // --- Ab hier: Auth erforderlich ---
   if (!isAuthenticated(request)) {
     return json({ error: 'Nicht angemeldet' }, 401);
+  }
+
+  // --- Admin-Routen: nur der Admin-Account darf die Freigabeliste verwalten ---
+  if (path.startsWith('/api/admin/')) {
+    if (!isAdmin(request)) {
+      return json({ error: 'Kein Zugriff' }, 403);
+    }
+    return handleAdmin(path, method, request, env);
   }
 
   const db = env.DB;
@@ -272,6 +304,46 @@ async function handleAPI(url, method, request, env) {
       'SELECT * FROM changelog ORDER BY id DESC LIMIT 500'
     ).all();
     return json(results);
+  }
+
+  return json({ error: 'Route nicht gefunden' }, 404);
+}
+
+/* -------------------------------------------------------------- Admin */
+
+async function listeEmails(db) {
+  const { results } = await db.prepare('SELECT email FROM allowed_emails ORDER BY email').all();
+  return results.map(r => r.email);
+}
+
+async function handleAdmin(path, method, request, env) {
+  const db = env.DB;
+
+  // GET /api/admin/emails
+  if (path === '/api/admin/emails' && method === 'GET') {
+    return json(await listeEmails(db));
+  }
+
+  // POST /api/admin/emails { email }
+  if (path === '/api/admin/emails' && method === 'POST') {
+    const data = await request.json();
+    const email = (data.email || '').trim().toLowerCase();
+    if (!/^[^@\s]+@neura-robotics\.com$/.test(email)) {
+      return json({ error: 'Nur @neura-robotics.com Adressen erlaubt' }, 400);
+    }
+    await db.prepare('INSERT OR IGNORE INTO allowed_emails (email) VALUES (?)').bind(email).run();
+    return json(await listeEmails(db));
+  }
+
+  // DELETE /api/admin/emails/:email
+  const matchEmail = path.match(/^\/api\/admin\/emails\/(.+)$/);
+  if (matchEmail && method === 'DELETE') {
+    const email = decodeURIComponent(matchEmail[1]).trim().toLowerCase();
+    if (email === ADMIN_EMAIL) {
+      return json({ error: 'Der Admin-Zugang kann nicht entfernt werden' }, 400);
+    }
+    await db.prepare('DELETE FROM allowed_emails WHERE email = ?').bind(email).run();
+    return json(await listeEmails(db));
   }
 
   return json({ error: 'Route nicht gefunden' }, 404);

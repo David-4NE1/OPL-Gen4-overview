@@ -742,6 +742,48 @@
     });
   }
 
+  /* --------------------------------------------------- Admin: Zugriff */
+
+  function ladeAdminListe() {
+    var box = $('#adminEmailListe');
+    box.textContent = 'Lade …';
+    fetch('/api/admin/emails').then(function (r) {
+      if (!r.ok) throw new Error('Fehler beim Laden');
+      return r.json();
+    }).then(function (emails) {
+      box.textContent = '';
+      emails.forEach(function (email) {
+        var row = el('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '8px';
+        row.appendChild(el('span', null, email));
+        var spacer = el('span'); spacer.style.flex = '1';
+        row.appendChild(spacer);
+        if (email !== 'david.rybinski@neura-robotics.com') {
+          var del = el('button', 'btn btn--ghost', '✕ entfernen');
+          del.type = 'button';
+          del.addEventListener('click', function () {
+            if (!confirm(email + ' den Zugang entziehen?')) return;
+            fetch('/api/admin/emails/' + encodeURIComponent(email), { method: 'DELETE' })
+              .then(function (r) { return r.json(); })
+              .then(function () { ladeAdminListe(); toast(email + ' entfernt.'); })
+              .catch(function () { toast('Entfernen fehlgeschlagen.', true); });
+          });
+          row.appendChild(del);
+        }
+        box.appendChild(row);
+      });
+    }).catch(function () {
+      box.textContent = 'Konnte Liste nicht laden.';
+    });
+  }
+
+  function zeigeAdmin() {
+    ladeAdminListe();
+    $('#dlgAdmin').showModal();
+  }
+
   /* ---------------------------------------------------------- Protokoll */
 
   function zeigeLog() {
@@ -877,6 +919,7 @@
         $('#dlgImport').showModal();
       } else if (act === 'log') zeigeLog();
       else if (act === 'amk-bilder') amkBilderNachtragen();
+      else if (act === 'admin') zeigeAdmin();
       else if (act === 'reset') {
         if (confirm('Wirklich alle Änderungen verwerfen und den Excel-Startstand ' +
                     '(29 Punkte, 21.09.2026) wiederherstellen?')) {
@@ -884,6 +927,32 @@
           toast('Startstand wiederhergestellt.');
         }
       }
+    });
+
+    if (window.__OPL_IS_ADMIN) {
+      $('#btnAdminMenu').hidden = false;
+      $('#adminMenuDivider').hidden = false;
+    }
+
+    $('#formAdminAdd').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var input = $('#adminNeueEmail');
+      var email = input.value.trim().toLowerCase();
+      if (!email) return;
+      fetch('/api/admin/emails', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: email })
+      }).then(function (r) {
+        if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || 'Fehler'); });
+        return r.json();
+      }).then(function () {
+        input.value = '';
+        ladeAdminListe();
+        toast(email + ' hinzugefügt.');
+      }).catch(function (err) {
+        toast(err.message, true);
+      });
     });
 
     // Neuer Punkt
