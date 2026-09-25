@@ -748,7 +748,11 @@
     var box = $('#adminEmailListe');
     box.textContent = 'Lade …';
     fetch('/api/admin/emails').then(function (r) {
-      if (!r.ok) throw new Error('Fehler beim Laden');
+      if (!r.ok) {
+        return r.json().catch(function () { return {}; }).then(function (e) {
+          throw new Error('HTTP ' + r.status + ': ' + (e.error || 'unbekannter Fehler'));
+        });
+      }
       return r.json();
     }).then(function (emails) {
       box.textContent = '';
@@ -774,8 +778,8 @@
         }
         box.appendChild(row);
       });
-    }).catch(function () {
-      box.textContent = 'Konnte Liste nicht laden.';
+    }).catch(function (err) {
+      box.textContent = 'Konnte Liste nicht laden: ' + err.message;
     });
   }
 
