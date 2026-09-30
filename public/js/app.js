@@ -930,6 +930,8 @@
           Store.reset();
           toast('Startstand wiederhergestellt.');
         }
+      } else if (act === 'logout') {
+        fetch('/api/logout').then(function () { location.reload(); });
       }
     });
 
