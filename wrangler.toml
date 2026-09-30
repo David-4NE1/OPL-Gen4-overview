@@ -9,6 +9,8 @@ name = "opl-gen4-overview"
 main = "worker/index.js"
 compatibility_date = "2024-09-25"
 compatibility_flags = ["nodejs_compat"]
+# Im Dashboard gesetzte Variablen beim Deploy nicht entfernen
+keep_vars = true
 
 [assets]
 directory = "./public"
