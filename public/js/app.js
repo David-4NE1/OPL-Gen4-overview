@@ -14,7 +14,7 @@
   var erledigtOffen = false;
   var importPuffer = null;
 
-  var filter = { suche: '', bereich: '', thema: '', prio: '', status: '', verant: '' };
+  var filter = { suche: '', bereich: '', thema: '', prio: '', status: '', verant: '', team: '' };
 
   var PRIO_RANK = { 'Hoch': 0, 'Mittel': 1, 'Niedrig': 2 };
   var STATUS_RANK = { 'Offen': 0, 'In Arbeit': 1, 'Erledigt': 2 };
@@ -89,6 +89,7 @@
       var v = e.verantwortlicher || '(offen)';
       if (v !== filter.verant) return false;
     }
+    if (filter.team && (e.verantwortlichkeit || '(offen)') !== filter.team) return false;
     if (quick === 'offen' && e.status === 'Erledigt') return false;
     if (quick === 'erledigt' && e.status !== 'Erledigt') return false;
     if (quick === 'hoch' && !(e.prio === 'Hoch' && e.status !== 'Erledigt')) return false;
@@ -96,7 +97,7 @@
     if (quick === 'niedrig' && !(e.prio === 'Niedrig' && e.status !== 'Erledigt')) return false;
     if (quick === 'ueberfaellig' && !Store.istUeberfaellig(e)) return false;
     if (filter.suche) {
-      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.bereich, e.notiz]
+      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.bereich, e.notiz]
         .join(' ').toLowerCase();
       if (hay.indexOf(filter.suche) < 0) return false;
     }
@@ -104,7 +105,7 @@
   }
 
   function filterAktiv() {
-    return !!(filter.suche || filter.bereich || filter.thema || filter.prio || filter.status || filter.verant || quick);
+    return !!(filter.suche || filter.bereich || filter.thema || filter.prio || filter.status || filter.verant || filter.team || quick);
   }
 
   function sortiereKarten(a, b) {
@@ -152,6 +153,7 @@
       if (filter.prio) teile.push('Prio: ' + filter.prio);
       if (filter.status) teile.push('Status: ' + filter.status);
       if (filter.verant) teile.push('Verantwortlich: ' + filter.verant);
+      if (filter.team) teile.push('Verantwortlichkeit: ' + filter.team);
       if (filter.suche) teile.push('Suche: "' + filter.suche + '"');
       $('#filterBannerText').textContent = 'Zeige ' + liste.length + ' von ' + alle.length + ' Punkten — ' + teile.join(', ');
       banner.hidden = false;
@@ -300,6 +302,13 @@
     vn.addEventListener('click', function () { oeffneEdit(e.nr, 'verant'); });
     meta.appendChild(vn);
 
+    var tm = el('button', 'chip' + (e.verantwortlichkeit ? '' : ' chip--none'),
+      '🏷 ' + (e.verantwortlichkeit || 'Verantwortlichkeit offen'));
+    tm.type = 'button';
+    tm.title = 'Verantwortlichkeit setzen (Advanced Development / Pre Series)';
+    tm.addEventListener('click', function () { oeffneEdit(e.nr, 'team'); });
+    meta.appendChild(tm);
+
     c.appendChild(meta);
 
     if (e.bilder && e.bilder.length) {
@@ -327,6 +336,7 @@
     { feld: 'thema', label: 'Thema/Aufgabe' },
     { feld: 'prio', label: 'Prio' },
     { feld: 'verantwortlicher', label: 'Verantwortlicher' },
+    { feld: 'verantwortlichkeit', label: 'Verantwortlichkeit' },
     { feld: 'faellig', label: 'Bis wann' },
     { feld: 'status', label: 'Status' },
     { feld: 'todo', label: 'To Do' },
@@ -370,6 +380,7 @@
       row.appendChild(tdP);
 
       row.appendChild(el('td', null, e.verantwortlicher || '–'));
+      row.appendChild(el('td', null, e.verantwortlichkeit || '–'));
 
       var tdD = el('td', null, e.faellig ? Xlsx.ddmmyyyy(e.faellig) : '–');
       if (Store.istUeberfaellig(e)) { tdD.style.color = 'var(--hoch)'; tdD.style.fontWeight = '700'; }
@@ -486,6 +497,7 @@
     $('#fmPrio').value = e ? e.prio : 'Mittel';
     $('#fmStatus').value = e ? e.status : 'Offen';
     $('#fmVerant').value = e ? e.verantwortlicher : (Store.state.user || '');
+    $('#fmTeam').value = e ? e.verantwortlichkeit : (filter.team && filter.team !== '(offen)' ? filter.team : '');
     $('#fmFaellig').value = e ? e.faellig : '';
     $('#fmTodo').value = e ? e.todo : '';
     $('#fmNotiz').value = e ? e.notiz : '';
@@ -510,6 +522,7 @@
     setTimeout(function () {
       if (fokus === 'faellig') $('#fmFaellig').focus();
       else if (fokus === 'verant') $('#fmVerant').focus();
+      else if (fokus === 'team') $('#fmTeam').focus();
       else $('#fmThema').focus();
     }, 30);
   }
@@ -521,6 +534,7 @@
       prio: $('#fmPrio').value,
       status: $('#fmStatus').value,
       verantwortlicher: $('#fmVerant').value.trim(),
+      verantwortlichkeit: $('#fmTeam').value,
       faellig: $('#fmFaellig').value,
       todo: $('#fmTodo').value.trim(),
       notiz: $('#fmNotiz').value.trim(),
@@ -607,14 +621,15 @@
 
   function exportCsv() {
     var kopf = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am'];
+                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit'];
     function q(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
     var zeilen = [kopf.map(q).join(';')];
     Store.state.entries.forEach(function (e) {
       zeilen.push([e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher,
         Xlsx.ddmmyyyy(e.faellig), e.status, e.todo,
         e.notiz || (e.bilder.length ? e.bilder.length + ' Bild(er) im Tool' : ''),
-        Xlsx.ddmmyyyy(e.erstelltAm)
+        Xlsx.ddmmyyyy(e.erstelltAm),
+        e.verantwortlichkeit
       ].map(q).join(';'));
     });
     // BOM, damit Excel UTF-8 erkennt
@@ -826,6 +841,12 @@
     Store.BEREICHE.forEach(function (b) { $('#fBereich').appendChild(new Option(b, b)); });
     Store.PRIOS.forEach(function (p) { $('#fPrio').appendChild(new Option(p, p)); });
     Store.STATI.forEach(function (s) { $('#fStatus').appendChild(new Option(s, s)); });
+    $('#fmTeam').appendChild(new Option('– offen –', ''));
+    Store.VERANTWORTLICHKEITEN.forEach(function (v) {
+      $('#fmTeam').appendChild(new Option(v, v));
+      $('#fTeam').appendChild(new Option(v, v));
+    });
+    $('#fTeam').appendChild(new Option('(offen)', '(offen)'));
 
     Store.onError(function (msg) { toast(msg, true); });
     Store.load();
@@ -842,7 +863,7 @@
       var v = ev.target.value.trim().toLowerCase();
       t = setTimeout(function () { filter.suche = v; render(); }, 120);
     });
-    [['#fBereich', 'bereich'], ['#fThema', 'thema'], ['#fPrio', 'prio'], ['#fStatus', 'status'], ['#fVerant', 'verant']]
+    [['#fBereich', 'bereich'], ['#fThema', 'thema'], ['#fPrio', 'prio'], ['#fStatus', 'status'], ['#fVerant', 'verant'], ['#fTeam', 'team']]
       .forEach(function (pair) {
         $(pair[0]).addEventListener('change', function (ev) {
           filter[pair[1]] = ev.target.value;
@@ -850,10 +871,10 @@
         });
       });
     function resetFilter() {
-      filter = { suche: '', bereich: '', thema: '', prio: '', status: '', verant: '' };
+      filter = { suche: '', bereich: '', thema: '', prio: '', status: '', verant: '', team: '' };
       quick = null;
       $('#suche').value = '';
-      ['#fBereich', '#fThema', '#fPrio', '#fStatus', '#fVerant'].forEach(function (s) { $(s).value = ''; });
+      ['#fBereich', '#fThema', '#fPrio', '#fStatus', '#fVerant', '#fTeam'].forEach(function (s) { $(s).value = ''; });
       render();
     }
     $('#btnFilterReset').addEventListener('click', resetFilter);

@@ -226,7 +226,7 @@ async function handleAPI(url, method, request, env) {
     const now = new Date().toISOString();
 
     const changes = [];
-    for (const k of ['bereich','thema','prio','verantwortlicher','faellig','status','todo','notiz']) {
+    for (const k of ['bereich','thema','prio','verantwortlicher','verantwortlichkeit','faellig','status','todo','notiz']) {
       if (patch[k] !== undefined && patch[k] !== old[k]) {
         changes.push(`${k}: "${old[k] || '–'}" → "${patch[k] || '–'}"`);
       }
@@ -358,12 +358,14 @@ function normalize(e) {
   ];
   const PRIOS = ['Hoch','Mittel','Niedrig'];
   const STATI = ['Offen','In Arbeit','Erledigt'];
+  const VERANTWORTLICHKEITEN = ['Advanced Development','Pre Series'];
   return {
     nr: e.nr,
     bereich: BEREICHE.includes(e.bereich) ? e.bereich : BEREICHE[0],
     thema: e.thema || '',
     prio: PRIOS.includes(e.prio) ? e.prio : 'Mittel',
     verantwortlicher: e.verantwortlicher || '',
+    verantwortlichkeit: VERANTWORTLICHKEITEN.includes(e.verantwortlichkeit) ? e.verantwortlichkeit : '',
     faellig: e.faellig || '',
     status: STATI.includes(e.status) ? e.status : 'Offen',
     todo: e.todo || '',
@@ -384,6 +386,7 @@ function dbToEntry(row) {
     thema: row.thema,
     prio: row.prio,
     verantwortlicher: row.verantwortlicher,
+    verantwortlichkeit: row.verantwortlichkeit || '',
     faellig: row.faellig,
     status: row.status,
     todo: row.todo,
@@ -397,9 +400,9 @@ function dbToEntry(row) {
 
 function insertStmt(db, e) {
   return db.prepare(
-    `INSERT INTO entries (nr, bereich, thema, prio, verantwortlicher, faellig, status, todo, bilder, notiz, erstellt_am, geaendert_am, geaendert_von)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher, e.faellig, e.status, e.todo,
+    `INSERT INTO entries (nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, faellig, status, todo, bilder, notiz, erstellt_am, geaendert_am, geaendert_von)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.faellig, e.status, e.todo,
          JSON.stringify(e.bilder), e.notiz, e.erstelltAm, e.geaendertAm, e.geaendertVon);
 }
 
@@ -409,11 +412,11 @@ function updateStmt(db, e) {
   // erstellt_am ist unveraenderlich, sobald gesetzt – ein leerer/fehlender
   // Wert in der DB wird aber mit dem mitgeschickten Wert aufgefuellt (Backfill).
   return db.prepare(
-    `UPDATE entries SET bereich=?, thema=?, prio=?, verantwortlicher=?, faellig=?, status=?, todo=?, bilder=?, notiz=?,
+    `UPDATE entries SET bereich=?, thema=?, prio=?, verantwortlicher=?, verantwortlichkeit=?, faellig=?, status=?, todo=?, bilder=?, notiz=?,
        erstellt_am = CASE WHEN erstellt_am IS NULL OR erstellt_am = '' THEN ? ELSE erstellt_am END,
        geaendert_am=?, geaendert_von=?
      WHERE nr=?`
-  ).bind(e.bereich, e.thema, e.prio, e.verantwortlicher, e.faellig, e.status, e.todo,
+  ).bind(e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.faellig, e.status, e.todo,
          JSON.stringify(e.bilder), e.notiz, e.erstelltAm, e.geaendertAm, e.geaendertVon, e.nr);
 }
 

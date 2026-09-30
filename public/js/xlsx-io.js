@@ -3,7 +3,7 @@
  *
  * Schreibt und liest .xlsx-Dateien exakt im Schema der bestehenden
  * OPL-Excel (Titel, KPI-Block mit Formeln, Kopfzeile ab Zeile 7,
- * Daten ab Zeile 8, Spalten A-K). Spalte K enthaelt die Bilder als
+ * Daten ab Zeile 8, Spalten A-L). Spalte K enthaelt die Bilder als
  * echte eingebettete Grafiken (Excel Drawing), nicht nur als Text.
  *
  * ZIP wird "stored" (unkomprimiert) geschrieben – das versteht Excel
@@ -273,7 +273,7 @@
   /* ------------------------------------------------------------------ */
 
   var HEADERS = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Bilder'];
+                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Bilder', 'Verantwortlichkeit'];
 
   // Feste Anzeigegroesse je eingebettetem Bild in Pixel (96 dpi).
   var IMG_W_PX = 110, IMG_H_PX = 80, IMG_GAP_PX = 6;
@@ -366,7 +366,7 @@
     var drawingRels = [];
     var anchors = [];
     var mediaCount = 0;
-    var K_COL_IDX = HEADERS.length - 1; // 0-basiert fuer xdr:col
+    var K_COL_IDX = 10; // Spalte K, 0-basiert fuer xdr:col
 
     var today = new Date().toISOString().slice(0, 10);
     entries.forEach(function (e, idx) {
@@ -384,7 +384,8 @@
         cellStr('H' + r, S.CELL, e.todo),
         cellStr('I' + r, S.CELL, bildSpalte(e)),
         cellStr('J' + r, S.CELL, ddmmyyyy(e.erstelltAm)),
-        cellStr('K' + r, S.CELL, '')
+        cellStr('K' + r, S.CELL, ''),
+        cellStr('L' + r, e.verantwortlichkeit ? S.CELL : S.PFLEGE, e.verantwortlichkeit)
       ];
 
       var bilder = (e.bilder || []).map(function (b) { return dataUrlToBytes(b.src); })
@@ -436,7 +437,7 @@
       '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
         'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
       '<sheetPr><outlinePr summaryBelow="1" summaryRight="1"/></sheetPr>' +
-      '<dimension ref="A1:K' + last + '"/>' +
+      '<dimension ref="A1:L' + last + '"/>' +
       '<sheetViews><sheetView tabSelected="1" workbookViewId="0">' +
         '<pane ySplit="7" topLeftCell="A8" activePane="bottomLeft" state="frozen"/>' +
       '</sheetView></sheetViews>' +
@@ -453,15 +454,17 @@
         '<col min="9" max="9" width="22" customWidth="1"/>' +
         '<col min="10" max="10" width="14" customWidth="1"/>' +
         '<col min="11" max="11" width="17" customWidth="1"/>' +
+        '<col min="12" max="12" width="20" customWidth="1"/>' +
       '</cols>' +
       '<sheetData>' + rows.join('') + '</sheetData>' +
-      '<autoFilter ref="A7:K' + last + '"/>' +
+      '<autoFilter ref="A7:L' + last + '"/>' +
       '<mergeCells count="3">' +
-        '<mergeCell ref="A1:K1"/><mergeCell ref="A2:K2"/><mergeCell ref="H5:I5"/>' +
+        '<mergeCell ref="A1:L1"/><mergeCell ref="A2:L2"/><mergeCell ref="H5:I5"/>' +
       '</mergeCells>' +
-      '<dataValidations count="3">' +
+      '<dataValidations count="4">' +
         validation('list', 'D' + first + ':D' + last, '"Hoch,Mittel,Niedrig"') +
         validation('list', 'G' + first + ':G' + last, '"Offen,In Arbeit,Erledigt"') +
+        validation('list', 'L' + first + ':L' + last, '"Advanced Development,Pre Series"') +
         validation('list', 'B' + first + ':B' + last,
           '"' + (opts.bereiche || []).join(',') + '"') +
       '</dataValidations>' +
@@ -701,7 +704,8 @@
           todo: todo,
           bilder: [],
           notiz: (row[9] || '').trim(),
-          erstelltAm: erstelltAm
+          erstelltAm: erstelltAm,
+          verantwortlichkeit: normalize(row[12], ['Advanced Development', 'Pre Series']) || ''
         };
         entries.push(eintrag);
         entryByRow[rn] = eintrag;

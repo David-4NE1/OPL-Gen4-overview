@@ -89,6 +89,7 @@
   <select id="fPrio" class="select"><option value="">Alle Prios</option></select>
   <select id="fStatus" class="select"><option value="">Alle Status</option></select>
   <select id="fVerant" class="select"><option value="">Alle Verantwortlichen</option></select>
+  <select id="fTeam" class="select"><option value="">Alle Verantwortlichkeiten</option></select>
   <div class="viewswitch" role="group" aria-label="Ansicht">
     <button type="button" class="is-active" data-view="karten" title="Karten-Ansicht">▤</button>
     <button type="button" data-view="tabelle" title="Tabellen-Ansicht">☰</button>
@@ -140,6 +141,9 @@
       </label>
       <label>Bis wann
         <input name="faellig" id="fmFaellig" type="date">
+      </label>
+      <label>Verantwortlichkeit
+        <select name="verantwortlichkeit" id="fmTeam"></select>
       </label>
     </div>
     <label>To Do

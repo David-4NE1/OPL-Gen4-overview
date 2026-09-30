@@ -33,6 +33,7 @@
   ];
   var PRIOS = ['Hoch', 'Mittel', 'Niedrig'];
   var STATI = ['Offen', 'In Arbeit', 'Erledigt'];
+  var VERANTWORTLICHKEITEN = ['Advanced Development', 'Pre Series'];
 
   var state = { entries: [], log: [], user: '' };
   var listeners = [];
@@ -50,6 +51,7 @@
       thema: e.thema || '',
       prio: PRIOS.indexOf(e.prio) >= 0 ? e.prio : 'Mittel',
       verantwortlicher: e.verantwortlicher || '',
+      verantwortlichkeit: VERANTWORTLICHKEITEN.indexOf(e.verantwortlichkeit) >= 0 ? e.verantwortlichkeit : '',
       faellig: e.faellig || '',
       status: STATI.indexOf(e.status) >= 0 ? e.status : 'Offen',
       todo: e.todo || '',
@@ -276,6 +278,7 @@
         if (vorhanden) {
           if (!n.bilder.length) n.bilder = vorhanden.bilder;
           n.erstelltAm = n.erstelltAm || vorhanden.erstelltAm || heute();
+          n.verantwortlichkeit = n.verantwortlichkeit || vorhanden.verantwortlichkeit;
           Object.assign(vorhanden, n, {
             geaendertAm: jetzt(), geaendertVon: state.user || 'Excel-Import'
           });
@@ -314,7 +317,7 @@
   }
 
   global.OPLStore = {
-    BEREICHE: BEREICHE, PRIOS: PRIOS, STATI: STATI,
+    BEREICHE: BEREICHE, PRIOS: PRIOS, STATI: STATI, VERANTWORTLICHKEITEN: VERANTWORTLICHKEITEN,
     state: state,
     load: load, subscribe: subscribe, onError: onError,
     add: add, update: update, remove: remove, cycle: cycle, byNr: byNr,
