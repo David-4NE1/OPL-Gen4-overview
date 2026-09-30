@@ -262,6 +262,7 @@
     });
 
     var neu = 0, aktualisiert = 0;
+    var betroffen = [];
     if (modus === 'ersetzen') {
       state.entries = entries.map(function (e) {
         var n = normalizeEntry(e);
@@ -282,6 +283,7 @@
           Object.assign(vorhanden, n, {
             geaendertAm: jetzt(), geaendertVon: state.user || 'Excel-Import'
           });
+          betroffen.push(vorhanden);
           aktualisiert++;
         } else {
           if (!n.bilder.length && bilderProNr[n.nr]) n.bilder = bilderProNr[n.nr];
@@ -289,6 +291,7 @@
           n.geaendertAm = jetzt();
           n.geaendertVon = state.user || 'Excel-Import';
           state.entries.push(n);
+          betroffen.push(n);
           neu++;
         }
       });
@@ -297,9 +300,11 @@
     state.entries.sort(function (a, b) { return a.nr - b.nr; });
     commit();
 
-    // Bulk-Sync an API
+    // Beim Zusammenfuehren nur die Eintraege aus der Datei schicken, damit
+    // parallele Aenderungen anderer an den uebrigen Karten nicht mit dem
+    // lokalen Stand ueberschrieben werden.
     syncToAPI('POST', '/api/import', {
-      entries: state.entries, modus: modus, user: state.user
+      entries: modus === 'ersetzen' ? state.entries : betroffen, modus: modus, user: state.user
     });
 
     return { neu: neu, aktualisiert: aktualisiert };
