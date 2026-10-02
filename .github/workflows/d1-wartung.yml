@@ -1,0 +1,59 @@
+name: D1 Wartung (Diagnose / Time Travel)
+
+# Manuell starten: Actions -> "D1 Wartung" -> Run workflow.
+# diagnose: zeigt Kartenanzahl, Nummern und Import-/Loesch-Ereignisse (keine Karteninhalte).
+# restore:  setzt die Datenbank per D1 Time Travel auf den angegebenen Zeitpunkt zurueck.
+#           Die Ausgabe enthaelt das Lesezeichen des vorherigen Stands (zum Rueckgaengigmachen).
+
+on:
+  workflow_dispatch:
+    inputs:
+      aktion:
+        description: 'diagnose oder restore'
+        required: true
+        default: diagnose
+        type: choice
+        options: [diagnose, restore]
+      zeitpunkt:
+        description: 'Nur fuer restore: Zeitpunkt in UTC (RFC3339), z. B. 2026-10-02T08:35:00Z'
+        required: false
+        default: ''
+
+concurrency:
+  group: d1-wartung
+  cancel-in-progress: false
+
+jobs:
+  d1:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ZEITPUNKT: ${{ inputs.zeitpunkt }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wrangler installieren
+        run: npm i -g wrangler@4
+
+      - name: Stand vorher
+        run: |
+          wrangler d1 time-travel info opl-gen4
+          wrangler d1 execute opl-gen4 --remote --command "SELECT COUNT(*) AS anzahl, MIN(nr) AS min_nr, MAX(nr) AS max_nr FROM entries"
+          wrangler d1 execute opl-gen4 --remote --command "SELECT group_concat(nr, ',') AS nummern FROM (SELECT nr FROM entries ORDER BY nr)"
+          wrangler d1 execute opl-gen4 --remote --command "SELECT id, nr, substr(text, 1, 80) AS ereignis, wann, wer FROM changelog WHERE wann >= datetime('now', '-3 days') AND (text LIKE 'Excel-Import%' OR text = 'gelöscht' OR text = 'angelegt') ORDER BY id DESC LIMIT 80"
+          wrangler d1 execute opl-gen4 --remote --command "SELECT substr(wann, 1, 13) AS stunde_utc, COUNT(*) AS aenderungen FROM changelog WHERE wann >= datetime('now', '-2 days') GROUP BY 1 ORDER BY 1 DESC"
+
+      - name: Time Travel Restore
+        if: inputs.aktion == 'restore'
+        run: |
+          if ! printf '%s' "$ZEITPUNKT" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2})?Z$'; then
+            echo "::error::Ungueltiger Zeitpunkt '$ZEITPUNKT' (erwartet z. B. 2026-10-02T08:35:00Z)"; exit 1
+          fi
+          wrangler d1 time-travel restore opl-gen4 --timestamp="$ZEITPUNKT"
+
+      - name: Stand nachher
+        if: inputs.aktion == 'restore'
+        run: |
+          wrangler d1 execute opl-gen4 --remote --command "SELECT COUNT(*) AS anzahl, MIN(nr) AS min_nr, MAX(nr) AS max_nr FROM entries"
+          wrangler d1 execute opl-gen4 --remote --command "SELECT group_concat(nr, ',') AS nummern FROM (SELECT nr FROM entries ORDER BY nr)"
