@@ -211,7 +211,7 @@ async function handleAPI(url, method, request, env) {
   // GET /api/bild/:nr/:i
   const matchBild = path.match(/^\/api\/bild\/(\d+)\/(\d+)$/);
   if (matchBild && method === 'GET') {
-    return bildAusliefern(db, +matchBild[1], +matchBild[2]);
+    return bildAusliefern(db, +matchBild[1], +matchBild[2], url);
   }
 
   // GET /api/entries/:nr
@@ -481,10 +481,17 @@ async function listeEintraege(db) {
   });
 }
 
-async function bildAusliefern(db, nr, i) {
+// Bilder aus dem urspruenglichen Startstand sind als Pfad auf eine statische
+// Datei gespeichert (z. B. assets/img/fig01-....png), nicht als Bilddaten.
+const ASSET_PFAD = /^\/?assets\/[A-Za-z0-9._\/-]+$/;
+
+async function bildAusliefern(db, nr, i, url) {
   const row = await db.prepare(
     "SELECT json_extract(bilder, ?) AS src FROM entries WHERE nr = ? AND json_valid(bilder)"
   ).bind(`$[${Math.trunc(i)}].src`, nr).first();
+  if (row && typeof row.src === 'string' && ASSET_PFAD.test(row.src) && !row.src.includes('..')) {
+    return Response.redirect(new URL('/' + row.src.replace(/^\//, ''), url).toString(), 302);
+  }
   const m = row && typeof row.src === 'string' ? /^data:([^;,]+);base64,/.exec(row.src) : null;
   if (!m) return json({ error: 'Bild nicht gefunden' }, 404);
   const bytes = Buffer.from(row.src.slice(m[0].length), 'base64');
@@ -509,7 +516,9 @@ async function bilderAufloesen(db, bilder) {
     const row = await db.prepare(
       "SELECT json_extract(bilder, ?) AS src FROM entries WHERE nr = ? AND json_valid(bilder)"
     ).bind(`$[${+m[2]}].src`, +m[1]).first();
-    if (row && typeof row.src === 'string' && row.src.startsWith('data:')) {
+    // Gespeicherten Wert unveraendert uebernehmen – Bilddaten wie auch
+    // Pfade auf statische Dateien (Startstand), sonst gingen diese verloren.
+    if (row && typeof row.src === 'string' && row.src) {
       out.push({ name: b.name || '', src: row.src });
     }
   }
