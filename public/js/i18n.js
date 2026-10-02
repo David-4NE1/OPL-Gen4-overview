@@ -224,7 +224,15 @@
     '⚠ Automatische Übersetzung derzeit nicht verfügbar – Karteninhalte werden auf Deutsch angezeigt.':
       '⚠ Automatic translation is currently unavailable – card contents are shown in German.',
     '🌐 übersetzt': '🌐 machine-translated',
-    'Original (Deutsch): {text}': 'Original (German): {text}'
+    'Original (Deutsch): {text}': 'Original (German): {text}',
+
+    // Verbindung / Bilder
+    '⚠ Verbindung zum Server gestört – angezeigt wird ein älterer, im Browser gespeicherter Stand. Bitte keine Änderungen eintragen, bis dieser Hinweis verschwindet.':
+      '⚠ Connection to the server is disrupted – an older state stored in the browser is shown. Please do not make changes until this notice disappears.',
+    'Keine Verbindung zum Server – Import ist gerade nicht möglich.': 'No connection to the server – import is not possible right now.',
+    'Keine Verbindung zum Server – Zurücksetzen ist gerade nicht möglich.': 'No connection to the server – reset is not possible right now.',
+    'Speichern auf dem Server fehlgeschlagen: {msg}': 'Saving to the server failed: {msg}',
+    'Excel wird erstellt …': 'Creating Excel file …'
   };
 
   function fill(s, params) {

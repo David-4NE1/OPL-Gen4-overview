@@ -38,6 +38,14 @@
   var state = { entries: [], log: [], user: '' };
   var listeners = [];
   var online = true;  // ob die API erreichbar ist
+  var statusListener = null;
+  var pollFehler = 0;
+
+  function setOnline(wert) {
+    var vorher = online;
+    online = wert;
+    if (statusListener && vorher !== wert) statusListener(wert);
+  }
 
   function heute() { return new Date().toISOString().slice(0, 10); }
   function jetzt() { return new Date().toISOString(); }
@@ -67,6 +75,9 @@
 
   function saveLocal() {
     try {
+      // Alten (evtl. sehr grossen) Stand zuerst entfernen, sonst scheitert
+      // setItem am Speicherlimit und der veraltete Stand bliebe stehen.
+      global.localStorage.removeItem(KEY);
       global.localStorage.setItem(KEY, JSON.stringify({
         entries: state.entries, log: state.log.slice(-500), user: state.user
       }));
@@ -98,7 +109,7 @@
 
     p.catch(function (err) {
       console.warn('API-Sync fehlgeschlagen:', err.message);
-      online = false;
+      notifyError((global.OPLi18n ? global.OPLi18n.T : String)('Speichern auf dem Server fehlgeschlagen: {msg}').replace('{msg}', err.message));
     });
   }
 
@@ -109,14 +120,15 @@
     // Dann von API laden
     API.get('/api/entries')
       .then(function (entries) {
-        online = true;
         state.entries = entries.map(normalizeEntry);
         saveLocal();
+        setOnline(true);
         emit();
       })
       .catch(function (err) {
         console.warn('API nicht erreichbar, verwende lokalen Stand:', err.message);
-        online = false;
+        online = true; // damit der Listener sicher feuert
+        setOnline(false);
         if (!hadLocal) {
           // Seed-Daten als letzter Fallback
           state.entries = (global.OPL_SEED || []).map(normalizeEntry);
@@ -150,15 +162,21 @@
     if (document.hidden || istDialogOffen()) return;
     API.get('/api/entries')
       .then(function (entries) {
-        online = true;
+        pollFehler = 0;
         var neu = entries.map(normalizeEntry);
-        if (JSON.stringify(neu) !== JSON.stringify(state.entries)) {
+        var warOffline = !online;
+        setOnline(true);
+        if (warOffline || JSON.stringify(neu) !== JSON.stringify(state.entries)) {
           state.entries = neu;
           saveLocal();
           emit();
         }
       })
-      .catch(function () { online = false; });
+      .catch(function () {
+        // Einzelne Aussetzer nicht sofort melden, erst ab dem zweiten in Folge
+        pollFehler++;
+        if (pollFehler >= 2) setOnline(false);
+      });
   }
 
   function startPolling() {
@@ -176,6 +194,8 @@
 
   var errorHandler = null;
   function onError(fn) { errorHandler = fn; }
+  function onStatus(fn) { statusListener = fn; }
+  function isOnline() { return online; }
   function notifyError(msg) { if (errorHandler) errorHandler(msg); }
 
   function subscribe(fn) { listeners.push(fn); }
@@ -324,7 +344,7 @@
   global.OPLStore = {
     BEREICHE: BEREICHE, PRIOS: PRIOS, STATI: STATI, VERANTWORTLICHKEITEN: VERANTWORTLICHKEITEN,
     state: state,
-    load: load, subscribe: subscribe, onError: onError,
+    load: load, subscribe: subscribe, onError: onError, onStatus: onStatus, isOnline: isOnline,
     add: add, update: update, remove: remove, cycle: cycle, byNr: byNr,
     setUser: setUser, applyImport: applyImport, reset: reset,
     istUeberfaellig: istUeberfaellig, heute: heute, clone: clone

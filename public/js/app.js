@@ -713,18 +713,38 @@
 
   /* ------------------------------------------------------ Export/Import */
 
+  // Bilder kommen vom Server nur als Verweis (/api/bild/...); fuer den
+  // Excel-Export werden sie hier einzeln als Daten nachgeladen.
+  function mitBildDaten(entries) {
+    var jobs = [];
+    var kopie = entries.map(function (e) {
+      var c = Object.assign({}, e, {
+        bilder: (e.bilder || []).map(function (b) { return Object.assign({}, b); })
+      });
+      c.bilder.forEach(function (b) {
+        if (b.src && b.src.indexOf('data:') !== 0) {
+          jobs.push(bildZuDataUrl(b.src).then(function (d) { b.src = d; })
+            .catch(function () { b.src = ''; }));
+        }
+      });
+      return c;
+    });
+    return Promise.all(jobs).then(function () { return kopie; });
+  }
+
   function exportXlsx() {
-    try {
-      var blob = Xlsx.exportWorkbook(Store.state.entries, {
+    toast(T('Excel wird erstellt …'));
+    mitBildDaten(Store.state.entries).then(function (entries) {
+      var blob = Xlsx.exportWorkbook(entries, {
         stand: Xlsx.ddmmyyyy(Store.heute()),
         bereiche: Store.BEREICHE
       });
       download(blob, 'OPL_4NE1_Gen4_' + dateiStempel() + '.xlsx');
       toast(T('Excel exportiert – gleiches Schema wie die bestehende Liste.'));
-    } catch (err) {
+    }).catch(function (err) {
       console.error(err);
       toast(T('Excel-Export fehlgeschlagen: {msg}', { msg: err.message }), true);
-    }
+    });
   }
 
   function exportCsv() {
@@ -955,6 +975,7 @@
     $('#fTeam').appendChild(new Option(T('(offen)'), '(offen)'));
 
     Store.onError(function (msg) { toast(msg, true); });
+    Store.onStatus(function (ok) { $('#offlineBanner').hidden = ok; });
     Store.load();
     if (window.__OPL_LOGIN_USER) {
       Store.setUser(window.__OPL_LOGIN_USER);
@@ -1051,6 +1072,9 @@
       } else if (act === 'log') zeigeLog();
       else if (act === 'amk-bilder') amkBilderNachtragen();
       else if (act === 'admin') zeigeAdmin();
+      else if (act === 'reset' && !Store.isOnline()) {
+        toast(T('Keine Verbindung zum Server – Zurücksetzen ist gerade nicht möglich.'), true);
+      }
       else if (act === 'reset') {
         if (confirm(T('Wirklich alle Änderungen verwerfen und den Excel-Startstand (29 Punkte, 21.09.2026) wiederherstellen?'))) {
           Store.reset();
@@ -1143,6 +1167,7 @@
     });
     $('#btnImportGo').addEventListener('click', function () {
       if (!importPuffer) return;
+      if (!Store.isOnline()) { toast(T('Keine Verbindung zum Server – Import ist gerade nicht möglich.'), true); return; }
       var modus = $$('input[name="impModus"]').filter(function (r) { return r.checked; })[0].value;
       if (modus === 'ersetzen' &&
           !confirm(T('Der aktuelle Stand ({n} Punkte) wird komplett ersetzt. Fortfahren?', { n: Store.state.entries.length }))) return;

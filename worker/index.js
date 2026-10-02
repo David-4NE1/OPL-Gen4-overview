@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer';
+
 /**
  * Cloudflare Worker – OPL Gen4 REST API
  *
@@ -9,6 +11,12 @@
  *   GET    /api/health            → Erreichbarkeit (kein Auth, keine Daten)
  *   GET    /api/entries           → alle Einträge (Cookie ODER Bearer READ_TOKEN)
  *   GET    /api/entries/:nr       → ein Eintrag
+ *   GET    /api/bild/:nr/:i       → einzelnes Bild als Binaerdatei
+ *
+ * Listen enthalten Bilder nur als Verweis (src = /api/bild/...), nicht als
+ * Base64-Daten – sonst waere jede Abfrage so gross wie alle Bilder zusammen.
+ * Beim Schreiben werden solche Verweise wieder durch die gespeicherten Daten
+ * ersetzt (bilderAufloesen).
  *   POST   /api/entries           → neuen Eintrag anlegen
  *   PUT    /api/entries/:nr       → Eintrag aktualisieren (Patch)
  *   DELETE /api/entries/:nr       → Eintrag löschen
@@ -172,8 +180,7 @@ async function handleAPI(url, method, request, env) {
   // Gilt ausschliesslich fuer diese eine Route/Methode und ersetzt die
   // Cookie-Pruefung nicht, sondern ergaenzt sie nur als Alternative.
   if (path === '/api/entries' && method === 'GET' && tokenGueltig(request, env)) {
-    const { results } = await env.DB.prepare('SELECT * FROM entries ORDER BY nr').all();
-    return json(results.map(dbToEntry));
+    return json(await listeEintraege(env.DB));
   }
 
   // --- Ab hier: Auth erforderlich ---
@@ -198,8 +205,13 @@ async function handleAPI(url, method, request, env) {
 
   // GET /api/entries
   if (path === '/api/entries' && method === 'GET') {
-    const { results } = await db.prepare('SELECT * FROM entries ORDER BY nr').all();
-    return json(results.map(dbToEntry));
+    return json(await listeEintraege(db));
+  }
+
+  // GET /api/bild/:nr/:i
+  const matchBild = path.match(/^\/api\/bild\/(\d+)\/(\d+)$/);
+  if (matchBild && method === 'GET') {
+    return bildAusliefern(db, +matchBild[1], +matchBild[2]);
   }
 
   // GET /api/entries/:nr
@@ -207,19 +219,20 @@ async function handleAPI(url, method, request, env) {
   if (matchOne && method === 'GET') {
     const row = await db.prepare('SELECT * FROM entries WHERE nr = ?').bind(+matchOne[1]).first();
     if (!row) return json({ error: 'Nicht gefunden' }, 404);
-    return json(dbToEntry(row));
+    return json(mitBildVerweisen(dbToEntry(row)));
   }
 
   // POST /api/entries  (neuer Eintrag)
   if (path === '/api/entries' && method === 'POST') {
     const data = await request.json();
+    data.bilder = await bilderAufloesen(db, data.bilder);
     const maxRow = await db.prepare('SELECT MAX(nr) AS m FROM entries').first();
     const nr = (maxRow?.m || 0) + 1;
     const now = new Date().toISOString();
     const e = normalize({ ...data, nr, erstelltAm: now.slice(0, 10), geaendertAm: now, geaendertVon: data.user || 'unbekannt' });
     await insertEntry(db, e);
     await logChange(db, nr, 'angelegt', e.geaendertVon);
-    return json(e, 201);
+    return json(mitBildVerweisen(e), 201);
   }
 
   // PUT /api/entries/:nr  (Patch)
@@ -229,6 +242,7 @@ async function handleAPI(url, method, request, env) {
     if (!row) return json({ error: 'Nicht gefunden' }, 404);
     const old = dbToEntry(row);
     const patch = await request.json();
+    if (patch.bilder !== undefined) patch.bilder = await bilderAufloesen(db, patch.bilder);
     const now = new Date().toISOString();
 
     const changes = [];
@@ -247,7 +261,7 @@ async function handleAPI(url, method, request, env) {
     });
     await updateEntry(db, updated);
     for (const c of changes) await logChange(db, nr, c, updated.geaendertVon);
-    return json(updated);
+    return json(mitBildVerweisen(updated));
   }
 
   // DELETE /api/entries/:nr
@@ -264,6 +278,8 @@ async function handleAPI(url, method, request, env) {
   if (path === '/api/import' && method === 'POST') {
     const { entries, modus, user } = await request.json();
     const now = new Date().toISOString();
+    // Bild-Verweise aufloesen, solange die alten Daten noch in der DB stehen
+    for (const raw of entries) raw.bilder = await bilderAufloesen(db, raw.bilder);
 
     if (modus === 'ersetzen') {
       await db.prepare('DELETE FROM entries').run();
@@ -420,6 +436,84 @@ async function handleTranslate(request, env) {
     return json({ error: 'Übersetzung fehlgeschlagen' }, 502);
   }
   return json({ translations: out, fehler });
+}
+
+/* -------------------------------------------------------------- Bilder */
+
+const BILD_VERWEIS = /^\/api\/bild\/(\d+)\/(\d+)(?:\?.*)?$/;
+
+function bildUrl(nr, i, laenge) {
+  return `/api/bild/${nr}/${i}?v=${laenge}`;
+}
+
+function mitBildVerweisen(e) {
+  return {
+    ...e,
+    bilder: (e.bilder || []).map((b, i) => ({
+      name: b.name || '',
+      src: BILD_VERWEIS.test(b.src || '') ? b.src : bildUrl(e.nr, i, (b.src || '').length)
+    }))
+  };
+}
+
+// Kartenliste ohne Base64-Bilddaten. Die Bild-Metadaten (Name, Laenge) ermittelt
+// D1 per JSON-Funktionen, damit der Worker die grossen Daten nie parsen muss.
+async function listeEintraege(db) {
+  const { results } = await db.prepare(
+    `SELECT nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, faellig, status, todo, notiz,
+            erstellt_am, geaendert_am, geaendert_von,
+            (SELECT json_group_array(json_object(
+                       'i', CAST(j.key AS INTEGER),
+                       'name', json_extract(j.value, '$.name'),
+                       'len', length(json_extract(j.value, '$.src'))))
+               FROM json_each(CASE WHEN json_valid(entries.bilder) THEN entries.bilder ELSE '[]' END) AS j
+            ) AS bilder_meta
+       FROM entries ORDER BY nr`
+  ).all();
+  return results.map(row => {
+    let meta = [];
+    try { meta = JSON.parse(row.bilder_meta || '[]'); } catch { meta = []; }
+    const bilder = meta
+      .filter(m => m && m.len > 0)
+      .sort((a, b) => a.i - b.i)
+      .map(m => ({ name: m.name || '', src: bildUrl(row.nr, m.i, m.len) }));
+    return { ...dbToEntry({ ...row, bilder: '[]' }), bilder };
+  });
+}
+
+async function bildAusliefern(db, nr, i) {
+  const row = await db.prepare(
+    "SELECT json_extract(bilder, ?) AS src FROM entries WHERE nr = ? AND json_valid(bilder)"
+  ).bind(`$[${Math.trunc(i)}].src`, nr).first();
+  const m = row && typeof row.src === 'string' ? /^data:([^;,]+);base64,/.exec(row.src) : null;
+  if (!m) return json({ error: 'Bild nicht gefunden' }, 404);
+  const bytes = Buffer.from(row.src.slice(m[0].length), 'base64');
+  return new Response(bytes, {
+    headers: {
+      'content-type': m[1],
+      // Die URL enthaelt ?v=<Laenge>; aendert sich das Bild, aendert sich die URL.
+      'cache-control': 'private, max-age=31536000, immutable'
+    }
+  });
+}
+
+// Ersetzt Verweise (/api/bild/nr/i) durch die in der DB gespeicherten Bilddaten.
+// Neue Bilder (data:-URLs) bleiben unveraendert; nicht aufloesbare fallen weg.
+async function bilderAufloesen(db, bilder) {
+  if (!Array.isArray(bilder)) return [];
+  const out = [];
+  for (const b of bilder) {
+    if (!b || typeof b.src !== 'string') continue;
+    const m = BILD_VERWEIS.exec(b.src);
+    if (!m) { out.push({ name: b.name || '', src: b.src }); continue; }
+    const row = await db.prepare(
+      "SELECT json_extract(bilder, ?) AS src FROM entries WHERE nr = ? AND json_valid(bilder)"
+    ).bind(`$[${+m[2]}].src`, +m[1]).first();
+    if (row && typeof row.src === 'string' && row.src.startsWith('data:')) {
+      out.push({ name: b.name || '', src: row.src });
+    }
+  }
+  return out;
 }
 
 /* -------------------------------------------------------- DB helpers */
