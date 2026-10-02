@@ -717,19 +717,22 @@
   // Excel-Export werden sie hier einzeln als Daten nachgeladen.
   function mitBildDaten(entries) {
     var jobs = [];
+    var stat = { ok: 0, fehler: 0 };
     var kopie = entries.map(function (e) {
       var c = Object.assign({}, e, {
         bilder: (e.bilder || []).map(function (b) { return Object.assign({}, b); })
       });
       c.bilder.forEach(function (b) {
         if (b.src && b.src.indexOf('data:') !== 0) {
-          jobs.push(bildZuDataUrl(b.src).then(function (d) { b.src = d; })
-            .catch(function () { b.src = ''; }));
+          jobs.push(bildZuDataUrl(b.src).then(function (d) { b.src = d; stat.ok++; })
+            .catch(function () { b.src = ''; stat.fehler++; }));
+        } else if (b.src) {
+          stat.ok++;
         }
       });
       return c;
     });
-    return Promise.all(jobs).then(function () { return kopie; });
+    return Promise.all(jobs).then(function () { kopie.bildStatistik = stat; return kopie; });
   }
 
   function exportXlsx() {
@@ -740,7 +743,12 @@
         bereiche: Store.BEREICHE
       });
       download(blob, 'OPL_4NE1_Gen4_' + dateiStempel() + '.xlsx');
-      toast(T('Excel exportiert – gleiches Schema wie die bestehende Liste.'));
+      var st = entries.bildStatistik;
+      if (st.fehler) {
+        toast(T('Excel exportiert, aber {f} von {g} Bildern konnten nicht geladen werden.', { f: st.fehler, g: st.ok + st.fehler }), true);
+      } else {
+        toast(T('Excel exportiert – {n} Bilder enthalten.', { n: st.ok }));
+      }
     }).catch(function (err) {
       console.error(err);
       toast(T('Excel-Export fehlgeschlagen: {msg}', { msg: err.message }), true);

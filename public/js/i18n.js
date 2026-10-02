@@ -232,7 +232,9 @@
     'Keine Verbindung zum Server – Import ist gerade nicht möglich.': 'No connection to the server – import is not possible right now.',
     'Keine Verbindung zum Server – Zurücksetzen ist gerade nicht möglich.': 'No connection to the server – reset is not possible right now.',
     'Speichern auf dem Server fehlgeschlagen: {msg}': 'Saving to the server failed: {msg}',
-    'Excel wird erstellt …': 'Creating Excel file …'
+    'Excel wird erstellt …': 'Creating Excel file …',
+    'Excel exportiert – {n} Bilder enthalten.': 'Excel exported – {n} images included.',
+    'Excel exportiert, aber {f} von {g} Bildern konnten nicht geladen werden.': 'Excel exported, but {f} of {g} images could not be loaded.'
   };
 
   function fill(s, params) {
