@@ -39,7 +39,7 @@ jobs:
       - name: Stand vorher
         run: |
           wrangler d1 time-travel info opl-gen4
-          wrangler d1 execute opl-gen4 --remote --command "SELECT COUNT(*) AS anzahl, MIN(nr) AS min_nr, MAX(nr) AS max_nr FROM entries"
+          wrangler d1 execute opl-gen4 --remote --command "SELECT COUNT(*) AS anzahl, MIN(nr) AS min_nr, MAX(nr) AS max_nr, SUM(LENGTH(bilder)) AS bilder_bytes_gesamt, MAX(LENGTH(bilder)) AS bilder_bytes_max_karte FROM entries"
           wrangler d1 execute opl-gen4 --remote --command "SELECT group_concat(nr, ',') AS nummern FROM (SELECT nr FROM entries ORDER BY nr)"
           wrangler d1 execute opl-gen4 --remote --command "SELECT id, nr, substr(text, 1, 80) AS ereignis, wann, wer FROM changelog WHERE wann >= datetime('now', '-3 days') AND (text LIKE 'Excel-Import%' OR text = 'gelöscht' OR text = 'angelegt') ORDER BY id DESC LIMIT 80"
           wrangler d1 execute opl-gen4 --remote --command "SELECT substr(wann, 1, 13) AS stunde_utc, COUNT(*) AS aenderungen FROM changelog WHERE wann >= datetime('now', '-2 days') GROUP BY 1 ORDER BY 1 DESC"
