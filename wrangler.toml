@@ -21,3 +21,7 @@ not_found_handling = "single-page-application"
 binding = "DB"
 database_name = "opl-gen4"
 database_id = "71f6b523-36a9-4483-9f33-7df365cbe4ce"
+
+# Workers AI fuer die maschinelle Uebersetzung der Karteninhalte (DE -> EN)
+[ai]
+binding = "AI"

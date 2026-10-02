@@ -6,6 +6,9 @@
 
   var Store = window.OPLStore;
   var Xlsx = window.OPLXlsx;
+  var I18N = window.OPLi18n;
+  var T = I18N.T;
+  var EN = I18N.isEn();
 
   var view = 'karten';
   var sort = { feld: 'nr', richtung: 1 };
@@ -21,6 +24,101 @@
 
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
+
+  /* ---------------------------------- Maschinelle Uebersetzung (EN) */
+
+  // Karteninhalte (Thema, To Do, Notiz) bleiben auf Deutsch gespeichert. Im
+  // englischen Modus werden sie ueber /api/translate (Cloudflare Workers AI,
+  // serverseitig in D1 zwischengespeichert) uebersetzt und markiert.
+  var TR = {};
+  var TR_CACHE_KEY = 'opl.tr.en.v1';
+  var trOffen = {};
+  var trLaeuft = false;
+  var trFehler = false;
+  var trFehlerSeit = 0;
+
+  if (EN) {
+    try { TR = JSON.parse(localStorage.getItem(TR_CACHE_KEY) || '{}') || {}; } catch (e) { TR = {}; }
+  }
+
+  function tx(text) {
+    if (!EN || !text) return text;
+    if (TR[text] != null) return TR[text];
+    trOffen[text] = true;
+    return text;
+  }
+
+  function istUebersetzt(e) {
+    return EN && [e.thema, e.todo, e.notiz].some(function (v) {
+      return v && TR[v] != null && TR[v] !== v;
+    });
+  }
+
+  function original(node, text) {
+    if (EN && text && TR[text] != null && TR[text] !== text) {
+      node.title = T('Original (Deutsch): {text}', { text: text });
+    }
+    return node;
+  }
+
+  function trCacheSpeichern() {
+    var keys = Object.keys(TR);
+    if (keys.length > 2000) {
+      keys.slice(0, keys.length - 2000).forEach(function (k) { delete TR[k]; });
+    }
+    try { localStorage.setItem(TR_CACHE_KEY, JSON.stringify(TR)); } catch (e) { /* voll */ }
+  }
+
+  function trBanner() {
+    var b = $('#trBanner');
+    if (!b) return;
+    if (!EN) { b.hidden = true; return; }
+    b.className = 'tr-banner' + (trFehler ? ' tr-banner--warn' : '');
+    if (trFehler) {
+      b.textContent = T('⚠ Automatische Übersetzung derzeit nicht verfügbar – Karteninhalte werden auf Deutsch angezeigt.');
+    } else if (trLaeuft || Object.keys(trOffen).length) {
+      b.textContent = T('🌐 Karteninhalte werden übersetzt …');
+    } else {
+      b.textContent = T('🌐 Karteninhalte wurden maschinell aus dem Deutschen übersetzt (Cloudflare Workers AI) und können ungenau sein. Gespeichert wird auf Deutsch – der Bearbeiten-Dialog zeigt den Originaltext.');
+    }
+    b.hidden = false;
+  }
+
+  function trNachladen() {
+    if (!EN || trLaeuft) return;
+    // Nach einem Fehler erst nach 5 Minuten erneut versuchen
+    if (trFehler && Date.now() - trFehlerSeit < 300000) { trBanner(); return; }
+    var texte = Object.keys(trOffen).slice(0, 25);
+    if (!texte.length) { trBanner(); return; }
+    trLaeuft = true;
+    trBanner();
+    fetch('/api/translate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ texts: texte, target: 'en' })
+    }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (res) {
+      var neu = res.translations || [];
+      var treffer = 0;
+      texte.forEach(function (src, i) {
+        delete trOffen[src];
+        if (typeof neu[i] === 'string' && neu[i]) { TR[src] = neu[i]; treffer++; }
+      });
+      if (!treffer && texte.length) throw new Error('keine Uebersetzung erhalten');
+      trFehler = false;
+      trCacheSpeichern();
+    }).catch(function (err) {
+      console.warn('Uebersetzung fehlgeschlagen:', err.message);
+      trFehler = true;
+      trFehlerSeit = Date.now();
+      trOffen = {};
+    }).then(function () {
+      trLaeuft = false;
+      render();
+    });
+  }
 
   /* ------------------------------------------------------------ Helfer */
 
@@ -52,12 +150,12 @@
   }
 
   function datumLabel(iso) {
-    if (!iso) return 'kein Datum';
+    if (!iso) return T('kein Datum');
     var d = tageBis(iso);
     var txt = Xlsx.ddmmyyyy(iso);
-    if (d === 0) return txt + ' · heute';
-    if (d < 0) return txt + ' · ' + Math.abs(d) + ' T überfällig';
-    if (d <= 7) return txt + ' · in ' + d + ' T';
+    if (d === 0) return T('{datum} · heute', { datum: txt });
+    if (d < 0) return T('{datum} · {n} T überfällig', { datum: txt, n: Math.abs(d) });
+    if (d <= 7) return T('{datum} · in {n} T', { datum: txt, n: d });
     return txt;
   }
 
@@ -97,7 +195,8 @@
     if (quick === 'niedrig' && !(e.prio === 'Niedrig' && e.status !== 'Erledigt')) return false;
     if (quick === 'ueberfaellig' && !Store.istUeberfaellig(e)) return false;
     if (filter.suche) {
-      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.bereich, e.notiz]
+      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.bereich, e.notiz,
+        TR[e.thema], TR[e.todo], TR[e.notiz], T(e.bereich), T(e.status), T(e.prio)]
         .join(' ').toLowerCase();
       if (hay.indexOf(filter.suche) < 0) return false;
     }
@@ -132,6 +231,11 @@
   /* ------------------------------------------------------------ Render */
 
   function render() {
+    renderInhalt();
+    if (EN) { trBanner(); trNachladen(); }
+  }
+
+  function renderInhalt() {
     var alle = Store.state.entries;
     renderKpis(alle);
     fuelleThemaFilter(alle);
@@ -146,16 +250,17 @@
       var teile = [];
       if (quick) {
         var ql = { offen: 'Offen', erledigt: 'Erledigt', hoch: 'Prio Hoch', mittel: 'Prio Mittel', niedrig: 'Prio Niedrig', ueberfaellig: 'Überfällig' };
-        teile.push(ql[quick] || quick);
+        teile.push(T(ql[quick] || quick));
       }
-      if (filter.bereich) teile.push('Bereich: ' + filter.bereich);
-      if (filter.thema) teile.push('Thema: ' + filter.thema);
-      if (filter.prio) teile.push('Prio: ' + filter.prio);
-      if (filter.status) teile.push('Status: ' + filter.status);
-      if (filter.verant) teile.push('Verantwortlich: ' + filter.verant);
-      if (filter.team) teile.push('Verantwortlichkeit: ' + filter.team);
-      if (filter.suche) teile.push('Suche: "' + filter.suche + '"');
-      $('#filterBannerText').textContent = 'Zeige ' + liste.length + ' von ' + alle.length + ' Punkten — ' + teile.join(', ');
+      if (filter.bereich) teile.push(T('Bereich: {v}', { v: T(filter.bereich) }));
+      if (filter.thema) teile.push(T('Thema: {v}', { v: tx(filter.thema) }));
+      if (filter.prio) teile.push(T('Prio: {v}', { v: T(filter.prio) }));
+      if (filter.status) teile.push(T('Status: {v}', { v: T(filter.status) }));
+      if (filter.verant) teile.push(T('Verantwortlich: {v}', { v: T(filter.verant) }));
+      if (filter.team) teile.push(T('Verantwortlichkeit: {v}', { v: T(filter.team) }));
+      if (filter.suche) teile.push(T('Suche: "{v}"', { v: filter.suche }));
+      $('#filterBannerText').textContent = T('Zeige {n} von {gesamt} Punkten — {teile}',
+        { n: liste.length, gesamt: alle.length, teile: teile.join(', ') });
       banner.hidden = false;
     } else {
       banner.hidden = true;
@@ -167,8 +272,8 @@
     if (!liste.length) {
       var leer = el('div', 'empty');
       leer.appendChild(el('p', null, alle.length
-        ? 'Keine Punkte passen zu Filter und Suche.'
-        : 'Noch keine Punkte – lege den ersten an oder importiere eine Excel.'));
+        ? T('Keine Punkte passen zu Filter und Suche.')
+        : T('Noch keine Punkte – lege den ersten an oder importiere eine Excel.')));
       content.appendChild(leer);
       return;
     }
@@ -204,15 +309,15 @@
     head.type = 'button';
     head.setAttribute('aria-expanded', String(offen));
     head.appendChild(el('span', 'group__chev', '▶'));
-    head.appendChild(el('h2', null, istErledigtGruppe ? '✓ Erledigt' : titel));
+    head.appendChild(el('h2', null, istErledigtGruppe ? T('✓ Erledigt') : T(titel)));
 
     if (!istErledigtGruppe) {
       ['Hoch', 'Mittel', 'Niedrig'].forEach(function (p) {
         var n = eintraege.filter(function (e) { return e.prio === p; }).length;
-        if (n) head.appendChild(el('span', 'pill pill--' + slug(p), n + '×' + p[0]));
+        if (n) head.appendChild(el('span', 'pill pill--' + slug(p), n + '×' + T(p)[0]));
       });
       var ueber = eintraege.filter(Store.istUeberfaellig).length;
-      if (ueber) head.appendChild(el('span', 'pill pill--hoch', '⚠ ' + ueber + ' überfällig'));
+      if (ueber) head.appendChild(el('span', 'pill pill--hoch', T('⚠ {n} überfällig', { n: ueber })));
 
       var alleImBereich = Store.state.entries.filter(function (e) { return e.bereich === titel; });
       var total = alleImBereich.length;
@@ -228,11 +333,11 @@
         var s3 = el('span', 'progress__seg progress__seg--offen');
         s3.style.width = (nOff / total * 100) + '%';
         bar.appendChild(s1); bar.appendChild(s2); bar.appendChild(s3);
-        bar.title = nErl + ' erledigt, ' + nArb + ' in Arbeit, ' + nOff + ' offen';
+        bar.title = T('{a} erledigt, {b} in Arbeit, {c} offen', { a: nErl, b: nArb, c: nOff });
         head.appendChild(bar);
       }
     }
-    head.appendChild(el('span', 'group__count', eintraege.length + (eintraege.length === 1 ? ' Punkt' : ' Punkte')));
+    head.appendChild(el('span', 'group__count', eintraege.length === 1 ? T('1 Punkt') : T('{n} Punkte', { n: eintraege.length })));
 
     head.addEventListener('click', function () {
       if (istErledigtGruppe) erledigtOffen = !erledigtOffen;
@@ -254,34 +359,36 @@
 
     var top = el('div', 'card__top');
     top.appendChild(el('span', 'card__nr', '#' + e.nr));
-    top.appendChild(el('span', 'card__thema', e.thema || '(ohne Thema)'));
+    top.appendChild(original(el('span', 'card__thema', e.thema ? tx(e.thema) : T('(ohne Thema)')), e.thema));
     var edit = el('button', 'card__edit', '✎');
     edit.type = 'button';
-    edit.title = 'Bearbeiten';
-    edit.setAttribute('aria-label', 'Punkt ' + e.nr + ' bearbeiten');
+    edit.title = T('Bearbeiten');
+    edit.setAttribute('aria-label', T('Punkt {nr} bearbeiten', { nr: e.nr }));
     edit.addEventListener('click', function () { oeffneEdit(e.nr); });
     top.appendChild(edit);
     c.appendChild(top);
 
-    if (e.erstelltAm) {
-      c.appendChild(el('p', 'card__created', 'Erstellt: ' + Xlsx.ddmmyyyy(e.erstelltAm)));
+    if (e.erstelltAm || istUebersetzt(e)) {
+      var created = el('p', 'card__created', e.erstelltAm ? T('Erstellt: {datum}', { datum: Xlsx.ddmmyyyy(e.erstelltAm) }) : '');
+      if (istUebersetzt(e)) created.appendChild(el('span', 'tr-tag', T('🌐 übersetzt')));
+      c.appendChild(created);
     }
 
-    if (e.todo) c.appendChild(el('p', 'card__todo', e.todo));
+    if (e.todo) c.appendChild(original(el('p', 'card__todo', tx(e.todo)), e.todo));
 
     var meta = el('div', 'card__meta');
 
     var prio = el('button', 'chip');
     prio.type = 'button';
-    prio.title = 'Klick: Prio wechseln (Hoch → Mittel → Niedrig)';
+    prio.title = T('Klick: Prio wechseln (Hoch → Mittel → Niedrig)');
     prio.appendChild(el('span', 'chip__dot dot--' + slug(e.prio)));
-    prio.appendChild(el('span', null, e.prio));
+    prio.appendChild(el('span', null, T(e.prio)));
     prio.addEventListener('click', function () { Store.cycle(e.nr, 'prio'); });
     meta.appendChild(prio);
 
-    var st = el('button', 'chip chip--status-' + slug(e.status), e.status);
+    var st = el('button', 'chip chip--status-' + slug(e.status), T(e.status));
     st.type = 'button';
-    st.title = 'Klick: Status wechseln (Offen → In Arbeit → Erledigt)';
+    st.title = T('Klick: Status wechseln (Offen → In Arbeit → Erledigt)');
     st.addEventListener('click', function () { Store.cycle(e.nr, 'status'); });
     meta.appendChild(st);
 
@@ -291,21 +398,21 @@
       (ueberfaellig ? ' is-overdue' : (tage != null && tage >= 0 && tage <= 7 && e.status !== 'Erledigt' ? ' is-soon' : '')) +
       (e.faellig ? '' : ' chip--none'), (ueberfaellig ? '⚠ ' : '📅 ') + datumLabel(e.faellig));
     due.type = 'button';
-    due.title = 'Fälligkeit ändern';
+    due.title = T('Fälligkeit ändern');
     due.addEventListener('click', function () { oeffneEdit(e.nr, 'faellig'); });
     meta.appendChild(due);
 
     var vn = el('button', 'chip' + (e.verantwortlicher ? '' : ' chip--none'),
-      '👤 ' + (e.verantwortlicher || 'offen'));
+      '👤 ' + (e.verantwortlicher || T('offen')));
     vn.type = 'button';
-    vn.title = 'Verantwortlichen setzen';
+    vn.title = T('Verantwortlichen setzen');
     vn.addEventListener('click', function () { oeffneEdit(e.nr, 'verant'); });
     meta.appendChild(vn);
 
     var tm = el('button', 'chip' + (e.verantwortlichkeit ? '' : ' chip--none'),
-      '🏷 ' + (e.verantwortlichkeit || 'Verantwortlichkeit offen'));
+      '🏷 ' + (e.verantwortlichkeit ? T(e.verantwortlichkeit) : T('Verantwortlichkeit offen')));
     tm.type = 'button';
-    tm.title = 'Verantwortlichkeit setzen (Advanced Development / Pre Series)';
+    tm.title = T('Verantwortlichkeit setzen (Advanced Development / Pre Series)');
     tm.addEventListener('click', function () { oeffneEdit(e.nr, 'team'); });
     meta.appendChild(tm);
 
@@ -317,14 +424,14 @@
         var img = new Image();
         img.className = 'thumb';
         img.src = b.src;
-        img.alt = b.name || ('Bild zu Punkt ' + e.nr);
+        img.alt = b.name || T('Bild zu Punkt {nr}', { nr: e.nr });
         img.loading = 'lazy';
         img.addEventListener('click', function () { zeigeLightbox(b.src, img.alt); });
         row.appendChild(img);
       });
       c.appendChild(row);
     } else if (e.notiz) {
-      c.appendChild(el('div', 'card__meta', '🖼 ' + e.notiz));
+      c.appendChild(original(el('div', 'card__meta', '🖼 ' + tx(e.notiz)), e.notiz));
     }
 
     return c;
@@ -349,7 +456,7 @@
     var thead = el('thead');
     var tr = el('tr');
     SPALTEN.forEach(function (s) {
-      var th = el('th', null, s.label);
+      var th = el('th', null, T(s.label));
       if (sort.feld === s.feld) {
         th.appendChild(el('span', 'sort-ind', sort.richtung > 0 ? ' ▲' : ' ▼'));
       }
@@ -367,34 +474,34 @@
     liste.slice().sort(sortiereTabelle).forEach(function (e) {
       var row = el('tr', e.status === 'Erledigt' ? 'is-erledigt' : '');
       row.appendChild(el('td', null, String(e.nr)));
-      row.appendChild(el('td', null, e.bereich));
-      row.appendChild(el('td', null, e.thema));
+      row.appendChild(el('td', null, T(e.bereich)));
+      row.appendChild(original(el('td', null, tx(e.thema)), e.thema));
 
       var tdP = el('td');
       var p = el('button', 'chip');
       p.type = 'button';
       p.appendChild(el('span', 'chip__dot dot--' + slug(e.prio)));
-      p.appendChild(el('span', null, e.prio));
+      p.appendChild(el('span', null, T(e.prio)));
       p.addEventListener('click', function () { Store.cycle(e.nr, 'prio'); });
       tdP.appendChild(p);
       row.appendChild(tdP);
 
       row.appendChild(el('td', null, e.verantwortlicher || '–'));
-      row.appendChild(el('td', null, e.verantwortlichkeit || '–'));
+      row.appendChild(el('td', null, e.verantwortlichkeit ? T(e.verantwortlichkeit) : '–'));
 
       var tdD = el('td', null, e.faellig ? Xlsx.ddmmyyyy(e.faellig) : '–');
       if (Store.istUeberfaellig(e)) { tdD.style.color = 'var(--hoch)'; tdD.style.fontWeight = '700'; }
       row.appendChild(tdD);
 
       var tdS = el('td');
-      var s = el('button', 'chip chip--status-' + slug(e.status), e.status);
+      var s = el('button', 'chip chip--status-' + slug(e.status), T(e.status));
       s.type = 'button';
       s.addEventListener('click', function () { Store.cycle(e.nr, 'status'); });
       tdS.appendChild(s);
       row.appendChild(tdS);
 
-      row.appendChild(el('td', 'col-todo', e.todo));
-      row.appendChild(el('td', null, e.notiz || (e.bilder.length ? e.bilder.length + ' Bild(er)' : '')));
+      row.appendChild(original(el('td', 'col-todo', tx(e.todo)), e.todo));
+      row.appendChild(original(el('td', null, e.notiz ? tx(e.notiz) : (e.bilder.length ? T('{n} Bild(er)', { n: e.bilder.length }) : '')), e.notiz));
 
       row.addEventListener('dblclick', function () { oeffneEdit(e.nr); });
       tbody.appendChild(row);
@@ -417,8 +524,8 @@
     $$('.kpi').forEach(function (b) {
       b.classList.toggle('is-active', quick === b.dataset.quick);
     });
-    $('#standLine').textContent = 'Open Point List · ' + alle.length + ' Punkte · Stand ' +
-      Xlsx.ddmmyyyy(Store.heute());
+    $('#standLine').textContent = T('Open Point List · {n} Punkte · Stand {datum}',
+      { n: alle.length, datum: Xlsx.ddmmyyyy(Store.heute()) });
   }
 
   function fuelleVerantFilter(alle) {
@@ -428,8 +535,8 @@
     var liste = Object.keys(namen).sort();
     var aktuell = filter.verant;
     sel.textContent = '';
-    sel.appendChild(new Option('Alle Verantwortlichen', ''));
-    liste.forEach(function (n) { sel.appendChild(new Option(n, n)); });
+    sel.appendChild(new Option(T('Alle Verantwortlichen'), ''));
+    liste.forEach(function (n) { sel.appendChild(new Option(T(n), n)); });
     sel.value = liste.indexOf(aktuell) >= 0 ? aktuell : '';
     if (sel.value !== aktuell) filter.verant = sel.value;
 
@@ -446,8 +553,8 @@
     var liste = Object.keys(themen).sort();
     var aktuell = filter.thema;
     sel.textContent = '';
-    sel.appendChild(new Option('Alle Themen', ''));
-    liste.forEach(function (t) { sel.appendChild(new Option(t, t)); });
+    sel.appendChild(new Option(T('Alle Themen'), ''));
+    liste.forEach(function (t) { sel.appendChild(new Option(tx(t), t)); });
     sel.value = liste.indexOf(aktuell) >= 0 ? aktuell : '';
     if (sel.value !== aktuell) filter.thema = sel.value;
 
@@ -472,19 +579,19 @@
 
   function fuelleSelect(sel, werte) {
     sel.textContent = '';
-    werte.forEach(function (w) { sel.appendChild(new Option(w, w)); });
+    werte.forEach(function (w) { sel.appendChild(new Option(T(w), w)); });
   }
 
   function aktualisiereEditTitel() {
     var thema = $('#fmThema').value.trim();
     var bereich = $('#fmBereich').value;
-    $('#dlgEditTitle').textContent = thema || (editNr == null ? 'Neuer Punkt' : 'Punkt #' + editNr);
+    $('#dlgEditTitle').textContent = thema || (editNr == null ? T('Neuer Punkt') : T('Punkt #{nr}', { nr: editNr }));
     var sub = $('#dlgEditSub');
     if (editNr == null) {
-      sub.textContent = bereich;
+      sub.textContent = T(bereich);
       sub.hidden = false;
     } else {
-      sub.textContent = '#' + editNr + ' · ' + bereich;
+      sub.textContent = '#' + editNr + ' · ' + T(bereich);
       sub.hidden = false;
     }
   }
@@ -502,6 +609,7 @@
     $('#fmTodo').value = e ? e.todo : '';
     $('#fmNotiz').value = e ? e.notiz : '';
     $('#fmBilder').value = '';
+    $('#fmLangHint').hidden = !EN;
     aktualisiereEditTitel();
     editBilder = e ? Store.clone(e.bilder) : [];
     renderEditBilder();
@@ -515,7 +623,7 @@
     $('#btnSaveNext').hidden = !hasNav;
     if (hasNav) {
       var idx = editListe.indexOf(nr);
-      $('#editPos').textContent = (idx + 1) + ' von ' + editListe.length;
+      $('#editPos').textContent = T('{a} von {b}', { a: idx + 1, b: editListe.length });
     }
 
     if (!$('#dlgEdit').open) $('#dlgEdit').showModal();
@@ -540,10 +648,10 @@
       notiz: $('#fmNotiz').value.trim(),
       bilder: editBilder
     };
-    if (!data.thema) { toast('Bitte ein Thema angeben.', true); return false; }
+    if (!data.thema) { toast(T('Bitte ein Thema angeben.'), true); return false; }
     if (editNr == null) {
       var neu = Store.add(data);
-      toast('Punkt #' + neu.nr + ' angelegt.');
+      toast(T('Punkt #{nr} angelegt.', { nr: neu.nr }));
     } else {
       Store.update(editNr, data);
     }
@@ -571,7 +679,7 @@
       img.addEventListener('click', function () { zeigeLightbox(b.src, b.name); });
       var x = el('button', null, '✕');
       x.type = 'button';
-      x.title = 'Bild entfernen';
+      x.title = T('Bild entfernen');
       x.addEventListener('click', function () { editBilder.splice(i, 1); renderEditBilder(); });
       w.appendChild(img);
       w.appendChild(x);
@@ -583,10 +691,10 @@
   function ladeBild(file) {
     return new Promise(function (resolve, reject) {
       var reader = new FileReader();
-      reader.onerror = function () { reject(new Error('Datei nicht lesbar: ' + file.name)); };
+      reader.onerror = function () { reject(new Error(T('Datei nicht lesbar: {name}', { name: file.name }))); };
       reader.onload = function () {
         var img = new Image();
-        img.onerror = function () { reject(new Error('Kein gültiges Bild: ' + file.name)); };
+        img.onerror = function () { reject(new Error(T('Kein gültiges Bild: {name}', { name: file.name }))); };
         img.onload = function () {
           var max = 1400;
           var scale = Math.min(1, max / Math.max(img.width, img.height));
@@ -612,10 +720,10 @@
         bereiche: Store.BEREICHE
       });
       download(blob, 'OPL_4NE1_Gen4_' + dateiStempel() + '.xlsx');
-      toast('Excel exportiert – gleiches Schema wie die bestehende Liste.');
+      toast(T('Excel exportiert – gleiches Schema wie die bestehende Liste.'));
     } catch (err) {
       console.error(err);
-      toast('Excel-Export fehlgeschlagen: ' + err.message, true);
+      toast(T('Excel-Export fehlgeschlagen: {msg}', { msg: err.message }), true);
     }
   }
 
@@ -635,13 +743,13 @@
     // BOM, damit Excel UTF-8 erkennt
     var blob = new Blob(['﻿' + zeilen.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     download(blob, 'OPL_4NE1_Gen4_' + dateiStempel() + '.csv');
-    toast('CSV exportiert.');
+    toast(T('CSV exportiert.'));
   }
 
   function vorschauImport(file) {
     var box = $('#impVorschau');
     box.hidden = false;
-    box.textContent = 'Datei wird gelesen …';
+    box.textContent = T('Datei wird gelesen …');
     $('#btnImportGo').disabled = true;
     importPuffer = null;
 
@@ -654,10 +762,10 @@
       Store.state.entries.forEach(function (e) { vorhandene[e.nr] = true; });
       var treffer = res.entries.filter(function (e) { return vorhandene[e.nr]; }).length;
       box.appendChild(el('div', null,
-        '✓ ' + res.entries.length + ' Zeilen gelesen · ' + treffer +
-        ' davon mit bekannter Nr · ' + (res.entries.length - treffer) + ' neu'));
+        T('✓ {n} Zeilen gelesen · {treffer} davon mit bekannter Nr · {neu} neu',
+          { n: res.entries.length, treffer: treffer, neu: res.entries.length - treffer })));
       if (res.warnungen.length) {
-        box.appendChild(el('div', null, '⚠ ' + res.warnungen.length + ' Hinweis(e):'));
+        box.appendChild(el('div', null, T('⚠ {n} Hinweis(e):', { n: res.warnungen.length })));
         var ul = el('ul');
         res.warnungen.slice(0, 20).forEach(function (w) { ul.appendChild(el('li', null, w)); });
         if (res.warnungen.length > 20) ul.appendChild(el('li', null, '…'));
@@ -711,10 +819,9 @@
   }
 
   function amkBilderNachtragen() {
-    if (!confirm('Die Creo-Bilder aus dem AMK-Design-Review (16 Einträge) ' +
-                 'nachtragen? Andere Felder bleiben unverändert.')) return;
+    if (!confirm(T('Die Creo-Bilder aus dem AMK-Design-Review (16 Einträge) nachtragen? Andere Felder bleiben unverändert.'))) return;
 
-    toast('Bilder werden nachgetragen …');
+    toast(T('Bilder werden nachgetragen …'));
     var wer = Store.state.user || 'Bild-Nachtrag';
     var ok = 0, fehler = 0, uebersprungen = 0;
 
@@ -750,9 +857,8 @@
         }).catch(function () { fehler++; });
       });
     }, Promise.resolve()).then(function () {
-      toast('AMK-Bilder nachgetragen: ' + ok + ' aktualisiert, ' +
-        uebersprungen + ' bereits vollständig' + (fehler ? ', ' + fehler + ' Fehler' : '') + '.',
-        fehler > 0);
+      toast(T('AMK-Bilder nachgetragen: {ok} aktualisiert, {skip} bereits vollständig{fehler}.',
+        { ok: ok, skip: uebersprungen, fehler: fehler ? T(', {n} Fehler', { n: fehler }) : '' }), fehler > 0);
       Store.load();
     });
   }
@@ -761,11 +867,11 @@
 
   function ladeAdminListe() {
     var box = $('#adminEmailListe');
-    box.textContent = 'Lade …';
+    box.textContent = T('Lade …');
     fetch('/api/admin/emails').then(function (r) {
       if (!r.ok) {
         return r.json().catch(function () { return {}; }).then(function (e) {
-          throw new Error('HTTP ' + r.status + ': ' + (e.error || 'unbekannter Fehler'));
+          throw new Error('HTTP ' + r.status + ': ' + T(e.error || 'unbekannter Fehler'));
         });
       }
       return r.json();
@@ -780,21 +886,21 @@
         var spacer = el('span'); spacer.style.flex = '1';
         row.appendChild(spacer);
         if (email !== 'david.rybinski@neura-robotics.com') {
-          var del = el('button', 'btn btn--ghost', '✕ entfernen');
+          var del = el('button', 'btn btn--ghost', T('✕ entfernen'));
           del.type = 'button';
           del.addEventListener('click', function () {
-            if (!confirm(email + ' den Zugang entziehen?')) return;
+            if (!confirm(T('{email} den Zugang entziehen?', { email: email }))) return;
             fetch('/api/admin/emails/' + encodeURIComponent(email), { method: 'DELETE' })
               .then(function (r) { return r.json(); })
-              .then(function () { ladeAdminListe(); toast(email + ' entfernt.'); })
-              .catch(function () { toast('Entfernen fehlgeschlagen.', true); });
+              .then(function () { ladeAdminListe(); toast(T('{email} entfernt.', { email: email })); })
+              .catch(function () { toast(T('Entfernen fehlgeschlagen.'), true); });
           });
           row.appendChild(del);
         }
         box.appendChild(row);
       });
     }).catch(function (err) {
-      box.textContent = 'Konnte Liste nicht laden: ' + err.message;
+      box.textContent = T('Konnte Liste nicht laden: {msg}', { msg: err.message });
     });
   }
 
@@ -808,27 +914,27 @@
   function zeigeLog() {
     var box = $('#logList');
     box.textContent = '';
-    box.appendChild(el('div', null, 'Lade …'));
+    box.appendChild(el('div', null, T('Lade …')));
     $('#dlgLog').showModal();
 
     fetch('/api/log').then(function (r) { return r.json(); }).then(function (eintraege) {
       box.textContent = '';
       if (!eintraege.length) {
-        box.appendChild(el('div', null, 'Noch keine Änderungen protokolliert.'));
+        box.appendChild(el('div', null, T('Noch keine Änderungen protokolliert.')));
         return;
       }
       eintraege.forEach(function (l) {
         var d = el('div');
-        var b = el('b', null, l.nr ? '#' + l.nr + ' ' : 'Liste ');
+        var b = el('b', null, l.nr ? '#' + l.nr + ' ' : T('Liste '));
         d.appendChild(b);
         d.appendChild(document.createTextNode(l.text + ' '));
-        d.appendChild(el('span', null, '— ' + (l.wer || 'unbekannt') + ', ' +
-          new Date(l.wann).toLocaleString('de-DE')));
+        d.appendChild(el('span', null, '— ' + (l.wer || T('unbekannt')) + ', ' +
+          new Date(l.wann).toLocaleString(I18N.locale())));
         box.appendChild(d);
       });
     }).catch(function () {
       box.textContent = '';
-      box.appendChild(el('div', null, 'Protokoll konnte nicht geladen werden.'));
+      box.appendChild(el('div', null, T('Protokoll konnte nicht geladen werden.')));
     });
   }
 
@@ -841,12 +947,12 @@
     Store.BEREICHE.forEach(function (b) { $('#fBereich').appendChild(new Option(b, b)); });
     Store.PRIOS.forEach(function (p) { $('#fPrio').appendChild(new Option(p, p)); });
     Store.STATI.forEach(function (s) { $('#fStatus').appendChild(new Option(s, s)); });
-    $('#fmTeam').appendChild(new Option('– offen –', ''));
+    $('#fmTeam').appendChild(new Option(T('– offen –'), ''));
     Store.VERANTWORTLICHKEITEN.forEach(function (v) {
-      $('#fmTeam').appendChild(new Option(v, v));
-      $('#fTeam').appendChild(new Option(v, v));
+      $('#fmTeam').appendChild(new Option(T(v), v));
+      $('#fTeam').appendChild(new Option(T(v), v));
     });
-    $('#fTeam').appendChild(new Option('(offen)', '(offen)'));
+    $('#fTeam').appendChild(new Option(T('(offen)'), '(offen)'));
 
     Store.onError(function (msg) { toast(msg, true); });
     Store.load();
@@ -946,10 +1052,9 @@
       else if (act === 'amk-bilder') amkBilderNachtragen();
       else if (act === 'admin') zeigeAdmin();
       else if (act === 'reset') {
-        if (confirm('Wirklich alle Änderungen verwerfen und den Excel-Startstand ' +
-                    '(29 Punkte, 21.09.2026) wiederherstellen?')) {
+        if (confirm(T('Wirklich alle Änderungen verwerfen und den Excel-Startstand (29 Punkte, 21.09.2026) wiederherstellen?'))) {
           Store.reset();
-          toast('Startstand wiederhergestellt.');
+          toast(T('Startstand wiederhergestellt.'));
         }
       } else if (act === 'logout') {
         fetch('/api/logout').then(function () { location.reload(); });
@@ -971,12 +1076,12 @@
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ email: email })
       }).then(function (r) {
-        if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || 'Fehler'); });
+        if (!r.ok) return r.json().then(function (e) { throw new Error(T(e.error || 'Fehler')); });
         return r.json();
       }).then(function () {
         input.value = '';
         ladeAdminListe();
-        toast(email + ' hinzugefügt.');
+        toast(T('{email} hinzugefügt.', { email: email }));
       }).catch(function (err) {
         toast(err.message, true);
       });
@@ -1001,7 +1106,7 @@
     $('#formEdit').addEventListener('submit', function (ev) {
       ev.preventDefault();
       if (editSpeichern()) {
-        toast('Punkt #' + editNr + ' gespeichert.');
+        toast(T('Punkt #{nr} gespeichert.', { nr: editNr }));
         editListe = [];
         $('#dlgEdit').close();
       }
@@ -1025,12 +1130,11 @@
 
     $('#btnDelete').addEventListener('click', function () {
       if (editNr == null) return;
-      if (!confirm('Punkt #' + editNr + ' wirklich löschen? ' +
-                   'Tipp: Status „Erledigt” behält die Historie.')) return;
+      if (!confirm(T('Punkt #{nr} wirklich löschen? Tipp: Status „Erledigt” behält die Historie.', { nr: editNr }))) return;
       Store.remove(editNr);
       editListe = [];
       $('#dlgEdit').close();
-      toast('Punkt gelöscht.');
+      toast(T('Punkt gelöscht.'));
     });
 
     // Import-Dialog
@@ -1041,13 +1145,12 @@
       if (!importPuffer) return;
       var modus = $$('input[name="impModus"]').filter(function (r) { return r.checked; })[0].value;
       if (modus === 'ersetzen' &&
-          !confirm('Der aktuelle Stand (' + Store.state.entries.length +
-                   ' Punkte) wird komplett ersetzt. Fortfahren?')) return;
+          !confirm(T('Der aktuelle Stand ({n} Punkte) wird komplett ersetzt. Fortfahren?', { n: Store.state.entries.length }))) return;
       var res = Store.applyImport(importPuffer, modus);
       $('#dlgImport').close();
       toast(modus === 'ersetzen'
-        ? 'Import fertig: Liste durch ' + res.neu + ' Punkte aus der Excel ersetzt.'
-        : 'Import fertig: ' + res.aktualisiert + ' aktualisiert, ' + res.neu + ' neu.');
+        ? T('Import fertig: Liste durch {n} Punkte aus der Excel ersetzt.', { n: res.neu })
+        : T('Import fertig: {a} aktualisiert, {n} neu.', { a: res.aktualisiert, n: res.neu }));
     });
 
     // Dialoge schließen

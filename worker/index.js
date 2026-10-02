@@ -18,6 +18,7 @@
  *   GET    /api/admin/emails      → Freigabeliste lesen (nur Admin)
  *   POST   /api/admin/emails      → E-Mail zur Freigabeliste hinzufuegen (nur Admin)
  *   DELETE /api/admin/emails/:e   → E-Mail von der Freigabeliste entfernen (nur Admin)
+ *   POST   /api/translate         → Texte DE→EN maschinell uebersetzen (Workers AI, Cache in D1)
  *
  * Freigegebene E-Mail-Adressen liegen in der D1-Tabelle "allowed_emails"
  * (Migration: siehe migrations/002_allowed_emails.sql).
@@ -188,6 +189,11 @@ async function handleAPI(url, method, request, env) {
     return handleAdmin(path, method, request, env);
   }
 
+  // POST /api/translate { texts: [...] } → { translations: [...] }
+  if (path === '/api/translate' && method === 'POST') {
+    return handleTranslate(request, env);
+  }
+
   const db = env.DB;
 
   // GET /api/entries
@@ -347,6 +353,73 @@ async function handleAdmin(path, method, request, env) {
   }
 
   return json({ error: 'Route nicht gefunden' }, 404);
+}
+
+/* -------------------------------------------------------- Uebersetzung */
+
+// Workers AI laeuft ueber das AI-Binding im eigenen Cloudflare-Konto, ohne
+// separaten API-Schluessel. Ergebnisse werden in D1 zwischengespeichert,
+// damit jeder Text nur einmal uebersetzt wird.
+const TR_MODEL = '@cf/meta/m2m100-1.2b';
+const TR_MAX_TEXTE = 25;
+const TR_MAX_ZEICHEN = 4000;
+
+async function sha256Hex(s) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function uebersetzeZeile(env, zeile) {
+  if (!zeile.trim()) return zeile;
+  const res = await env.AI.run(TR_MODEL, { text: zeile, source_lang: 'german', target_lang: 'english' });
+  return (res && res.translated_text) ? res.translated_text : null;
+}
+
+async function uebersetzeText(env, db, text) {
+  const hash = await sha256Hex('de>en|' + text);
+  const cached = await db.prepare('SELECT text FROM translations WHERE hash = ?').bind(hash).first();
+  if (cached) return cached.text;
+  // Zeilenweise, damit Zeilenumbrueche im To Do erhalten bleiben
+  const zeilen = text.split('\n');
+  const ergebnis = [];
+  for (const z of zeilen) {
+    const en = await uebersetzeZeile(env, z);
+    if (en == null) return null;
+    ergebnis.push(en);
+  }
+  const en = ergebnis.join('\n');
+  await db.prepare('INSERT OR REPLACE INTO translations (hash, text) VALUES (?, ?)').bind(hash, en).run();
+  return en;
+}
+
+async function handleTranslate(request, env) {
+  if (!env.AI) return json({ error: 'Übersetzung nicht verfügbar' }, 501);
+  const data = await request.json();
+  const texte = (Array.isArray(data.texts) ? data.texts : [])
+    .slice(0, TR_MAX_TEXTE)
+    .map(t => String(t == null ? '' : t).slice(0, TR_MAX_ZEICHEN));
+  const db = env.DB;
+  await db.prepare('CREATE TABLE IF NOT EXISTS translations (hash TEXT PRIMARY KEY, text TEXT NOT NULL)').run();
+
+  const out = new Array(texte.length).fill(null);
+  let fehler = 0;
+  let next = 0;
+  async function worker() {
+    while (next < texte.length) {
+      const i = next++;
+      if (!texte[i].trim()) { out[i] = texte[i]; continue; }
+      try {
+        out[i] = await uebersetzeText(env, db, texte[i]);
+      } catch (err) {
+        fehler++;
+      }
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  if (texte.length && fehler === texte.length) {
+    return json({ error: 'Übersetzung fehlgeschlagen' }, 502);
+  }
+  return json({ translations: out, fehler });
 }
 
 /* -------------------------------------------------------- DB helpers */

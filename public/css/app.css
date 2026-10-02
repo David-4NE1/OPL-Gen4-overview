@@ -225,6 +225,23 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
   background: var(--accent); color: #fff; font-size: 13px;
 }
 .filter-banner[hidden] { display: none; }
+
+/* Hinweis: maschinell uebersetzte Inhalte (englischer Modus) */
+.tr-banner {
+  box-sizing: border-box; width: calc(100% - 32px); max-width: 1368px; margin: 12px auto 0; padding: 8px 14px;
+  border: 1px solid var(--line); border-left: 4px solid var(--accent);
+  border-radius: var(--radius); background: var(--surface);
+  color: var(--ink-soft); font-size: 13px;
+}
+.tr-banner--warn { border-left-color: var(--mittel); }
+.tr-banner[hidden] { display: none; }
+.tr-tag {
+  margin-left: 8px; padding: 0 6px; border-radius: 6px;
+  background: var(--bg); border: 1px solid var(--line);
+  font-size: 10.5px; color: var(--ink-soft); white-space: nowrap;
+}
+.login-box { position: relative; }
+.login-lang { position: absolute; top: 12px; right: 12px; padding: 4px 10px; font-size: 12px; }
 .filter-banner__text { flex: 1; }
 .filter-banner__close {
   border: 0; background: rgba(255,255,255,.2); color: #fff; border-radius: 6px;
