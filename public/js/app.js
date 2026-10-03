@@ -829,32 +829,7 @@
     });
   }
 
-  /* ------------------------------------------------ AMK-Bilder nachtragen */
-
-  var AMK_BILD_MAP = [
-    { nr: 1,  imgs: ['assets/img/fig02-fussgelenk-lagerschraube.png'] },
-    { nr: 4,  imgs: ['assets/img/fig07-schelle-klemme.png',
-                     'assets/img/fig08-schelle-spalt-022mm.png',
-                     'assets/img/fig14-schelle-4406-al7075.png'] },
-    { nr: 8,  imgs: ['assets/img/fig06-modellbaum-links-rechts.png'] },
-    { nr: 9,  imgs: ['assets/img/fig04-stecker-aktuatorgehaeuse.png'] },
-    { nr: 10, imgs: ['assets/img/fig05-gelenkanschlag-pokayoke.png'] },
-    { nr: 14, imgs: ['assets/img/fig11-hardstop-stifte-k-g7.png'] },
-    { nr: 15, imgs: ['assets/img/fig10-aktuator-flansch-luftspalt.png',
-                     'assets/img/fig17-waermetauscher-luefter.png'] },
-    { nr: 16, imgs: ['assets/img/fig12-lager-zwei-haelften.png',
-                     'assets/img/fig13-armgelenk-trennebene.png'] },
-    { nr: 19, imgs: ['assets/img/fig09-montage-7100-gruppe.png'] },
-    { nr: 20, imgs: ['assets/img/fig15-torso-batterien.png'] },
-    { nr: 21, imgs: ['assets/img/fig16-aufhaengeoese-bajonett.png'] },
-    { nr: 22, imgs: ['assets/img/fig18-mainboard-compute-unit.png'] },
-    { nr: 24, imgs: ['assets/img/fig19-torso-struktur-al6082.png'] },
-    { nr: 26, imgs: ['assets/img/opl-26-kollision-bein-1.png',
-                     'assets/img/opl-26-kollision-bein-2.png'] },
-    { nr: 29, imgs: ['assets/img/fig03-beine-huefte-proportionen.png'] },
-    { nr: 36, imgs: ['assets/img/fig01-gesamtbaugruppe-4ne1d.png'] }
-  ];
-
+  /** Laedt ein Bild (auch per Weiterleitung) und liefert es als data-URL. */
   function bildZuDataUrl(url) {
     return fetch(url).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -866,51 +841,6 @@
         fr.onerror = reject;
         fr.readAsDataURL(blob);
       });
-    });
-  }
-
-  function amkBilderNachtragen() {
-    if (!confirm(T('Die Creo-Bilder aus dem AMK-Design-Review (16 Einträge) nachtragen? Andere Felder bleiben unverändert.'))) return;
-
-    toast(T('Bilder werden nachgetragen …'));
-    var wer = Store.state.user || 'Bild-Nachtrag';
-    var ok = 0, fehler = 0, uebersprungen = 0;
-
-    AMK_BILD_MAP.reduce(function (chain, item) {
-      return chain.then(function () {
-        return fetch('/api/entries/' + item.nr).then(function (r) {
-          if (!r.ok) { fehler++; return null; }
-          return r.json();
-        }).then(function (entry) {
-          if (!entry) return;
-          var vorhandene = entry.bilder || [];
-          var namen = {};
-          vorhandene.forEach(function (b) { namen[b.name] = true; });
-
-          var fehlend = item.imgs.filter(function (url) {
-            return !namen[url.split('/').pop()];
-          });
-          if (!fehlend.length) { uebersprungen++; return; }
-
-          return Promise.all(fehlend.map(function (url) {
-            return bildZuDataUrl(url).then(function (dataUrl) {
-              return { name: url.split('/').pop(), src: dataUrl };
-            });
-          })).then(function (neue) {
-            return fetch('/api/entries/' + item.nr, {
-              method: 'PUT',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ bilder: vorhandene.concat(neue), user: wer })
-            });
-          }).then(function (put) {
-            if (put && put.ok) ok++; else fehler++;
-          });
-        }).catch(function () { fehler++; });
-      });
-    }, Promise.resolve()).then(function () {
-      toast(T('AMK-Bilder nachgetragen: {ok} aktualisiert, {skip} bereits vollständig{fehler}.',
-        { ok: ok, skip: uebersprungen, fehler: fehler ? T(', {n} Fehler', { n: fehler }) : '' }), fehler > 0);
-      Store.load();
     });
   }
 
@@ -1101,7 +1031,6 @@
         importPuffer = null;
         $('#dlgImport').showModal();
       } else if (act === 'log') zeigeLog();
-      else if (act === 'amk-bilder') amkBilderNachtragen();
       else if (act === 'admin') zeigeAdmin();
       else if (act === 'reset' && !Store.isOnline()) {
         toast(T('Keine Verbindung zum Server – Zurücksetzen ist gerade nicht möglich.'), true);

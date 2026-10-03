@@ -47,7 +47,6 @@
     '⬇ CSV-Export': '⬇ CSV export',
     '⬆ Excel-Import (.xlsx)': '⬆ Excel import (.xlsx)',
     '🕓 Änderungsprotokoll': '🕓 Change log',
-    '🖼 AMK-Bilder nachtragen': '🖼 Add AMK images',
     '↺ Auf Excel-Startstand zurücksetzen': '↺ Reset to Excel baseline',
     '🔐 Zugriff verwalten': '🔐 Manage access',
     '🚪 Abmelden': '🚪 Sign out',
@@ -184,14 +183,6 @@
     'Wirklich alle Änderungen verwerfen und den Excel-Startstand (29 Punkte, 21.09.2026) wiederherstellen?':
       'Really discard all changes and restore the Excel baseline (29 items, 21.09.2026)?',
     'Startstand wiederhergestellt.': 'Baseline restored.',
-
-    // AMK-Bilder
-    'Die Creo-Bilder aus dem AMK-Design-Review (16 Einträge) nachtragen? Andere Felder bleiben unverändert.':
-      'Add the Creo images from the AMK design review (16 entries)? Other fields stay unchanged.',
-    'Bilder werden nachgetragen …': 'Adding images …',
-    'AMK-Bilder nachgetragen: {ok} aktualisiert, {skip} bereits vollständig{fehler}.':
-      'AMK images added: {ok} updated, {skip} already complete{fehler}.',
-    ', {n} Fehler': ', {n} errors',
 
     // Protokoll
     'Änderungsprotokoll': 'Change log',
