@@ -118,7 +118,7 @@
     var hadLocal = loadLocal();
 
     // Dann von API laden
-    API.get('/api/entries')
+    ladeVomServer()
       .then(function (entries) {
         state.entries = entries.map(normalizeEntry);
         saveLocal();
@@ -151,21 +151,43 @@
 
   /* ---- Live-Sync: periodisch pruefen, ob andere etwas geaendert haben ---- */
 
-  var POLL_MS = 6000;
+  // Gepollt wird nur der kleine Aenderungsstand (/api/stand); die volle Liste
+  // kommt nur, wenn er sich geaendert hat. Sonst kostet jede Abfrage im Worker
+  // so viel CPU-Zeit, dass das Cloudflare-Free-Tier-Limit (10 ms) reisst.
+  var POLL_MS = 10000;
   var pollTimer = null;
+  var letzterStand = null;
 
   function istDialogOffen() {
     return !!document.querySelector('dialog[open]');
   }
 
+  // Stand vor der Liste holen: aendert sich dazwischen etwas, ist der
+  // gemerkte Stand aelter und die naechste Abfrage laedt erneut.
+  function ladeVomServer() {
+    var stand;
+    return API.get('/api/stand').then(function (r) {
+      stand = r.stand;
+      return API.get('/api/entries');
+    }).then(function (entries) {
+      letzterStand = stand;
+      return entries;
+    });
+  }
+
   function poll() {
     if (document.hidden || istDialogOffen()) return;
-    API.get('/api/entries')
+    API.get('/api/stand')
+      .then(function (r) {
+        if (online && r.stand === letzterStand) return null;
+        return ladeVomServer();
+      })
       .then(function (entries) {
         pollFehler = 0;
-        var neu = entries.map(normalizeEntry);
         var warOffline = !online;
         setOnline(true);
+        if (!entries) return;
+        var neu = entries.map(normalizeEntry);
         if (warOffline || JSON.stringify(neu) !== JSON.stringify(state.entries)) {
           state.entries = neu;
           saveLocal();
