@@ -10,6 +10,7 @@ import { Buffer } from 'node:buffer';
  *   GET    /api/logout            → Abmelden (löscht Cookie)
  *   GET    /api/health            → Erreichbarkeit (kein Auth, keine Daten)
  *   GET    /api/entries           → alle Einträge (Cookie ODER Bearer READ_TOKEN)
+ *   GET    /api/stand             → Aenderungsstand (kleiner Fingerabdruck fuers Polling)
  *   GET    /api/entries/:nr       → ein Eintrag
  *   GET    /api/bild/:nr/:i       → einzelnes Bild als Binaerdatei
  *
@@ -203,6 +204,13 @@ async function handleAPI(url, method, request, env) {
 
   const db = env.DB;
 
+  // GET /api/stand – das Frontend fragt hier alle paar Sekunden nach, ob sich
+  // etwas geaendert hat, und laedt die volle Liste nur bei Bedarf. Das haelt
+  // die CPU-Zeit pro Abfrage weit unter dem Free-Tier-Limit von 10 ms.
+  if (path === '/api/stand' && method === 'GET') {
+    return json({ stand: await aenderungsStand(db) });
+  }
+
   // GET /api/entries
   if (path === '/api/entries' && method === 'GET') {
     return json(await listeEintraege(db));
@@ -329,6 +337,21 @@ async function handleAPI(url, method, request, env) {
   }
 
   return json({ error: 'Route nicht gefunden' }, 404);
+}
+
+/* -------------------------------------------------------------- Stand */
+
+// Jede Schreib-Route aendert mindestens einen dieser Werte: Anlegen/Loeschen
+// die Anzahl, Bearbeiten (auch nur Bilder) geaendert_am, Import/Reset das
+// Protokoll bzw. die Anzahl.
+async function aenderungsStand(db) {
+  const row = await db.prepare(
+    `SELECT (SELECT COUNT(*) FROM entries) AS n,
+            (SELECT MAX(geaendert_am) FROM entries) AS g,
+            (SELECT MAX(id) FROM changelog) AS l,
+            (SELECT COUNT(*) FROM changelog) AS lc`
+  ).first();
+  return [row.n, row.g || '', row.l || 0, row.lc].join('|');
 }
 
 /* -------------------------------------------------------------- Admin */
