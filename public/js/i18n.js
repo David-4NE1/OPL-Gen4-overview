@@ -201,6 +201,8 @@
     'unbekannt': 'unknown',
     'Protokoll konnte nicht geladen werden.': 'Could not load the change log.',
     'Schließen': 'Close',
+    'Vorheriges Bild': 'Previous image',
+    'Nächstes Bild': 'Next image',
 
     // Admin
     'Zugriff verwalten': 'Manage access',

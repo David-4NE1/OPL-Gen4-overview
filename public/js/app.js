@@ -420,13 +420,13 @@
 
     if (e.bilder && e.bilder.length) {
       var row = el('div', 'thumbrow');
-      e.bilder.forEach(function (b) {
+      e.bilder.forEach(function (b, i) {
         var img = new Image();
         img.className = 'thumb';
         img.src = b.src;
         img.alt = b.name || T('Bild zu Punkt {nr}', { nr: e.nr });
         img.loading = 'lazy';
-        img.addEventListener('click', function () { zeigeLightbox(b.src, img.alt); });
+        img.addEventListener('click', function () { zeigeLightbox(e.bilder, i); });
         row.appendChild(img);
       });
       c.appendChild(row);
@@ -565,10 +565,33 @@
 
   /* ---------------------------------------------------------- Lightbox */
 
-  function zeigeLightbox(src, alt) {
-    $('#lightboxImg').src = src;
-    $('#lightboxImg').alt = alt || '';
-    $('#lightbox').hidden = false;
+  // Kopie der Bildliste: Aenderungen im Bearbeiten-Dialog wirken nicht auf die offene Ansicht
+  var lbBilder = [], lbIndex = 0;
+
+  function zeigeLightbox(bilder, index) {
+    lbBilder = (bilder || []).slice();
+    if (!lbBilder.length) return;
+    lbIndex = index || 0;
+    lbZeige();
+    var d = $('#lightbox');
+    if (!d.open) d.showModal();
+  }
+
+  function lbZeige() {
+    var b = lbBilder[lbIndex];
+    var mehrere = lbBilder.length > 1;
+    $('#lightboxImg').src = b.src;
+    $('#lightboxImg').alt = b.name || '';
+    $('#lightboxPrev').hidden = !mehrere;
+    $('#lightboxNext').hidden = !mehrere;
+    $('#lightboxInfo').textContent = (mehrere ? (lbIndex + 1) + ' / ' + lbBilder.length : '') +
+      (b.name ? (mehrere ? ' · ' : '') + b.name : '');
+  }
+
+  function lbBlaettern(d) {
+    if (lbBilder.length < 2) return;
+    lbIndex = (lbIndex + d + lbBilder.length) % lbBilder.length;
+    lbZeige();
   }
 
   /* ------------------------------------------------------ Edit-Dialog */
@@ -676,7 +699,7 @@
       img.className = 'thumb';
       img.src = b.src;
       img.alt = b.name || '';
-      img.addEventListener('click', function () { zeigeLightbox(b.src, b.name); });
+      img.addEventListener('click', function () { zeigeLightbox(editBilder, i); });
       var x = el('button', null, '✕');
       x.type = 'button';
       x.title = T('Bild entfernen');
@@ -1192,9 +1215,15 @@
     });
 
     // Lightbox
-    $('#lightbox').addEventListener('click', function () { $('#lightbox').hidden = true; });
+    // Klick irgendwo (ausser auf die Pfeile) schliesst; Esc schliesst nativ nur die Lightbox
+    $('#lightbox').addEventListener('click', function () { $('#lightbox').close(); });
+    $('#lightboxPrev').addEventListener('click', function (ev) { ev.stopPropagation(); lbBlaettern(-1); });
+    $('#lightboxNext').addEventListener('click', function (ev) { ev.stopPropagation(); lbBlaettern(1); });
+    $('#lightbox').addEventListener('keydown', function (ev) {
+      if (ev.key === 'ArrowLeft') { ev.preventDefault(); lbBlaettern(-1); }
+      if (ev.key === 'ArrowRight') { ev.preventDefault(); lbBlaettern(1); }
+    });
     document.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Escape') $('#lightbox').hidden = true;
       if (ev.key === 'n' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) &&
           !document.querySelector('dialog[open]')) {
         ev.preventDefault();

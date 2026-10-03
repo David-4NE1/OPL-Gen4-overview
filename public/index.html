@@ -225,10 +225,14 @@
 </dialog>
 
 <!-- Lightbox -->
-<div id="lightbox" class="lightbox" hidden>
+<!-- als <dialog>, damit es auch ueber dem geoeffneten Bearbeiten-Dialog liegt -->
+<dialog id="lightbox" class="lightbox">
   <button class="lightbox__close" type="button" aria-label="Schließen" data-i18n-aria>✕</button>
+  <button id="lightboxPrev" class="lightbox__nav lightbox__nav--prev" type="button" aria-label="Vorheriges Bild" data-i18n-aria>‹</button>
   <img id="lightboxImg" alt="">
-</div>
+  <button id="lightboxNext" class="lightbox__nav lightbox__nav--next" type="button" aria-label="Nächstes Bild" data-i18n-aria>›</button>
+  <div id="lightboxInfo" class="lightbox__info"></div>
+</dialog>
 
 </div><!-- /appContent -->
 
