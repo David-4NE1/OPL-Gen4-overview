@@ -9,6 +9,7 @@ name: D1 Wartung (Diagnose / Time Travel)
 # themen-umstellen: ordnet die Karten #1 bis #132 den festen Themen und Baugruppen zu
 #           (.github/d1/themen-umstellen.sql); gibt nur Zaehlungen aus, keine Karteninhalte.
 #           Rueckgaengig per restore auf den Zeitpunkt vor dem Lauf.
+# verantwortlichkeit-standard: fuellt leere Verantwortlichkeiten nach Person (.github/d1/verantwortlichkeit-standard.sql).
 
 on:
   workflow_dispatch:
@@ -18,7 +19,7 @@ on:
         required: true
         default: diagnose
         type: choice
-        options: [diagnose, restore, bilder-diagnose, bilder-duplikate-entfernen, themen-umstellen]
+        options: [diagnose, restore, bilder-diagnose, bilder-duplikate-entfernen, themen-umstellen, verantwortlichkeit-standard]
       zeitpunkt:
         description: 'Nur fuer restore: Zeitpunkt in UTC (RFC3339), z. B. 2026-10-02T08:35:00Z'
         required: false
@@ -70,6 +71,12 @@ jobs:
           wrangler d1 execute opl-gen4 --remote --command "$(grep -v '^--' .github/d1/themen-umstellen.sql)"
           wrangler d1 execute opl-gen4 --remote --command "SELECT thema, COUNT(*) AS anzahl FROM entries GROUP BY thema ORDER BY anzahl DESC"
           wrangler d1 execute opl-gen4 --remote --command "SELECT baugruppe, COUNT(*) AS anzahl FROM entries GROUP BY baugruppe ORDER BY anzahl DESC"
+
+      - name: Verantwortlichkeit nach Person nachtragen
+        if: inputs.aktion == 'verantwortlichkeit-standard'
+        run: |
+          wrangler d1 execute opl-gen4 --remote --command "$(grep -v '^--' .github/d1/verantwortlichkeit-standard.sql)"
+          wrangler d1 execute opl-gen4 --remote --command "SELECT verantwortlichkeit, COUNT(*) AS anzahl FROM entries GROUP BY verantwortlichkeit ORDER BY anzahl DESC"
 
       - name: Time Travel Restore
         if: inputs.aktion == 'restore'

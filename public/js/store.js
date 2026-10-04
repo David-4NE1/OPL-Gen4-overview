@@ -48,6 +48,21 @@
 
   function istThema(t) { return THEMEN.indexOf(t) >= 0; }
 
+  // Standard-Verantwortlichkeit je Person; greift nur, wenn das Feld leer ist
+  var TEAM_STANDARD = {
+    'marc zinner': 'Advanced Development',
+    'jannik göz': 'Advanced Development',
+    'jannik goez': 'Advanced Development',
+    'jannik': 'Advanced Development',
+    'marcellinus meyer': 'Advanced Development',
+    'marcellinus': 'Advanced Development',
+    'peter bahn': 'Advanced Development',
+    'thorsten grelle': 'Pre Series'
+  };
+  function teamStandard(name) {
+    return TEAM_STANDARD[String(name || '').trim().replace(/\s+/g, ' ').toLowerCase()] || '';
+  }
+
   // Unbekanntes Thema (z. B. aus einer alten Excel) wandert vor das To Do,
   // damit nichts verloren geht; das Thema bleibt leer und wird im Tool gewählt.
   function altesThemaInsTodo(alt, todo) {
@@ -338,6 +353,7 @@
     if (modus === 'ersetzen') {
       state.entries = entries.map(function (e) {
         var n = themaEinordnen(normalizeEntry(e));
+        n.verantwortlichkeit = n.verantwortlichkeit || teamStandard(n.verantwortlicher);
         if (!n.bilder.length && bilderProNr[n.nr]) n.bilder = bilderProNr[n.nr];
         n.erstelltAm = n.erstelltAm || erstelltAmProNr[n.nr] || heute();
         return n;
@@ -351,7 +367,7 @@
         if (vorhanden) {
           if (!n.bilder.length) n.bilder = vorhanden.bilder;
           n.erstelltAm = n.erstelltAm || vorhanden.erstelltAm || heute();
-          n.verantwortlichkeit = n.verantwortlichkeit || vorhanden.verantwortlichkeit;
+          n.verantwortlichkeit = n.verantwortlichkeit || vorhanden.verantwortlichkeit || teamStandard(n.verantwortlicher);
           n.baugruppe = n.baugruppe || vorhanden.baugruppe;
           // Altes Freitext-Thema aus der Datei ueberschreibt kein gueltiges Thema
           if (!istThema(n.thema) && istThema(vorhanden.thema)) n.thema = vorhanden.thema;
@@ -363,6 +379,7 @@
           aktualisiert++;
         } else {
           themaEinordnen(n);
+          n.verantwortlichkeit = n.verantwortlichkeit || teamStandard(n.verantwortlicher);
           if (!n.bilder.length && bilderProNr[n.nr]) n.bilder = bilderProNr[n.nr];
           n.erstelltAm = n.erstelltAm || heute();
           n.geaendertAm = jetzt();
@@ -400,7 +417,7 @@
 
   global.OPLStore = {
     BEREICHE: BEREICHE, PRIOS: PRIOS, STATI: STATI, VERANTWORTLICHKEITEN: VERANTWORTLICHKEITEN,
-    THEMEN: THEMEN, BAUGRUPPEN: BAUGRUPPEN, istThema: istThema, altesThemaInsTodo: altesThemaInsTodo,
+    THEMEN: THEMEN, BAUGRUPPEN: BAUGRUPPEN, istThema: istThema, teamStandard: teamStandard, altesThemaInsTodo: altesThemaInsTodo,
     state: state,
     load: load, subscribe: subscribe, onError: onError, onStatus: onStatus, isOnline: isOnline,
     add: add, update: update, remove: remove, cycle: cycle, byNr: byNr,
