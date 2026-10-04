@@ -638,7 +638,8 @@
     renderEditBilder();
     $('#btnDelete').hidden = !e;
 
-    if (e && !editListe.length) {
+    // Liste neu bilden, wenn sie fehlt oder veraltet ist (Karte nicht enthalten)
+    if (e && editListe.indexOf(nr) < 0) {
       editListe = Store.state.entries.filter(sichtbar).map(function (x) { return x.nr; });
     }
     var hasNav = e && editListe.length > 1;
@@ -1122,6 +1123,10 @@
         editNavigiere(1);
       }
     });
+
+    // Auch bei Abbrechen, Esc oder ✕ die Blätterliste verwerfen, damit der
+    // nächste Aufruf den dann aktiven Filter verwendet
+    $('#dlgEdit').addEventListener('close', function () { editListe = []; });
 
     $('#btnPrev').addEventListener('click', function () { editNavigiere(-1); });
     $('#btnNext').addEventListener('click', function () { editNavigiere(1); });
