@@ -758,19 +758,38 @@
     return Promise.all(jobs).then(function () { kopie.bildStatistik = stat; return kopie; });
   }
 
+  // Exportiert wird, was die aktiven Filter zeigen; ohne Filter alles.
+  function exportEintraege() {
+    var alle = Store.state.entries;
+    if (!filterAktiv()) return alle;
+    return alle.filter(sichtbar).sort(function (a, b) { return a.nr - b.nr; });
+  }
+
+  function exportName(endung) {
+    return 'OPL_4NE1_Gen4_' + dateiStempel() + (filterAktiv() ? '_gefiltert' : '') + '.' + endung;
+  }
+
+  function exportHinweis() {
+    return filterAktiv()
+      ? ' ' + T('Filter aktiv: {n} von {g} Punkten.', { n: exportEintraege().length, g: Store.state.entries.length })
+      : '';
+  }
+
   function exportXlsx() {
+    var auswahl = exportEintraege();
+    if (!auswahl.length) { toast(T('Keine Punkte im aktuellen Filter – nichts zu exportieren.'), true); return; }
     toast(T('Excel wird erstellt …'));
-    mitBildDaten(Store.state.entries).then(function (entries) {
+    mitBildDaten(auswahl).then(function (entries) {
       var blob = Xlsx.exportWorkbook(entries, {
         stand: Xlsx.ddmmyyyy(Store.heute()),
         bereiche: Store.BEREICHE
       });
-      download(blob, 'OPL_4NE1_Gen4_' + dateiStempel() + '.xlsx');
+      download(blob, exportName('xlsx'));
       var st = entries.bildStatistik;
       if (st.fehler) {
-        toast(T('Excel exportiert, aber {f} von {g} Bildern konnten nicht geladen werden.', { f: st.fehler, g: st.ok + st.fehler }), true);
+        toast(T('Excel exportiert, aber {f} von {g} Bildern konnten nicht geladen werden.', { f: st.fehler, g: st.ok + st.fehler }) + exportHinweis(), true);
       } else {
-        toast(T('Excel exportiert – {n} Bilder enthalten.', { n: st.ok }));
+        toast(T('Excel exportiert – {n} Bilder enthalten.', { n: st.ok }) + exportHinweis());
       }
     }).catch(function (err) {
       console.error(err);
@@ -783,7 +802,9 @@
                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit'];
     function q(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
     var zeilen = [kopf.map(q).join(';')];
-    Store.state.entries.forEach(function (e) {
+    var auswahl = exportEintraege();
+    if (!auswahl.length) { toast(T('Keine Punkte im aktuellen Filter – nichts zu exportieren.'), true); return; }
+    auswahl.forEach(function (e) {
       zeilen.push([e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher,
         Xlsx.ddmmyyyy(e.faellig), e.status, e.todo,
         e.notiz || (e.bilder.length ? e.bilder.length + ' Bild(er) im Tool' : ''),
@@ -793,8 +814,8 @@
     });
     // BOM, damit Excel UTF-8 erkennt
     var blob = new Blob(['﻿' + zeilen.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    download(blob, 'OPL_4NE1_Gen4_' + dateiStempel() + '.csv');
-    toast(T('CSV exportiert.'));
+    download(blob, exportName('csv'));
+    toast(T('CSV exportiert.') + exportHinweis());
   }
 
   function vorschauImport(file) {
@@ -1129,8 +1150,13 @@
       if (!importPuffer) return;
       if (!Store.isOnline()) { toast(T('Keine Verbindung zum Server – Import ist gerade nicht möglich.'), true); return; }
       var modus = $$('input[name="impModus"]').filter(function (r) { return r.checked; })[0].value;
-      if (modus === 'ersetzen' &&
-          !confirm(T('Der aktuelle Stand ({n} Punkte) wird komplett ersetzt. Fortfahren?', { n: Store.state.entries.length }))) return;
+      if (modus === 'ersetzen') {
+        var weg = Store.state.entries.length - importPuffer.length;
+        var frage = T('Der aktuelle Stand ({n} Punkte) wird komplett ersetzt. Fortfahren?', { n: Store.state.entries.length });
+        // z. B. ein gefilterter Export: alles, was nicht in der Datei steht, wuerde geloescht
+        if (weg > 0) frage = T('Achtung: Die Datei enthält nur {i} von {n} Punkten. Beim Ersetzen werden {w} Punkte gelöscht. Wirklich fortfahren?', { i: importPuffer.length, n: Store.state.entries.length, w: weg });
+        if (!confirm(frage)) return;
+      }
       var res = Store.applyImport(importPuffer, modus);
       $('#dlgImport').close();
       toast(modus === 'ersetzen'

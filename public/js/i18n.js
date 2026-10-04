@@ -164,6 +164,8 @@
     'Excel exportiert – gleiches Schema wie die bestehende Liste.': 'Excel exported – same layout as the existing list.',
     'Excel-Export fehlgeschlagen: {msg}': 'Excel export failed: {msg}',
     'CSV exportiert.': 'CSV exported.',
+    'Filter aktiv: {n} von {g} Punkten.': 'Filter active: {n} of {g} items.',
+    'Keine Punkte im aktuellen Filter – nichts zu exportieren.': 'No items in the current filter – nothing to export.',
     'Excel-Import': 'Excel import',
     'Erwartet wird das gewohnte OPL-Schema: Kopfzeile mit <b>Nr | Bereich | Thema/Aufgabe | Prio | Verantwortlicher | Bis wann | Status | To Do | Bild</b>, Daten darunter. Titel- und KPI-Zeilen darüber werden ignoriert.':
       'Expected is the usual OPL layout: header row with <b>Nr | Bereich | Thema/Aufgabe | Prio | Verantwortlicher | Bis wann | Status | To Do | Bild</b>, data below. Title and KPI rows above are ignored.',
@@ -178,6 +180,7 @@
     '✓ {n} Zeilen gelesen · {treffer} davon mit bekannter Nr · {neu} neu': '✓ {n} rows read · {treffer} with known no. · {neu} new',
     '⚠ {n} Hinweis(e):': '⚠ {n} note(s):',
     'Der aktuelle Stand ({n} Punkte) wird komplett ersetzt. Fortfahren?': 'The current state ({n} items) will be replaced completely. Continue?',
+    'Achtung: Die Datei enthält nur {i} von {n} Punkten. Beim Ersetzen werden {w} Punkte gelöscht. Wirklich fortfahren?': 'Warning: the file contains only {i} of {n} items. Replacing will delete {w} items. Really continue?',
     'Import fertig: Liste durch {n} Punkte aus der Excel ersetzt.': 'Import done: list replaced by {n} items from the Excel file.',
     'Import fertig: {a} aktualisiert, {n} neu.': 'Import done: {a} updated, {n} new.',
     'Wirklich alle Änderungen verwerfen und den Excel-Startstand (29 Punkte, 21.09.2026) wiederherstellen?':
