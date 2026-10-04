@@ -181,6 +181,7 @@ async function handleAPI(url, method, request, env) {
   // Gilt ausschliesslich fuer diese eine Route/Methode und ersetzt die
   // Cookie-Pruefung nicht, sondern ergaenzt sie nur als Alternative.
   if (path === '/api/entries' && method === 'GET' && tokenGueltig(request, env)) {
+    await schemaSicherstellen(env.DB);
     return json(await listeEintraege(env.DB));
   }
 
@@ -203,6 +204,7 @@ async function handleAPI(url, method, request, env) {
   }
 
   const db = env.DB;
+  await schemaSicherstellen(db);
 
   // GET /api/stand – das Frontend fragt hier alle paar Sekunden nach, ob sich
   // etwas geaendert hat, und laedt die volle Liste nur bei Bedarf. Das haelt
@@ -254,7 +256,7 @@ async function handleAPI(url, method, request, env) {
     const now = new Date().toISOString();
 
     const changes = [];
-    for (const k of ['bereich','thema','prio','verantwortlicher','verantwortlichkeit','faellig','status','todo','notiz']) {
+    for (const k of ['bereich','thema','prio','verantwortlicher','verantwortlichkeit','baugruppe','faellig','status','todo','notiz']) {
       if (patch[k] !== undefined && patch[k] !== old[k]) {
         changes.push(`${k}: "${old[k] || '–'}" → "${patch[k] || '–'}"`);
       }
@@ -483,7 +485,7 @@ function mitBildVerweisen(e) {
 // D1 per JSON-Funktionen, damit der Worker die grossen Daten nie parsen muss.
 async function listeEintraege(db) {
   const { results } = await db.prepare(
-    `SELECT nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, faellig, status, todo, notiz,
+    `SELECT nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, faellig, status, todo, notiz,
             erstellt_am, geaendert_am, geaendert_von,
             (SELECT json_group_array(json_object(
                        'i', CAST(j.key AS INTEGER),
@@ -550,6 +552,19 @@ async function bilderAufloesen(db, bilder) {
 
 /* -------------------------------------------------------- DB helpers */
 
+// Neue Spalten legt der Worker selbst an (einmal je Isolate), damit ein Deploy
+// nicht auf eine manuell ausgefuehrte Migration warten muss.
+let schemaOk = false;
+async function schemaSicherstellen(db) {
+  if (schemaOk) return;
+  try {
+    await db.prepare("ALTER TABLE entries ADD COLUMN baugruppe TEXT DEFAULT ''").run();
+  } catch (err) {
+    if (!/duplicate column/i.test(String(err && err.message))) throw err;
+  }
+  schemaOk = true;
+}
+
 function normalize(e) {
   const BEREICHE = [
     'Hardware/Mechanik','Elektrik/Elektronik','Simulation/Berechnung',
@@ -558,6 +573,7 @@ function normalize(e) {
   const PRIOS = ['Hoch','Mittel','Niedrig'];
   const STATI = ['Offen','In Arbeit','Erledigt'];
   const VERANTWORTLICHKEITEN = ['Advanced Development','Pre Series'];
+  const BAUGRUPPEN = ['Kopf','Torso','Arm','Pelvis/Hüfte','Bein','Fuß','Übergreifend'];
   return {
     nr: e.nr,
     bereich: BEREICHE.includes(e.bereich) ? e.bereich : BEREICHE[0],
@@ -565,6 +581,7 @@ function normalize(e) {
     prio: PRIOS.includes(e.prio) ? e.prio : 'Mittel',
     verantwortlicher: e.verantwortlicher || '',
     verantwortlichkeit: VERANTWORTLICHKEITEN.includes(e.verantwortlichkeit) ? e.verantwortlichkeit : '',
+    baugruppe: BAUGRUPPEN.includes(e.baugruppe) ? e.baugruppe : '',
     faellig: e.faellig || '',
     status: STATI.includes(e.status) ? e.status : 'Offen',
     todo: e.todo || '',
@@ -586,6 +603,7 @@ function dbToEntry(row) {
     prio: row.prio,
     verantwortlicher: row.verantwortlicher,
     verantwortlichkeit: row.verantwortlichkeit || '',
+    baugruppe: row.baugruppe || '',
     faellig: row.faellig,
     status: row.status,
     todo: row.todo,
@@ -599,9 +617,9 @@ function dbToEntry(row) {
 
 function insertStmt(db, e) {
   return db.prepare(
-    `INSERT INTO entries (nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, faellig, status, todo, bilder, notiz, erstellt_am, geaendert_am, geaendert_von)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.faellig, e.status, e.todo,
+    `INSERT INTO entries (nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, faellig, status, todo, bilder, notiz, erstellt_am, geaendert_am, geaendert_von)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.faellig, e.status, e.todo,
          JSON.stringify(e.bilder), e.notiz, e.erstelltAm, e.geaendertAm, e.geaendertVon);
 }
 
@@ -611,11 +629,11 @@ function updateStmt(db, e) {
   // erstellt_am ist unveraenderlich, sobald gesetzt – ein leerer/fehlender
   // Wert in der DB wird aber mit dem mitgeschickten Wert aufgefuellt (Backfill).
   return db.prepare(
-    `UPDATE entries SET bereich=?, thema=?, prio=?, verantwortlicher=?, verantwortlichkeit=?, faellig=?, status=?, todo=?, bilder=?, notiz=?,
+    `UPDATE entries SET bereich=?, thema=?, prio=?, verantwortlicher=?, verantwortlichkeit=?, baugruppe=?, faellig=?, status=?, todo=?, bilder=?, notiz=?,
        erstellt_am = CASE WHEN erstellt_am IS NULL OR erstellt_am = '' THEN ? ELSE erstellt_am END,
        geaendert_am=?, geaendert_von=?
      WHERE nr=?`
-  ).bind(e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.faellig, e.status, e.todo,
+  ).bind(e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.faellig, e.status, e.todo,
          JSON.stringify(e.bilder), e.notiz, e.erstelltAm, e.geaendertAm, e.geaendertVon, e.nr);
 }
 

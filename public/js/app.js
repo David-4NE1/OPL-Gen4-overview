@@ -17,7 +17,7 @@
   var erledigtOffen = false;
   var importPuffer = null;
 
-  var filter = { suche: '', bereich: '', thema: '', prio: '', status: '', verant: '', team: '' };
+  var filter = { suche: '', bereich: '', thema: '', prio: '', status: '', verant: '', team: '', baugruppe: '' };
 
   var PRIO_RANK = { 'Hoch': 0, 'Mittel': 1, 'Niedrig': 2 };
   var STATUS_RANK = { 'Offen': 0, 'In Arbeit': 1, 'Erledigt': 2 };
@@ -180,7 +180,7 @@
 
   function sichtbar(e) {
     if (filter.bereich && e.bereich !== filter.bereich) return false;
-    if (filter.thema && e.thema !== filter.thema) return false;
+    if (filter.thema === '(offen)' ? Store.istThema(e.thema) : (filter.thema && e.thema !== filter.thema)) return false;
     if (filter.prio && e.prio !== filter.prio) return false;
     if (filter.status && e.status !== filter.status) return false;
     if (filter.verant) {
@@ -188,6 +188,7 @@
       if (v !== filter.verant) return false;
     }
     if (filter.team && (e.verantwortlichkeit || '(offen)') !== filter.team) return false;
+    if (filter.baugruppe && (e.baugruppe || '(offen)') !== filter.baugruppe) return false;
     if (quick === 'offen' && e.status === 'Erledigt') return false;
     if (quick === 'erledigt' && e.status !== 'Erledigt') return false;
     if (quick === 'hoch' && !(e.prio === 'Hoch' && e.status !== 'Erledigt')) return false;
@@ -195,7 +196,7 @@
     if (quick === 'niedrig' && !(e.prio === 'Niedrig' && e.status !== 'Erledigt')) return false;
     if (quick === 'ueberfaellig' && !Store.istUeberfaellig(e)) return false;
     if (filter.suche) {
-      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.bereich, e.notiz,
+      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.bereich, e.notiz,
         TR[e.thema], TR[e.todo], TR[e.notiz], T(e.bereich), T(e.status), T(e.prio)]
         .join(' ').toLowerCase();
       if (hay.indexOf(filter.suche) < 0) return false;
@@ -204,7 +205,7 @@
   }
 
   function filterAktiv() {
-    return !!(filter.suche || filter.bereich || filter.thema || filter.prio || filter.status || filter.verant || filter.team || quick);
+    return !!(filter.suche || filter.bereich || filter.thema || filter.prio || filter.status || filter.verant || filter.team || filter.baugruppe || quick);
   }
 
   function sortiereKarten(a, b) {
@@ -253,11 +254,12 @@
         teile.push(T(ql[quick] || quick));
       }
       if (filter.bereich) teile.push(T('Bereich: {v}', { v: T(filter.bereich) }));
-      if (filter.thema) teile.push(T('Thema: {v}', { v: tx(filter.thema) }));
+      if (filter.thema) teile.push(T('Thema: {v}', { v: filter.thema === '(offen)' ? T('(nicht zugeordnet)') : T(filter.thema) }));
       if (filter.prio) teile.push(T('Prio: {v}', { v: T(filter.prio) }));
       if (filter.status) teile.push(T('Status: {v}', { v: T(filter.status) }));
       if (filter.verant) teile.push(T('Verantwortlich: {v}', { v: T(filter.verant) }));
       if (filter.team) teile.push(T('Verantwortlichkeit: {v}', { v: T(filter.team) }));
+      if (filter.baugruppe) teile.push(T('Baugruppe: {v}', { v: T(filter.baugruppe) }));
       if (filter.suche) teile.push(T('Suche: "{v}"', { v: filter.suche }));
       $('#filterBannerText').textContent = T('Zeige {n} von {gesamt} Punkten — {teile}',
         { n: liste.length, gesamt: alle.length, teile: teile.join(', ') });
@@ -359,7 +361,7 @@
 
     var top = el('div', 'card__top');
     top.appendChild(el('span', 'card__nr', '#' + e.nr));
-    top.appendChild(original(el('span', 'card__thema', e.thema ? tx(e.thema) : T('(ohne Thema)')), e.thema));
+    top.appendChild(el('span', 'card__thema', e.thema ? (Store.istThema(e.thema) ? T(e.thema) : tx(e.thema)) : T('(ohne Thema)')));
     var edit = el('button', 'card__edit', '✎');
     edit.type = 'button';
     edit.title = T('Bearbeiten');
@@ -416,6 +418,21 @@
     tm.addEventListener('click', function () { oeffneEdit(e.nr, 'team'); });
     meta.appendChild(tm);
 
+    var bg = el('button', 'chip' + (e.baugruppe ? '' : ' chip--none'),
+      '📍 ' + (e.baugruppe ? T(e.baugruppe) : T('Baugruppe offen')));
+    bg.type = 'button';
+    bg.title = T('Baugruppe setzen');
+    bg.addEventListener('click', function () { oeffneEdit(e.nr, 'baugruppe'); });
+    meta.appendChild(bg);
+
+    if (!Store.istThema(e.thema)) {
+      var th = el('button', 'chip chip--warn', '⚠ ' + T('Thema zuordnen'));
+      th.type = 'button';
+      th.title = T('Thema aus der Liste wählen');
+      th.addEventListener('click', function () { oeffneEdit(e.nr, 'thema'); });
+      meta.appendChild(th);
+    }
+
     c.appendChild(meta);
 
     if (e.bilder && e.bilder.length) {
@@ -434,13 +451,20 @@
       c.appendChild(original(el('div', 'card__meta', '🖼 ' + tx(e.notiz)), e.notiz));
     }
 
+    // Doppelklick auf die Karte oeffnet sie (nicht auf Chips, Bilder, Buttons)
+    c.addEventListener('dblclick', function (ev) {
+      if (ev.target.closest('button, img, a')) return;
+      oeffneEdit(e.nr);
+    });
+
     return c;
   }
 
   var SPALTEN = [
     { feld: 'nr', label: 'Nr' },
     { feld: 'bereich', label: 'Bereich' },
-    { feld: 'thema', label: 'Thema/Aufgabe' },
+    { feld: 'thema', label: 'Thema' },
+    { feld: 'baugruppe', label: 'Baugruppe' },
     { feld: 'prio', label: 'Prio' },
     { feld: 'verantwortlicher', label: 'Verantwortlicher' },
     { feld: 'verantwortlichkeit', label: 'Verantwortlichkeit' },
@@ -475,7 +499,8 @@
       var row = el('tr', e.status === 'Erledigt' ? 'is-erledigt' : '');
       row.appendChild(el('td', null, String(e.nr)));
       row.appendChild(el('td', null, T(e.bereich)));
-      row.appendChild(original(el('td', null, tx(e.thema)), e.thema));
+      row.appendChild(el('td', Store.istThema(e.thema) ? null : 'is-warn', Store.istThema(e.thema) ? T(e.thema) : (e.thema ? '⚠ ' + tx(e.thema) : '⚠')));
+      row.appendChild(el('td', null, e.baugruppe ? T(e.baugruppe) : '–'));
 
       var tdP = el('td');
       var p = el('button', 'chip');
@@ -548,19 +573,14 @@
 
   function fuelleThemaFilter(alle) {
     var sel = $('#fThema');
-    var themen = {};
-    alle.forEach(function (e) { if (e.thema) themen[e.thema] = true; });
-    var liste = Object.keys(themen).sort();
     var aktuell = filter.thema;
+    var ohne = alle.filter(function (e) { return !Store.istThema(e.thema); }).length;
     sel.textContent = '';
     sel.appendChild(new Option(T('Alle Themen'), ''));
-    liste.forEach(function (t) { sel.appendChild(new Option(tx(t), t)); });
-    sel.value = liste.indexOf(aktuell) >= 0 ? aktuell : '';
-    if (sel.value !== aktuell) filter.thema = sel.value;
-
-    var dl = $('#themenListe');
-    dl.textContent = '';
-    liste.forEach(function (t) { dl.appendChild(new Option(t)); });
+    Store.THEMEN.forEach(function (t) { sel.appendChild(new Option(T(t), t)); });
+    if (ohne) sel.appendChild(new Option(T('(nicht zugeordnet)') + ' · ' + ohne, '(offen)'));
+    sel.value = aktuell;
+    if (sel.value !== aktuell) { sel.value = ''; filter.thema = ''; }
   }
 
   /* ---------------------------------------------------------- Lightbox */
@@ -600,13 +620,28 @@
   var editBilder = [];
   var editListe = [];
 
+  // Thema-Auswahl; ein altes Freitext-Thema wird als Hinweis angezeigt,
+  // ist aber nicht speicherbar (Pflicht: Thema aus der Liste)
+  function themaAuswahl(wert) {
+    var sel = $('#fmThema');
+    sel.textContent = '';
+    sel.appendChild(new Option(T('– bitte wählen –'), ''));
+    Store.THEMEN.forEach(function (t) { sel.appendChild(new Option(T(t), t)); });
+    if (wert && !Store.istThema(wert)) {
+      var alt = new Option(T('bisher: {t} (bitte neu wählen)', { t: wert }), '');
+      alt.disabled = true;
+      sel.appendChild(alt);
+    }
+    sel.value = Store.istThema(wert) ? wert : '';
+  }
+
   function fuelleSelect(sel, werte) {
     sel.textContent = '';
     werte.forEach(function (w) { sel.appendChild(new Option(T(w), w)); });
   }
 
   function aktualisiereEditTitel() {
-    var thema = $('#fmThema').value.trim();
+    var thema = $('#fmThema').value ? T($('#fmThema').value) : '';
     var bereich = $('#fmBereich').value;
     $('#dlgEditTitle').textContent = thema || (editNr == null ? T('Neuer Punkt') : T('Punkt #{nr}', { nr: editNr }));
     var sub = $('#dlgEditSub');
@@ -623,11 +658,12 @@
     editNr = nr == null ? null : nr;
     var e = nr == null ? null : Store.byNr(nr);
     $('#fmBereich').value = e ? e.bereich : (filter.bereich || Store.BEREICHE[0]);
-    $('#fmThema').value = e ? e.thema : '';
+    themaAuswahl(e ? e.thema : (Store.istThema(filter.thema) ? filter.thema : ''));
     $('#fmPrio').value = e ? e.prio : 'Mittel';
     $('#fmStatus').value = e ? e.status : 'Offen';
     $('#fmVerant').value = e ? e.verantwortlicher : (Store.state.user || '');
     $('#fmTeam').value = e ? e.verantwortlichkeit : (filter.team && filter.team !== '(offen)' ? filter.team : '');
+    $('#fmBaugruppe').value = e ? (e.baugruppe || '') : (filter.baugruppe && filter.baugruppe !== '(offen)' ? filter.baugruppe : '');
     $('#fmFaellig').value = e ? e.faellig : '';
     $('#fmTodo').value = e ? e.todo : '';
     $('#fmNotiz').value = e ? e.notiz : '';
@@ -655,6 +691,7 @@
       if (fokus === 'faellig') $('#fmFaellig').focus();
       else if (fokus === 'verant') $('#fmVerant').focus();
       else if (fokus === 'team') $('#fmTeam').focus();
+      else if (fokus === 'baugruppe') $('#fmBaugruppe').focus();
       else $('#fmThema').focus();
     }, 30);
   }
@@ -662,17 +699,21 @@
   function editSpeichern() {
     var data = {
       bereich: $('#fmBereich').value,
-      thema: $('#fmThema').value.trim(),
+      thema: $('#fmThema').value,
       prio: $('#fmPrio').value,
       status: $('#fmStatus').value,
       verantwortlicher: $('#fmVerant').value.trim(),
       verantwortlichkeit: $('#fmTeam').value,
+      baugruppe: $('#fmBaugruppe').value,
       faellig: $('#fmFaellig').value,
       todo: $('#fmTodo').value.trim(),
       notiz: $('#fmNotiz').value.trim(),
       bilder: editBilder
     };
-    if (!data.thema) { toast(T('Bitte ein Thema angeben.'), true); return false; }
+    if (!Store.istThema(data.thema)) { toast(T('Bitte ein Thema aus der Liste wählen.'), true); $('#fmThema').focus(); return false; }
+    // altes Freitext-Thema nicht verlieren: wandert vor das To Do
+    var vorher = editNr == null ? null : Store.byNr(editNr);
+    if (vorher && !Store.istThema(vorher.thema)) data.todo = Store.altesThemaInsTodo(vorher.thema, data.todo);
     if (editNr == null) {
       var neu = Store.add(data);
       toast(T('Punkt #{nr} angelegt.', { nr: neu.nr }));
@@ -783,7 +824,9 @@
     mitBildDaten(auswahl).then(function (entries) {
       var blob = Xlsx.exportWorkbook(entries, {
         stand: Xlsx.ddmmyyyy(Store.heute()),
-        bereiche: Store.BEREICHE
+        bereiche: Store.BEREICHE,
+        themen: Store.THEMEN,
+        baugruppen: Store.BAUGRUPPEN
       });
       download(blob, exportName('xlsx'));
       var st = entries.bildStatistik;
@@ -800,7 +843,7 @@
 
   function exportCsv() {
     var kopf = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit'];
+                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit', 'Baugruppe'];
     function q(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
     var zeilen = [kopf.map(q).join(';')];
     var auswahl = exportEintraege();
@@ -810,7 +853,8 @@
         Xlsx.ddmmyyyy(e.faellig), e.status, e.todo,
         e.notiz || (e.bilder.length ? e.bilder.length + ' Bild(er) im Tool' : ''),
         Xlsx.ddmmyyyy(e.erstelltAm),
-        e.verantwortlichkeit
+        e.verantwortlichkeit,
+        e.baugruppe
       ].map(q).join(';'));
     });
     // BOM, damit Excel UTF-8 erkennt
@@ -956,6 +1000,12 @@
       $('#fTeam').appendChild(new Option(T(v), v));
     });
     $('#fTeam').appendChild(new Option(T('(offen)'), '(offen)'));
+    $('#fmBaugruppe').appendChild(new Option(T('– offen –'), ''));
+    Store.BAUGRUPPEN.forEach(function (v) {
+      $('#fmBaugruppe').appendChild(new Option(T(v), v));
+      $('#fBaugruppe').appendChild(new Option(T(v), v));
+    });
+    $('#fBaugruppe').appendChild(new Option(T('(offen)'), '(offen)'));
 
     Store.onError(function (msg) { toast(msg, true); });
     Store.onStatus(function (ok) { $('#offlineBanner').hidden = ok; });
@@ -973,7 +1023,7 @@
       var v = ev.target.value.trim().toLowerCase();
       t = setTimeout(function () { filter.suche = v; render(); }, 120);
     });
-    [['#fBereich', 'bereich'], ['#fThema', 'thema'], ['#fPrio', 'prio'], ['#fStatus', 'status'], ['#fVerant', 'verant'], ['#fTeam', 'team']]
+    [['#fBereich', 'bereich'], ['#fThema', 'thema'], ['#fPrio', 'prio'], ['#fStatus', 'status'], ['#fVerant', 'verant'], ['#fTeam', 'team'], ['#fBaugruppe', 'baugruppe']]
       .forEach(function (pair) {
         $(pair[0]).addEventListener('change', function (ev) {
           filter[pair[1]] = ev.target.value;
@@ -981,10 +1031,10 @@
         });
       });
     function resetFilter() {
-      filter = { suche: '', bereich: '', thema: '', prio: '', status: '', verant: '', team: '' };
+      filter = { suche: '', bereich: '', thema: '', prio: '', status: '', verant: '', team: '', baugruppe: '' };
       quick = null;
       $('#suche').value = '';
-      ['#fBereich', '#fThema', '#fPrio', '#fStatus', '#fVerant', '#fTeam'].forEach(function (s) { $(s).value = ''; });
+      ['#fBereich', '#fThema', '#fPrio', '#fStatus', '#fVerant', '#fTeam', '#fBaugruppe'].forEach(function (s) { $(s).value = ''; });
       render();
     }
     $('#btnFilterReset').addEventListener('click', resetFilter);
@@ -1097,7 +1147,7 @@
     $('#btnNeu').addEventListener('click', function () { oeffneEdit(null); });
 
     // Edit-Dialog
-    $('#fmThema').addEventListener('input', aktualisiereEditTitel);
+    $('#fmThema').addEventListener('change', aktualisiereEditTitel);
     $('#fmBereich').addEventListener('change', aktualisiereEditTitel);
 
     $('#fmBilder').addEventListener('change', function (ev) {

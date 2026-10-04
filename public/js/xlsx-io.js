@@ -273,7 +273,7 @@
   /* ------------------------------------------------------------------ */
 
   var HEADERS = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Bilder', 'Verantwortlichkeit'];
+                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Bilder', 'Verantwortlichkeit', 'Baugruppe'];
 
   // Feste Anzeigegroesse je eingebettetem Bild in Pixel (96 dpi).
   var IMG_W_PX = 110, IMG_H_PX = 80, IMG_GAP_PX = 6;
@@ -385,7 +385,8 @@
         cellStr('I' + r, S.CELL, bildSpalte(e)),
         cellStr('J' + r, S.CELL, ddmmyyyy(e.erstelltAm)),
         cellStr('K' + r, S.CELL, ''),
-        cellStr('L' + r, e.verantwortlichkeit ? S.CELL : S.PFLEGE, e.verantwortlichkeit)
+        cellStr('L' + r, e.verantwortlichkeit ? S.CELL : S.PFLEGE, e.verantwortlichkeit),
+        cellStr('M' + r, e.baugruppe ? S.CELL : S.PFLEGE, e.baugruppe || '')
       ];
 
       var bilder = (e.bilder || []).map(function (b) { return dataUrlToBytes(b.src); })
@@ -437,7 +438,7 @@
       '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
         'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
       '<sheetPr><outlinePr summaryBelow="1" summaryRight="1"/></sheetPr>' +
-      '<dimension ref="A1:L' + last + '"/>' +
+      '<dimension ref="A1:M' + last + '"/>' +
       '<sheetViews><sheetView tabSelected="1" workbookViewId="0">' +
         '<pane ySplit="7" topLeftCell="A8" activePane="bottomLeft" state="frozen"/>' +
       '</sheetView></sheetViews>' +
@@ -455,13 +456,16 @@
         '<col min="10" max="10" width="14" customWidth="1"/>' +
         '<col min="11" max="11" width="17" customWidth="1"/>' +
         '<col min="12" max="12" width="20" customWidth="1"/>' +
+        '<col min="13" max="13" width="16" customWidth="1"/>' +
       '</cols>' +
       '<sheetData>' + rows.join('') + '</sheetData>' +
-      '<autoFilter ref="A7:L' + last + '"/>' +
+      '<autoFilter ref="A7:M' + last + '"/>' +
       '<mergeCells count="3">' +
-        '<mergeCell ref="A1:L1"/><mergeCell ref="A2:L2"/><mergeCell ref="H5:I5"/>' +
+        '<mergeCell ref="A1:M1"/><mergeCell ref="A2:M2"/><mergeCell ref="H5:I5"/>' +
       '</mergeCells>' +
-      '<dataValidations count="4">' +
+      '<dataValidations count="' + (4 + (opts.themen ? 1 : 0) + (opts.baugruppen ? 1 : 0)) + '">' +
+        (opts.themen ? validation('list', 'C' + first + ':C' + last, '"' + opts.themen.join(',') + '"') : '') +
+        (opts.baugruppen ? validation('list', 'M' + first + ':M' + last, '"' + opts.baugruppen.join(',') + '"') : '') +
         validation('list', 'D' + first + ':D' + last, '"Hoch,Mittel,Niedrig"') +
         validation('list', 'G' + first + ':G' + last, '"Offen,In Arbeit,Erledigt"') +
         validation('list', 'L' + first + ':L' + last, '"Advanced Development,Pre Series"') +
@@ -705,7 +709,8 @@
           bilder: [],
           notiz: (row[9] || '').trim(),
           erstelltAm: erstelltAm,
-          verantwortlichkeit: normalize(row[12], ['Advanced Development', 'Pre Series']) || ''
+          verantwortlichkeit: normalize(row[12], ['Advanced Development', 'Pre Series']) || '',
+          baugruppe: normalize(row[13], ['Kopf', 'Torso', 'Arm', 'Pelvis/Hüfte', 'Bein', 'Fuß', 'Übergreifend']) || ''
         };
         entries.push(eintrag);
         entryByRow[rn] = eintrag;

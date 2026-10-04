@@ -6,6 +6,8 @@ name: D1 Wartung (Diagnose / Time Travel)
 #           Die Ausgabe enthaelt das Lesezeichen des vorherigen Stands (zum Rueckgaengigmachen).
 # bilder-diagnose: listet doppelte Bilder je Karte (Nr, Position, Dateiname, Groesse).
 # bilder-duplikate-entfernen: entfernt diese Duplikate (vorher/nachher-Liste, Eintrag im Protokoll).
+# themen-umstellen: ordnet die Karten #1 bis #132 den festen Themen und Baugruppen zu
+#           (.github/d1/themen-umstellen.sql); gibt nur Zaehlungen aus, keine Karteninhalte.
 #           Rueckgaengig per restore auf den Zeitpunkt vor dem Lauf.
 
 on:
@@ -16,7 +18,7 @@ on:
         required: true
         default: diagnose
         type: choice
-        options: [diagnose, restore, bilder-diagnose, bilder-duplikate-entfernen]
+        options: [diagnose, restore, bilder-diagnose, bilder-duplikate-entfernen, themen-umstellen]
       zeitpunkt:
         description: 'Nur fuer restore: Zeitpunkt in UTC (RFC3339), z. B. 2026-10-02T08:35:00Z'
         required: false
@@ -59,6 +61,15 @@ jobs:
           echo "Nachher (sollte leer sein):"
           wrangler d1 execute opl-gen4 --remote --command "$(grep -v '^--' .github/d1/bilder-diagnose.sql)"
           wrangler d1 execute opl-gen4 --remote --command "SELECT COUNT(*) AS anzahl, SUM(LENGTH(bilder)) AS bilder_bytes_gesamt FROM entries"
+
+      - name: Themen und Baugruppen umstellen
+        if: inputs.aktion == 'themen-umstellen'
+        run: |
+          wrangler d1 execute opl-gen4 --remote --command "SELECT 1 FROM pragma_table_info('entries') WHERE name = 'baugruppe'" | grep -q '"1"' || \
+            wrangler d1 execute opl-gen4 --remote --command "ALTER TABLE entries ADD COLUMN baugruppe TEXT DEFAULT ''"
+          wrangler d1 execute opl-gen4 --remote --command "$(grep -v '^--' .github/d1/themen-umstellen.sql)"
+          wrangler d1 execute opl-gen4 --remote --command "SELECT thema, COUNT(*) AS anzahl FROM entries GROUP BY thema ORDER BY anzahl DESC"
+          wrangler d1 execute opl-gen4 --remote --command "SELECT baugruppe, COUNT(*) AS anzahl FROM entries GROUP BY baugruppe ORDER BY anzahl DESC"
 
       - name: Time Travel Restore
         if: inputs.aktion == 'restore'
