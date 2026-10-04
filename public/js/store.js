@@ -34,6 +34,35 @@
   var PRIOS = ['Hoch', 'Mittel', 'Niedrig'];
   var STATI = ['Offen', 'In Arbeit', 'Erledigt'];
   var VERANTWORTLICHKEITEN = ['Advanced Development', 'Pre Series'];
+  // Feste Themen (Pflicht beim Speichern im Tool); der konkrete Ort/Inhalt steht im To Do
+  var THEMEN = [
+    'Kollision & Bauraum', 'Kabel & Steckverbinder', 'Montage & Service',
+    'Verbindungstechnik & Toleranzen', 'Poka Yoke & Varianten', 'Auslegung & Simulation',
+    'Thermik', 'Elektronik & Software', 'BOM/CAD & Dokumentation', 'Industrialisierung & Design'
+  ];
+  // Reihenfolge von Kopf bis Fuß
+  var BAUGRUPPEN = ['Kopf', 'Torso', 'Arm', 'Pelvis/Hüfte', 'Bein', 'Fuß', 'Übergreifend'];
+  // Alte Freitext-Themen ohne eigenen Informationsgehalt: fallen beim Einordnen weg
+  var THEMEN_GENERISCH = ['CAD', 'Montage', 'Kabel', 'Design', 'Schrauben', 'Berechnung', 'Passung',
+    'Kollision', 'Elektrik', 'Thermik', 'Lagerung', 'Simulation', 'Material', 'Design-Regel'];
+
+  function istThema(t) { return THEMEN.indexOf(t) >= 0; }
+
+  // Unbekanntes Thema (z. B. aus einer alten Excel) wandert vor das To Do,
+  // damit nichts verloren geht; das Thema bleibt leer und wird im Tool gewählt.
+  function altesThemaInsTodo(alt, todo) {
+    alt = (alt || '').trim();
+    todo = todo || '';
+    if (!alt || istThema(alt) || THEMEN_GENERISCH.indexOf(alt) >= 0 || todo.indexOf(alt) === 0) return todo;
+    return alt + (todo ? ': ' + todo : '');
+  }
+
+  function themaEinordnen(n) {
+    if (!n.thema || istThema(n.thema)) return n;
+    n.todo = altesThemaInsTodo(n.thema, n.todo);
+    n.thema = '';
+    return n;
+  }
 
   var state = { entries: [], log: [], user: '' };
   var listeners = [];
@@ -60,6 +89,7 @@
       prio: PRIOS.indexOf(e.prio) >= 0 ? e.prio : 'Mittel',
       verantwortlicher: e.verantwortlicher || '',
       verantwortlichkeit: VERANTWORTLICHKEITEN.indexOf(e.verantwortlichkeit) >= 0 ? e.verantwortlichkeit : '',
+      baugruppe: BAUGRUPPEN.indexOf(e.baugruppe) >= 0 ? e.baugruppe : '',
       faellig: e.faellig || '',
       status: STATI.indexOf(e.status) >= 0 ? e.status : 'Offen',
       todo: e.todo || '',
@@ -307,7 +337,7 @@
     var betroffen = [];
     if (modus === 'ersetzen') {
       state.entries = entries.map(function (e) {
-        var n = normalizeEntry(e);
+        var n = themaEinordnen(normalizeEntry(e));
         if (!n.bilder.length && bilderProNr[n.nr]) n.bilder = bilderProNr[n.nr];
         n.erstelltAm = n.erstelltAm || erstelltAmProNr[n.nr] || heute();
         return n;
@@ -322,12 +352,17 @@
           if (!n.bilder.length) n.bilder = vorhanden.bilder;
           n.erstelltAm = n.erstelltAm || vorhanden.erstelltAm || heute();
           n.verantwortlichkeit = n.verantwortlichkeit || vorhanden.verantwortlichkeit;
+          n.baugruppe = n.baugruppe || vorhanden.baugruppe;
+          // Altes Freitext-Thema aus der Datei ueberschreibt kein gueltiges Thema
+          if (!istThema(n.thema) && istThema(vorhanden.thema)) n.thema = vorhanden.thema;
+          else themaEinordnen(n);
           Object.assign(vorhanden, n, {
             geaendertAm: jetzt(), geaendertVon: state.user || 'Excel-Import'
           });
           betroffen.push(vorhanden);
           aktualisiert++;
         } else {
+          themaEinordnen(n);
           if (!n.bilder.length && bilderProNr[n.nr]) n.bilder = bilderProNr[n.nr];
           n.erstelltAm = n.erstelltAm || heute();
           n.geaendertAm = jetzt();
@@ -365,6 +400,7 @@
 
   global.OPLStore = {
     BEREICHE: BEREICHE, PRIOS: PRIOS, STATI: STATI, VERANTWORTLICHKEITEN: VERANTWORTLICHKEITEN,
+    THEMEN: THEMEN, BAUGRUPPEN: BAUGRUPPEN, istThema: istThema, altesThemaInsTodo: altesThemaInsTodo,
     state: state,
     load: load, subscribe: subscribe, onError: onError, onStatus: onStatus, isOnline: isOnline,
     add: add, update: update, remove: remove, cycle: cycle, byNr: byNr,

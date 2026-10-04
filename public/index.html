@@ -92,6 +92,7 @@
   <select id="fStatus" class="select"><option value="" data-i18n>Alle Status</option></select>
   <select id="fVerant" class="select"><option value="" data-i18n>Alle Verantwortlichen</option></select>
   <select id="fTeam" class="select"><option value="" data-i18n>Alle Verantwortlichkeiten</option></select>
+  <select id="fBaugruppe" class="select"><option value="" data-i18n>Alle Baugruppen</option></select>
   <div class="viewswitch" role="group" aria-label="Ansicht" data-i18n-aria>
     <button type="button" class="is-active" data-view="karten" title="Karten-Ansicht" data-i18n-title>▤</button>
     <button type="button" data-view="tabelle" title="Tabellen-Ansicht" data-i18n-title>☰</button>
@@ -131,9 +132,8 @@
       <label><span data-i18n>Bereich</span>
         <select name="bereich" id="fmBereich" required></select>
       </label>
-      <label><span data-i18n>Thema/Aufgabe</span>
-        <input name="thema" id="fmThema" type="text" required list="themenListe" placeholder="z. B. Lagerkonzept Kugellager" autocomplete="off" data-i18n-ph>
-        <datalist id="themenListe"></datalist>
+      <label><span data-i18n>Thema</span>
+        <select name="thema" id="fmThema" required></select>
       </label>
       <label><span data-i18n>Prio</span>
         <select name="prio" id="fmPrio"></select>
@@ -150,6 +150,9 @@
       </label>
       <label><span data-i18n>Verantwortlichkeit</span>
         <select name="verantwortlichkeit" id="fmTeam"></select>
+      </label>
+      <label><span data-i18n>Baugruppe</span>
+        <select name="baugruppe" id="fmBaugruppe"></select>
       </label>
     </div>
     <label><span data-i18n>To Do</span>
