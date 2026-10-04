@@ -703,7 +703,7 @@
       prio: $('#fmPrio').value,
       status: $('#fmStatus').value,
       verantwortlicher: $('#fmVerant').value.trim(),
-      verantwortlichkeit: $('#fmTeam').value,
+      verantwortlichkeit: $('#fmTeam').value || Store.teamStandard($('#fmVerant').value),
       baugruppe: $('#fmBaugruppe').value,
       faellig: $('#fmFaellig').value,
       todo: $('#fmTodo').value.trim(),
@@ -1148,6 +1148,10 @@
 
     // Edit-Dialog
     $('#fmThema').addEventListener('change', aktualisiereEditTitel);
+    // Verantwortlichkeit nach Person vorbelegen, solange sie leer ist
+    $('#fmVerant').addEventListener('change', function () {
+      if (!$('#fmTeam').value) $('#fmTeam').value = Store.teamStandard($('#fmVerant').value);
+    });
     $('#fmBereich').addEventListener('change', aktualisiereEditTitel);
 
     $('#fmBilder').addEventListener('change', function (ev) {
