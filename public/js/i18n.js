@@ -67,6 +67,11 @@
     'Alle Verantwortlichkeiten': 'All responsibilities',
     'Alle Baugruppen': 'All assemblies',
     'Auswahl aufheben': 'Clear selection',
+    'Nacharbeit': 'Rework',
+    'Nacharbeit am Teil': 'Rework on part',
+    'Nacharbeit: {v}': 'Rework: {v}',
+    '(keine Nacharbeit)': '(no rework)',
+    '– keine –': '– none –',
     // Feste Themen und Baugruppen
     'Thema': 'Topic',
     'Baugruppe': 'Assembly',

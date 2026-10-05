@@ -320,6 +320,7 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 .chip--due.is-overdue { background: var(--hoch); color: #fff; border-color: var(--hoch); font-weight: 700; }
 .chip--due.is-soon { background: var(--mittel-bg); border-color: #efd9a8; }
 .chip--none { color: var(--ink-soft); background: var(--mittel-bg); border-color: var(--line); }
+.chip--nacharbeit { color: var(--accent); border-color: var(--accent); background: transparent; }
 .chip--warn { color: var(--hoch); border-color: var(--hoch); background: transparent; font-weight: 600; }
 td.is-warn { color: var(--hoch); }
 
