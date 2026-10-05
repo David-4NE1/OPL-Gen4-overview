@@ -273,7 +273,7 @@
   /* ------------------------------------------------------------------ */
 
   var HEADERS = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Bilder', 'Verantwortlichkeit', 'Baugruppe'];
+                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Bilder', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit'];
 
   // Feste Anzeigegroesse je eingebettetem Bild in Pixel (96 dpi).
   var IMG_W_PX = 110, IMG_H_PX = 80, IMG_GAP_PX = 6;
@@ -386,7 +386,8 @@
         cellStr('J' + r, S.CELL, ddmmyyyy(e.erstelltAm)),
         cellStr('K' + r, S.CELL, ''),
         cellStr('L' + r, e.verantwortlichkeit ? S.CELL : S.PFLEGE, e.verantwortlichkeit),
-        cellStr('M' + r, e.baugruppe ? S.CELL : S.PFLEGE, e.baugruppe || '')
+        cellStr('M' + r, e.baugruppe ? S.CELL : S.PFLEGE, e.baugruppe || ''),
+        cellStr('N' + r, S.CELL, e.nacharbeit || '')
       ];
 
       var bilder = (e.bilder || []).map(function (b) { return dataUrlToBytes(b.src); })
@@ -457,15 +458,17 @@
         '<col min="11" max="11" width="17" customWidth="1"/>' +
         '<col min="12" max="12" width="20" customWidth="1"/>' +
         '<col min="13" max="13" width="16" customWidth="1"/>' +
+        '<col min="14" max="14" width="24" customWidth="1"/>' +
       '</cols>' +
       '<sheetData>' + rows.join('') + '</sheetData>' +
-      '<autoFilter ref="A7:M' + last + '"/>' +
+      '<autoFilter ref="A7:N' + last + '"/>' +
       '<mergeCells count="3">' +
-        '<mergeCell ref="A1:M1"/><mergeCell ref="A2:M2"/><mergeCell ref="H5:I5"/>' +
+        '<mergeCell ref="A1:N1"/><mergeCell ref="A2:N2"/><mergeCell ref="H5:I5"/>' +
       '</mergeCells>' +
-      '<dataValidations count="' + (4 + (opts.themen ? 1 : 0) + (opts.baugruppen ? 1 : 0)) + '">' +
+      '<dataValidations count="' + (4 + (opts.themen ? 1 : 0) + (opts.baugruppen ? 1 : 0) + (opts.nacharbeit ? 1 : 0)) + '">' +
         (opts.themen ? validation('list', 'C' + first + ':C' + last, '"' + opts.themen.join(',') + '"') : '') +
         (opts.baugruppen ? validation('list', 'M' + first + ':M' + last, '"' + opts.baugruppen.join(',') + '"') : '') +
+        (opts.nacharbeit ? validation('list', 'N' + first + ':N' + last, '"' + opts.nacharbeit.join(',') + '"') : '') +
         validation('list', 'D' + first + ':D' + last, '"Hoch,Mittel,Niedrig"') +
         validation('list', 'G' + first + ':G' + last, '"Offen,In Arbeit,Erledigt"') +
         validation('list', 'L' + first + ':L' + last, '"Advanced Development,Pre Series"') +
@@ -710,7 +713,8 @@
           notiz: (row[9] || '').trim(),
           erstelltAm: erstelltAm,
           verantwortlichkeit: normalize(row[12], ['Advanced Development', 'Pre Series']) || '',
-          baugruppe: normalize(row[13], ['Kopf', 'Torso', 'Arm', 'Pelvis/Hüfte', 'Bein', 'Fuß', 'Übergreifend']) || ''
+          baugruppe: normalize(row[13], ['Kopf', 'Torso', 'Arm', 'Pelvis/Hüfte', 'Bein', 'Fuß', 'Übergreifend']) || '',
+          nacharbeit: normalize(row[14], ['Re-Milling', 'Modification', 'Re-Milling + Modification']) || ''
         };
         entries.push(eintrag);
         entryByRow[rn] = eintrag;

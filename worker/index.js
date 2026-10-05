@@ -266,7 +266,7 @@ async function handleAPI(url, method, request, env) {
     const now = new Date().toISOString();
 
     const changes = [];
-    for (const k of ['bereich','thema','prio','verantwortlicher','verantwortlichkeit','baugruppe','seite','release','faellig','status','todo','notiz']) {
+    for (const k of ['bereich','thema','prio','verantwortlicher','verantwortlichkeit','baugruppe','seite','nacharbeit','release','faellig','status','todo','notiz']) {
       if (patch[k] !== undefined && patch[k] !== old[k]) {
         changes.push(`${k}: "${old[k] || '–'}" → "${patch[k] || '–'}"`);
       }
@@ -303,11 +303,12 @@ async function handleAPI(url, method, request, env) {
 
     if (modus === 'ersetzen') {
       // Die Excel kennt weder Release noch Seite: bisherige Werte je Nr behalten
-      const { results: alt } = await db.prepare("SELECT nr, release, seite FROM entries WHERE release <> '' OR seite <> ''").all();
+      // (Nacharbeit ebenso, wenn die Spalte in der Datei leer ist)
+      const { results: alt } = await db.prepare("SELECT nr, release, seite, nacharbeit FROM entries WHERE release <> '' OR seite <> '' OR nacharbeit <> ''").all();
       const altJeNr = new Map(alt.map(r => [r.nr, r]));
       await db.prepare('DELETE FROM entries').run();
       const stmts = entries.map(raw => {
-        const e = normalize({ ...raw, release: raw.release || altJeNr.get(raw.nr)?.release, seite: raw.seite || altJeNr.get(raw.nr)?.seite, geaendertAm: now, geaendertVon: user || 'Excel-Import' });
+        const e = normalize({ ...raw, release: raw.release || altJeNr.get(raw.nr)?.release, seite: raw.seite || altJeNr.get(raw.nr)?.seite, nacharbeit: raw.nacharbeit || altJeNr.get(raw.nr)?.nacharbeit, geaendertAm: now, geaendertVon: user || 'Excel-Import' });
         return insertStmt(db, e);
       });
       await db.batch(stmts);
@@ -318,9 +319,9 @@ async function handleAPI(url, method, request, env) {
     let neu = 0, aktualisiert = 0;
     const stmts = [];
     for (const raw of entries) {
-      const existing = await db.prepare('SELECT nr, release, seite FROM entries WHERE nr = ?').bind(raw.nr).first();
+      const existing = await db.prepare('SELECT nr, release, seite, nacharbeit FROM entries WHERE nr = ?').bind(raw.nr).first();
       // Die Excel kennt weder Release noch Seite: bestehende Werte behalten
-      const e = normalize({ ...raw, release: raw.release || existing?.release, seite: raw.seite || existing?.seite, geaendertAm: now, geaendertVon: user || 'Excel-Import' });
+      const e = normalize({ ...raw, release: raw.release || existing?.release, seite: raw.seite || existing?.seite, nacharbeit: raw.nacharbeit || existing?.nacharbeit, geaendertAm: now, geaendertVon: user || 'Excel-Import' });
       if (existing) {
         stmts.push(updateStmt(db, e));
         aktualisiert++;
@@ -557,7 +558,7 @@ function mitBildVerweisen(e) {
 // D1 per JSON-Funktionen, damit der Worker die grossen Daten nie parsen muss.
 async function listeEintraege(db) {
   const { results } = await db.prepare(
-    `SELECT nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, seite, release, faellig, status, todo, notiz,
+    `SELECT nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, seite, nacharbeit, release, faellig, status, todo, notiz,
             erstellt_am, geaendert_am, geaendert_von,
             (SELECT json_group_array(json_object(
                        'i', CAST(j.key AS INTEGER),
@@ -634,7 +635,7 @@ async function schemaSicherstellen(db) {
   } catch (err) {
     if (!/duplicate column/i.test(String(err && err.message))) throw err;
   }
-  for (const spalte of ['release', 'seite']) {
+  for (const spalte of ['release', 'seite', 'nacharbeit']) {
     try {
       await db.prepare(`ALTER TABLE entries ADD COLUMN ${spalte} TEXT DEFAULT ''`).run();
     } catch (err) {
@@ -669,6 +670,8 @@ function normalize(e) {
   const BAUGRUPPEN = ['Kopf','Torso','Arm','Pelvis/Hüfte','Bein','Fuß','Übergreifend'];
   // Seite aus Sicht des Roboters
   const SEITEN = ['Links','Rechts','Beidseitig'];
+  // Nacharbeit an bestehenden Teilen
+  const NACHARBEIT = ['Re-Milling','Modification','Re-Milling + Modification'];
   return {
     nr: e.nr,
     bereich: BEREICHE.includes(e.bereich) ? e.bereich : BEREICHE[0],
@@ -678,6 +681,7 @@ function normalize(e) {
     verantwortlichkeit: VERANTWORTLICHKEITEN.includes(e.verantwortlichkeit) ? e.verantwortlichkeit : '',
     baugruppe: BAUGRUPPEN.includes(e.baugruppe) ? e.baugruppe : '',
     seite: SEITEN.includes(e.seite) ? e.seite : '',
+    nacharbeit: NACHARBEIT.includes(e.nacharbeit) ? e.nacharbeit : '',
     release: releaseName(e.release),
     faellig: e.faellig || '',
     status: STATI.includes(e.status) ? e.status : 'Offen',
@@ -702,6 +706,7 @@ function dbToEntry(row) {
     verantwortlichkeit: row.verantwortlichkeit || '',
     baugruppe: row.baugruppe || '',
     seite: row.seite || '',
+    nacharbeit: row.nacharbeit || '',
     release: row.release || '',
     faellig: row.faellig,
     status: row.status,
@@ -716,9 +721,9 @@ function dbToEntry(row) {
 
 function insertStmt(db, e) {
   return db.prepare(
-    `INSERT INTO entries (nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, seite, release, faellig, status, todo, bilder, notiz, erstellt_am, geaendert_am, geaendert_von)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.seite, e.release, e.faellig, e.status, e.todo,
+    `INSERT INTO entries (nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, seite, nacharbeit, release, faellig, status, todo, bilder, notiz, erstellt_am, geaendert_am, geaendert_von)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.seite, e.nacharbeit, e.release, e.faellig, e.status, e.todo,
          JSON.stringify(e.bilder), e.notiz, e.erstelltAm, e.geaendertAm, e.geaendertVon);
 }
 
@@ -728,11 +733,11 @@ function updateStmt(db, e) {
   // erstellt_am ist unveraenderlich, sobald gesetzt – ein leerer/fehlender
   // Wert in der DB wird aber mit dem mitgeschickten Wert aufgefuellt (Backfill).
   return db.prepare(
-    `UPDATE entries SET bereich=?, thema=?, prio=?, verantwortlicher=?, verantwortlichkeit=?, baugruppe=?, seite=?, release=?, faellig=?, status=?, todo=?, bilder=?, notiz=?,
+    `UPDATE entries SET bereich=?, thema=?, prio=?, verantwortlicher=?, verantwortlichkeit=?, baugruppe=?, seite=?, nacharbeit=?, release=?, faellig=?, status=?, todo=?, bilder=?, notiz=?,
        erstellt_am = CASE WHEN erstellt_am IS NULL OR erstellt_am = '' THEN ? ELSE erstellt_am END,
        geaendert_am=?, geaendert_von=?
      WHERE nr=?`
-  ).bind(e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.seite, e.release, e.faellig, e.status, e.todo,
+  ).bind(e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.seite, e.nacharbeit, e.release, e.faellig, e.status, e.todo,
          JSON.stringify(e.bilder), e.notiz, e.erstelltAm, e.geaendertAm, e.geaendertVon, e.nr);
 }
 

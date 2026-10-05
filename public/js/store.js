@@ -44,6 +44,8 @@
   var BAUGRUPPEN = ['Kopf', 'Torso', 'Arm', 'Pelvis/Hüfte', 'Bein', 'Fuß', 'Übergreifend'];
   // Seite aus Sicht des Roboters (fuer paarige Baugruppen wie Arm, Bein, Fuß)
   var SEITEN = ['Links', 'Rechts', 'Beidseitig'];
+  // Nacharbeit an bestehenden Teilen
+  var NACHARBEIT = ['Re-Milling', 'Modification', 'Re-Milling + Modification'];
   // Alte Freitext-Themen ohne eigenen Informationsgehalt: fallen beim Einordnen weg
   var THEMEN_GENERISCH = ['CAD', 'Montage', 'Kabel', 'Design', 'Schrauben', 'Berechnung', 'Passung',
     'Kollision', 'Elektrik', 'Thermik', 'Lagerung', 'Simulation', 'Material', 'Design-Regel'];
@@ -108,6 +110,7 @@
       verantwortlichkeit: VERANTWORTLICHKEITEN.indexOf(e.verantwortlichkeit) >= 0 ? e.verantwortlichkeit : '',
       baugruppe: BAUGRUPPEN.indexOf(e.baugruppe) >= 0 ? e.baugruppe : '',
       seite: SEITEN.indexOf(e.seite) >= 0 ? e.seite : '',
+      nacharbeit: NACHARBEIT.indexOf(e.nacharbeit) >= 0 ? e.nacharbeit : '',
       release: e.release || '',
       faellig: e.faellig || '',
       status: STATI.indexOf(e.status) >= 0 ? e.status : 'Offen',
@@ -379,6 +382,7 @@
           n.baugruppe = n.baugruppe || vorhanden.baugruppe;
           n.release = n.release || vorhanden.release;
           n.seite = n.seite || vorhanden.seite;
+          n.nacharbeit = n.nacharbeit || vorhanden.nacharbeit;
           // Altes Freitext-Thema aus der Datei ueberschreibt kein gueltiges Thema
           if (!istThema(n.thema) && istThema(vorhanden.thema)) n.thema = vorhanden.thema;
           else themaEinordnen(n);
@@ -427,7 +431,7 @@
 
   global.OPLStore = {
     BEREICHE: BEREICHE, PRIOS: PRIOS, STATI: STATI, VERANTWORTLICHKEITEN: VERANTWORTLICHKEITEN,
-    THEMEN: THEMEN, BAUGRUPPEN: BAUGRUPPEN, SEITEN: SEITEN, istThema: istThema, teamStandard: teamStandard, altesThemaInsTodo: altesThemaInsTodo,
+    THEMEN: THEMEN, BAUGRUPPEN: BAUGRUPPEN, SEITEN: SEITEN, NACHARBEIT: NACHARBEIT, istThema: istThema, teamStandard: teamStandard, altesThemaInsTodo: altesThemaInsTodo,
     state: state,
     load: load, subscribe: subscribe, onError: onError, onStatus: onStatus, isOnline: isOnline,
     add: add, update: update, remove: remove, cycle: cycle, byNr: byNr,

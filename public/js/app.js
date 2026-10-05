@@ -19,9 +19,9 @@
 
   // Auswahlfilter sind Listen (Mehrfachauswahl), leere Liste = alle
   var FILTER_FELDER = [['#fBereich', 'bereich'], ['#fThema', 'thema'], ['#fPrio', 'prio'], ['#fStatus', 'status'],
-    ['#fVerant', 'verant'], ['#fTeam', 'team'], ['#fBaugruppe', 'baugruppe']];
+    ['#fVerant', 'verant'], ['#fTeam', 'team'], ['#fBaugruppe', 'baugruppe'], ['#fNacharbeit', 'nacharbeit']];
   function leererFilter() {
-    return { suche: '', bereich: [], thema: [], prio: [], status: [], verant: [], team: [], baugruppe: [] };
+    return { suche: '', bereich: [], thema: [], prio: [], status: [], verant: [], team: [], baugruppe: [], nacharbeit: [] };
   }
   var filter = leererFilter();
 
@@ -192,6 +192,10 @@
     if (!trifft(filter.verant, e.verantwortlicher || '(offen)')) return false;
     if (!trifft(filter.team, e.verantwortlichkeit || '(offen)')) return false;
     if (!trifft(filter.baugruppe, e.baugruppe || '(offen)')) return false;
+    // "Re-Milling + Modification" erscheint unter beiden Filterwerten
+    if (filter.nacharbeit.length && !filter.nacharbeit.some(function (v) {
+      return v === '(keine)' ? !e.nacharbeit : (e.nacharbeit || '').indexOf(v) >= 0;
+    })) return false;
     if (quick === 'offen' && e.status === 'Erledigt') return false;
     if (quick === 'erledigt' && e.status !== 'Erledigt') return false;
     if (quick === 'hoch' && !(e.prio === 'Hoch' && e.status !== 'Erledigt')) return false;
@@ -199,7 +203,7 @@
     if (quick === 'niedrig' && !(e.prio === 'Niedrig' && e.status !== 'Erledigt')) return false;
     if (quick === 'ueberfaellig' && !Store.istUeberfaellig(e)) return false;
     if (filter.suche) {
-      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.bereich, e.notiz,
+      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.nacharbeit, e.bereich, e.notiz,
         TR[e.thema], TR[e.todo], TR[e.notiz], T(e.bereich), T(e.status), T(e.prio)]
         .join(' ').toLowerCase();
       if (hay.indexOf(filter.suche) < 0) return false;
@@ -279,6 +283,7 @@
       if (filter.verant.length) teile.push(T('Verantwortlich: {v}', { v: werte('verant') }));
       if (filter.team.length) teile.push(T('Verantwortlichkeit: {v}', { v: werte('team') }));
       if (filter.baugruppe.length) teile.push(T('Baugruppe: {v}', { v: werte('baugruppe') }));
+      if (filter.nacharbeit.length) teile.push(T('Nacharbeit: {v}', { v: werte('nacharbeit') }));
       if (filter.suche) teile.push(T('Suche: "{v}"', { v: filter.suche }));
       $('#filterBannerText').textContent = T('Zeige {n} von {gesamt} Punkten — {teile}',
         { n: liste.length, gesamt: alle.length, teile: teile.join(', ') });
@@ -444,6 +449,14 @@
     bg.addEventListener('click', function () { oeffneEdit(e.nr, 'baugruppe'); });
     meta.appendChild(bg);
 
+    if (e.nacharbeit) {
+      var na = el('button', 'chip chip--nacharbeit', '🛠 ' + T(e.nacharbeit));
+      na.type = 'button';
+      na.title = T('Nacharbeit am Teil');
+      na.addEventListener('click', function () { oeffneEdit(e.nr, 'nacharbeit'); });
+      meta.appendChild(na);
+    }
+
     if (e.release) {
       var rl = el('a', 'chip', '🚀 ' + e.release);
       rl.href = 'roadmap.html';
@@ -491,6 +504,7 @@
     { feld: 'bereich', label: 'Bereich' },
     { feld: 'thema', label: 'Thema' },
     { feld: 'baugruppe', label: 'Baugruppe' },
+    { feld: 'nacharbeit', label: 'Nacharbeit' },
     { feld: 'prio', label: 'Prio' },
     { feld: 'verantwortlicher', label: 'Verantwortlicher' },
     { feld: 'verantwortlichkeit', label: 'Verantwortlichkeit' },
@@ -527,6 +541,7 @@
       row.appendChild(el('td', null, T(e.bereich)));
       row.appendChild(el('td', Store.istThema(e.thema) ? null : 'is-warn', Store.istThema(e.thema) ? T(e.thema) : (e.thema ? '⚠ ' + tx(e.thema) : '⚠')));
       row.appendChild(el('td', null, e.baugruppe ? T(e.baugruppe) : '–'));
+      row.appendChild(el('td', null, e.nacharbeit ? T(e.nacharbeit) : '–'));
 
       var tdP = el('td');
       var p = el('button', 'chip');
@@ -680,6 +695,8 @@
       .concat([['(offen)', T('(offen)')]]));
     mselOptionen('#fBaugruppe', 'baugruppe', Store.BAUGRUPPEN.map(function (v) { return [v, T(v)]; })
       .concat([['(offen)', T('(offen)')]]));
+    mselOptionen('#fNacharbeit', 'nacharbeit', [['Re-Milling', T('Re-Milling')], ['Modification', T('Modification')],
+      ['(keine)', T('(keine Nacharbeit)')]]);
   }
 
   /* ---------------------------------------------------------- Lightbox */
@@ -764,6 +781,7 @@
     $('#fmTeam').value = e ? e.verantwortlichkeit : einzigerFilter('team');
     $('#fmBaugruppe').value = e ? (e.baugruppe || '') : einzigerFilter('baugruppe');
     $('#fmSeite').value = e ? (e.seite || '') : '';
+    $('#fmNacharbeit').value = e ? (e.nacharbeit || '') : '';
     $('#fmFaellig').value = e ? e.faellig : '';
     $('#fmTodo').value = e ? e.todo : '';
     $('#fmNotiz').value = e ? e.notiz : '';
@@ -792,6 +810,7 @@
       else if (fokus === 'verant') $('#fmVerant').focus();
       else if (fokus === 'team') $('#fmTeam').focus();
       else if (fokus === 'baugruppe') $('#fmBaugruppe').focus();
+      else if (fokus === 'nacharbeit') $('#fmNacharbeit').focus();
       else $('#fmThema').focus();
     }, 30);
   }
@@ -806,6 +825,7 @@
       verantwortlichkeit: $('#fmTeam').value || Store.teamStandard($('#fmVerant').value),
       baugruppe: $('#fmBaugruppe').value,
       seite: $('#fmSeite').value,
+      nacharbeit: $('#fmNacharbeit').value,
       faellig: $('#fmFaellig').value,
       todo: $('#fmTodo').value.trim(),
       notiz: $('#fmNotiz').value.trim(),
@@ -927,7 +947,8 @@
         stand: Xlsx.ddmmyyyy(Store.heute()),
         bereiche: Store.BEREICHE,
         themen: Store.THEMEN,
-        baugruppen: Store.BAUGRUPPEN
+        baugruppen: Store.BAUGRUPPEN,
+        nacharbeit: Store.NACHARBEIT
       });
       download(blob, exportName('xlsx'));
       var st = entries.bildStatistik;
@@ -944,7 +965,7 @@
 
   function exportCsv() {
     var kopf = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit', 'Baugruppe'];
+                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit'];
     function q(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
     var zeilen = [kopf.map(q).join(';')];
     var auswahl = exportEintraege();
@@ -955,7 +976,8 @@
         e.notiz || (e.bilder.length ? e.bilder.length + ' Bild(er) im Tool' : ''),
         Xlsx.ddmmyyyy(e.erstelltAm),
         e.verantwortlichkeit,
-        e.baugruppe
+        e.baugruppe,
+        e.nacharbeit
       ].map(q).join(';'));
     });
     // BOM, damit Excel UTF-8 erkennt
@@ -1103,6 +1125,8 @@
     });
     $('#fmSeite').appendChild(new Option('–', ''));
     Store.SEITEN.forEach(function (v) { $('#fmSeite').appendChild(new Option(T(v), v)); });
+    $('#fmNacharbeit').appendChild(new Option(T('– keine –'), ''));
+    Store.NACHARBEIT.forEach(function (v) { $('#fmNacharbeit').appendChild(new Option(T(v), v)); });
 
     Store.onError(function (msg) { toast(msg, true); });
     Store.onStatus(function (ok) { $('#offlineBanner').hidden = ok; });
