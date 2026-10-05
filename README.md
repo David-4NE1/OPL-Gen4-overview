@@ -54,6 +54,27 @@ Hinweise:
 - Überfällig = Datum „Bis wann“ liegt vor heute **und** Status ≠ Erledigt.
   Die Badge oben pulsiert rot, sobald es überfällige Punkte gibt.
 
+## Roadmap / Releases
+
+`roadmap.html` (Menü **⋯ → 🗺 Roadmap / Releases**) zeigt die OPL-Punkte als Board:
+Spalte **„Nicht eingeplant“** plus je Release eine Spalte (Start: 4.0.1, 4.0.2, 4.0.3).
+
+- **Drag & Drop** einer Karte in eine Spalte ordnet den Punkt dem Release zu – alternativ
+  das Auswahlfeld unten auf der Karte (Handy/Tablet, Tastatur).
+- Die Zuordnung ist das Feld `release` **direkt am OPL-Punkt** – keine zweite Liste.
+  Jede Änderung steht im Änderungsprotokoll, die OPL-Karte zeigt einen 🚀-Chip.
+- **+ Release** legt weitere Versionen an (Format `4.0.4`), ✎ am Spaltenkopf pflegt
+  Status (Geplant / In Arbeit / Freigegeben), Zieltermin und Fokus. Beim Löschen eines
+  Releases fallen dessen Punkte zurück auf „nicht eingeplant“.
+- Kopfzeile: offene Punkte mit/ohne Release und **Prio hoch ohne Release**.
+- **⋯ → Release-Notes kopieren** liefert eine Markdown-Liste je Release, **⋯ → CSV** die
+  komplette Zuordnung.
+- Excel-Import überschreibt keine Release-Zuordnung (die Excel kennt das Feld nicht).
+- Ohne Server (Datei lokal geöffnet) läuft die Seite als Demo mit den Startdaten.
+
+Der Worker legt Spalte `release` und Tabelle `releases` beim ersten Aufruf selbst an
+(Dokumentation: `migrations/005_release.sql`).
+
 ## Excel-Export und -Import
 
 Über das Menü **⋯** oben rechts:

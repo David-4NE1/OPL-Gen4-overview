@@ -425,6 +425,13 @@
     bg.addEventListener('click', function () { oeffneEdit(e.nr, 'baugruppe'); });
     meta.appendChild(bg);
 
+    if (e.release) {
+      var rl = el('a', 'chip', '🚀 ' + e.release);
+      rl.href = 'roadmap.html';
+      rl.title = T('Release-Zuordnung in der Roadmap ändern');
+      meta.appendChild(rl);
+    }
+
     if (!Store.istThema(e.thema)) {
       var th = el('button', 'chip chip--warn', '⚠ ' + T('Thema zuordnen'));
       th.type = 'button';
@@ -1102,7 +1109,8 @@
         $('#btnImportGo').disabled = true;
         importPuffer = null;
         $('#dlgImport').showModal();
-      } else if (act === 'log') zeigeLog();
+      } else if (act === 'roadmap') location.href = 'roadmap.html';
+      else if (act === 'log') zeigeLog();
       else if (act === 'admin') zeigeAdmin();
       else if (act === 'reset' && !Store.isOnline()) {
         toast(T('Keine Verbindung zum Server – Zurücksetzen ist gerade nicht möglich.'), true);
