@@ -158,3 +158,22 @@ funktioniert auch in älteren Browsern.
 - **Bilder** vergrößern den localStorage schnell; sie werden beim Hochladen auf
   max. 1400 px skaliert und als JPEG (Qualität 0.82) abgelegt. Bei „Speichern
   fehlgeschlagen“ hilft exportieren und Bilder reduzieren.
+
+## Zugriff und Rollen
+
+- Anmeldung mit freigeschalteter E-Mail-Adresse (@neura-robotics.com) und dem
+  gemeinsamen Passwort aus dem Worker-Secret `OPL_PASSWORD` (ohne Secret ist kein
+  Login möglich). Nach 10 Fehlversuchen ist die Adresse 15 Minuten gesperrt.
+- Jede Person bekommt eine eigene, signierte Sitzung (30 Tage). Der Schlüssel
+  kommt aus dem Secret `SESSION_SECRET` oder wird beim ersten Login zufällig
+  erzeugt und nur in D1 (Tabelle `settings`) gespeichert. Wird diese Zeile
+  gelöscht, müssen sich alle neu anmelden.
+- Die Freigabeliste wird bei jeder Anfrage geprüft: Entfernen oder Herabstufen
+  unter „⋯ → Zugriff verwalten“ wirkt sofort.
+- Rollen: **Lesen** (ansehen, exportieren), **Bearbeiten** (Punkte anlegen und
+  ändern, Excel zusammenführen, Releases pflegen), **Admin** (zusätzlich löschen,
+  Import „Ersetzen“, Zurücksetzen, Zugriff verwalten). Der Worker prüft die
+  Rechte, die Oberfläche blendet nur aus.
+- Konfliktschutz: Beim Speichern schickt das Tool nur die geänderten Felder und
+  den vorher gesehenen Stand. Hat jemand anderes dasselbe Feld inzwischen
+  geändert, wird nachgefragt statt still überschrieben.

@@ -454,3 +454,16 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
   .cards { grid-template-columns: 1fr; }
   main { padding: 12px; }
 }
+
+/* ------------------------------------------------------------- Rollen */
+/* Nur Anzeige – die Rechte prueft der Worker bei jeder Anfrage */
+body[data-rolle="lesen"] .nur-bearbeiten,
+body:not([data-rolle="admin"]) .nur-admin { display: none !important; }
+
+.adminliste { max-height: 46vh; }
+.adminzeile { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.adminzeile__mail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adminzeile select { padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.adminzeile__platz { width: 98px; }
+#formAdminAdd textarea { width: 100%; }
+.user-input[readonly] { cursor: default; }

@@ -44,7 +44,7 @@
     { key: '(ohne)', bg: '', seite: '', label: 'Ohne Baugruppe' }
   ];
 
-  var state = { entries: [], releases: [], user: '', modus: 'laden', stand: null,
+  var state = { entries: [], releases: [], user: '', rolle: 'bearbeiten', modus: 'laden', stand: null,
     ansicht: 'board', zone: null, koerperRelease: '*' };
   var dragNr = null;
   var bearbeitetesRelease = null;
@@ -152,7 +152,14 @@
     aendern(nr, 'release', release, release ? 'Release ' + release : 'nicht eingeplant');
   }
 
+  // Rollen: lesen < bearbeiten < admin (verbindlich prueft der Worker)
+  function darf(mindestens) {
+    var rang = { lesen: 0, bearbeiten: 1, admin: 2 };
+    return state.modus === 'demo' || rang[state.rolle] >= rang[mindestens];
+  }
+
   function aendern(nr, feld, wert, meldung) {
+    if (!darf('bearbeiten')) { toast('Nur Lesezugriff – Änderungen sind für deinen Zugang nicht freigeschaltet.', true); return; }
     var e = byNr(nr);
     if (!e || (e[feld] || '') === wert) return;
     var vorher = e[feld] || '';
@@ -387,7 +394,7 @@
   function renderKarte(e) {
     var c = el('article', 'rm-card rm-card--' + slug(e.prio) +
       (e.status === 'Erledigt' ? ' rm-card--erledigt' : '') + (e._speichert ? ' is-saving' : ''));
-    c.draggable = true;
+    c.draggable = darf('bearbeiten');
     c.dataset.nr = e.nr;
 
     var top = el('div', 'rm-card__top');
@@ -600,6 +607,7 @@
   /* ------------------------------------------------------------ Release-Dialog */
 
   function oeffneRelease(r) {
+    if (!darf('bearbeiten')) { toast('Nur Lesezugriff – Releases können nur mit Bearbeiten-Recht geändert werden.', true); return; }
     bearbeitetesRelease = r && !r.fehlt ? r.name : null;
     var vorschlag = '';
     if (!r) {
@@ -613,7 +621,7 @@
     $('#rlStatus').value = r && r.status ? r.status : 'Geplant';
     $('#rlZiel').value = r ? r.ziel || '' : '';
     $('#rlBeschreibung').value = r ? r.beschreibung || '' : '';
-    $('#btnReleaseDelete').hidden = !r;
+    $('#btnReleaseDelete').hidden = !r || !darf('admin');
     $('#dlgRelease').showModal();
   }
 
@@ -777,6 +785,8 @@
       if (!r.ok || typ.indexOf('application/json') < 0) return demoStarten();
       return r.json().then(function (auth) {
         state.user = auth.user || '';
+        state.rolle = auth.rolle || 'bearbeiten';
+        if (!darf('bearbeiten')) $('#btnRelease').disabled = true;
         state.modus = 'server';
         return ladeServer().then(function () {
           render();
