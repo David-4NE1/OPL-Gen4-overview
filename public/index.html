@@ -59,25 +59,25 @@
   </div>
 
   <div class="topbar__actions">
-    <input id="userName" class="user-input" type="text" placeholder="Dein Name" autocomplete="name"
-           title="Wird im Änderungsprotokoll mitgeschrieben" data-i18n-ph data-i18n-title>
+    <input id="userName" class="user-input" type="text" readonly tabindex="-1"
+           title="Angemeldet als – wird im Änderungsprotokoll mitgeschrieben" data-i18n-title>
     <button id="btnLang" class="btn btn--ghost" type="button" data-lang-toggle>EN</button>
     <button id="btnDark" class="btn btn--ghost" type="button" title="Dark / Light Mode">☀</button>
-    <button id="btnNeu" class="btn btn--primary" type="button" data-i18n>+ Neuer Punkt</button>
+    <button id="btnNeu" class="btn btn--primary nur-bearbeiten" type="button" data-i18n>+ Neuer Punkt</button>
     <div class="menu">
       <button id="btnMenu" class="btn btn--ghost" type="button" aria-haspopup="true" aria-expanded="false"
               title="Excel &amp; mehr" data-i18n-title>⋯</button>
       <div class="menu__panel" id="menuPanel" hidden>
         <button type="button" data-act="export-xlsx" data-i18n>⬇ Excel-Export (.xlsx)</button>
         <button type="button" data-act="export-csv" data-i18n>⬇ CSV-Export</button>
-        <hr>
-        <button type="button" data-act="import-xlsx" data-i18n>⬆ Excel-Import (.xlsx)</button>
+        <hr class="nur-bearbeiten">
+        <button type="button" data-act="import-xlsx" class="nur-bearbeiten" data-i18n>⬆ Excel-Import (.xlsx)</button>
         <hr>
         <button type="button" data-act="roadmap" data-i18n>🗺 Roadmap / Releases</button>
         <button type="button" data-act="log" data-i18n>🕓 Änderungsprotokoll</button>
-        <button type="button" data-act="reset" data-i18n>↺ Auf Excel-Startstand zurücksetzen</button>
-        <hr id="adminMenuDivider" hidden>
-        <button type="button" data-act="admin" id="btnAdminMenu" hidden data-i18n>🔐 Zugriff verwalten</button>
+        <button type="button" data-act="reset" class="nur-admin" data-i18n>↺ Auf Excel-Startstand zurücksetzen</button>
+        <hr id="adminMenuDivider" class="nur-admin" hidden>
+        <button type="button" data-act="admin" id="btnAdminMenu" class="nur-admin" hidden data-i18n>🔐 Zugriff verwalten</button>
         <hr>
         <button type="button" data-act="logout" data-i18n>🚪 Abmelden</button>
       </div>
@@ -174,11 +174,11 @@
     </label>
     <div id="fmBilderListe" class="thumbrow"></div>
     <footer class="dialog__footer">
-      <button type="button" id="btnDelete" class="btn btn--danger" hidden data-i18n>Löschen</button>
+      <button type="button" id="btnDelete" class="btn btn--danger nur-admin" hidden data-i18n>Löschen</button>
       <span class="spacer"></span>
       <button type="button" class="btn btn--ghost" data-close data-i18n>Abbrechen</button>
-      <button type="submit" class="btn btn--primary" data-i18n>Speichern</button>
-      <button type="button" id="btnSaveNext" class="btn btn--primary" hidden data-i18n>Speichern &amp; weiter ›</button>
+      <button type="submit" class="btn btn--primary nur-bearbeiten" data-i18n>Speichern</button>
+      <button type="button" id="btnSaveNext" class="btn btn--primary nur-bearbeiten" hidden data-i18n>Speichern &amp; weiter ›</button>
     </footer>
   </form>
 </dialog>
@@ -196,7 +196,7 @@
     <legend data-i18n>Wie einspielen?</legend>
     <label><input type="radio" name="impModus" value="zusammenfuehren" checked>
       <span data-i18n-html><b>Zusammenführen</b> – Einträge mit gleicher Nr werden aktualisiert, neue kommen dazu.</span></label>
-    <label><input type="radio" name="impModus" value="ersetzen">
+    <label class="nur-admin"><input type="radio" name="impModus" value="ersetzen">
       <span data-i18n-html><b>Ersetzen</b> – der aktuelle Stand wird komplett durch die Datei ersetzt.</span></label>
   </fieldset>
   <div id="impVorschau" class="imp-preview" hidden></div>
@@ -220,11 +220,22 @@
 <!-- Dialog: Admin – Zugriff verwalten -->
 <dialog id="dlgAdmin" class="dialog">
   <h2 data-i18n>Zugriff verwalten</h2>
-  <p class="hint" data-i18n>Nur diese E-Mail-Adressen (@neura-robotics.com) dürfen sich anmelden.</p>
-  <div id="adminEmailListe" class="loglist"></div>
-  <form id="formAdminAdd" class="grid2" style="margin-top:12px">
-    <label style="grid-column:1/3"><span data-i18n>Neue E-Mail-Adresse</span>
-      <input id="adminNeueEmail" type="email" placeholder="vorname.nachname@neura-robotics.com" required data-i18n-ph>
+  <p class="hint" data-i18n-html>Nur diese E-Mail-Adressen (@neura-robotics.com) dürfen sich anmelden.
+    <b>Lesen</b>: ansehen und exportieren · <b>Bearbeiten</b>: Punkte anlegen und ändern ·
+    <b>Admin</b>: zusätzlich löschen, Import „Ersetzen“, Zurücksetzen und Zugriff verwalten.
+    Entfernen wirkt sofort.</p>
+  <div id="adminZaehler" class="hint"></div>
+  <div id="adminEmailListe" class="loglist adminliste"></div>
+  <form id="formAdminAdd" style="margin-top:12px">
+    <label><span data-i18n>Neue E-Mail-Adressen (eine pro Zeile, auch mit Komma oder Semikolon getrennt)</span>
+      <textarea id="adminNeueEmail" rows="4" placeholder="vorname.nachname@neura-robotics.com" required data-i18n-ph></textarea>
+    </label>
+    <label><span data-i18n>Rolle</span>
+      <select id="adminNeueRolle">
+        <option value="lesen" data-i18n>Lesen</option>
+        <option value="bearbeiten" selected data-i18n>Bearbeiten</option>
+        <option value="admin" data-i18n>Admin</option>
+      </select>
     </label>
   </form>
   <footer class="dialog__footer">
@@ -253,11 +264,13 @@
   var form = document.getElementById('loginForm');
   var errEl = document.getElementById('loginError');
 
-  function showApp(userName, isAdmin) {
+  function showApp(userName, isAdmin, rolle) {
     gate.hidden = true;
     app.hidden = false;
     if (userName) window.__OPL_LOGIN_USER = userName;
     window.__OPL_IS_ADMIN = !!isAdmin;
+    window.__OPL_ROLLE = rolle || (isAdmin ? 'admin' : 'bearbeiten');
+    document.body.dataset.rolle = window.__OPL_ROLLE;
     loadScripts();
   }
 
@@ -277,7 +290,7 @@
   fetch('/api/auth').then(function(r) {
     if (r.ok) return r.json();
   }).then(function(data) {
-    if (data && data.authenticated) showApp(data.user, data.isAdmin);
+    if (data && data.authenticated) showApp(data.user, data.isAdmin, data.rolle);
   }).catch(function() {});
 
   form.addEventListener('submit', function(e) {
@@ -293,7 +306,7 @@
       if (r.ok) return r.json();
       return r.json().then(function(e) { throw new Error(OPLi18n.T(e.error || 'Fehler')); });
     }).then(function(data) {
-      showApp(data.user, data.isAdmin);
+      showApp(data.user, data.isAdmin, data.rolle);
     }).catch(function(err) {
       errEl.textContent = err.message && err.message !== 'Failed to fetch' ? err.message : OPLi18n.T('Verbindungsfehler');
       errEl.hidden = false;

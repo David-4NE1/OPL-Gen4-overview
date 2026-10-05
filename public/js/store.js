@@ -19,7 +19,19 @@
       del:    function (p) { return fetch(base + p, { method: 'DELETE' }).then(toJSON); }
     };
     function toJSON(r) {
-      if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || r.statusText); });
+      // Sitzung abgelaufen oder Zugang entzogen: neu laden zeigt die Anmeldung
+      if (r.status === 401 && !global.__OPL_NEU_LADEN) {
+        global.__OPL_NEU_LADEN = true;
+        global.location.reload();
+      }
+      if (!r.ok) {
+        return r.json().catch(function () { return {}; }).then(function (e) {
+          var err = new Error(e.error || r.statusText);
+          err.status = r.status;
+          err.body = e;
+          throw err;
+        });
+      }
       return r.json();
     }
   })();
@@ -159,10 +171,20 @@
     else if (method === 'DELETE') p = API.del(path);
     else return;
 
-    p.catch(function (err) {
-      console.warn('API-Sync fehlgeschlagen:', err.message);
-      notifyError((global.OPLi18n ? global.OPLi18n.T : String)('Speichern auf dem Server fehlgeschlagen: {msg}').replace('{msg}', err.message));
-    });
+    p.catch(syncFehler);
+  }
+
+  function syncFehler(err) {
+    console.warn('API-Sync fehlgeschlagen:', err.message);
+    notifyError((global.OPLi18n ? global.OPLi18n.T : String)('Speichern auf dem Server fehlgeschlagen: {msg}').replace('{msg}', err.message));
+    // Lokalen Stand wieder an den Server angleichen (z. B. nach fehlenden Rechten)
+    if (err.status === 403 || err.status === 404) {
+      ladeVomServer().then(function (entries) {
+        state.entries = entries.map(normalizeEntry);
+        saveLocal();
+        emit();
+      }).catch(function () {});
+    }
   }
 
   function load() {
@@ -291,7 +313,21 @@
     return state.entries.filter(function (e) { return e.nr === nr; })[0] || null;
   }
 
+  /* ---- Rollen: lesen < bearbeiten < admin (der Worker prueft verbindlich) ---- */
+
+  var rolle = 'bearbeiten';
+  var RANG = { lesen: 0, bearbeiten: 1, admin: 2 };
+  function setRolle(r) { rolle = RANG[r] != null ? r : 'bearbeiten'; }
+  function darf(mindestens) { return RANG[rolle] >= RANG[mindestens]; }
+  function verweigert(mindestens) {
+    var T = global.OPLi18n ? global.OPLi18n.T : String;
+    notifyError(mindestens === 'admin' ? T('Nur für Admins erlaubt.')
+      : T('Nur Lesezugriff – Bearbeiten ist für deinen Zugang nicht freigeschaltet.'));
+    return null;
+  }
+
   function add(data) {
+    if (!darf('bearbeiten')) return verweigert('bearbeiten');
     var e = normalizeEntry(data);
     e.nr = nextNr();
     e.erstelltAm = heute();
@@ -304,28 +340,87 @@
     return e;
   }
 
+  var FELDER = ['bereich', 'thema', 'prio', 'verantwortlicher', 'verantwortlichkeit', 'baugruppe', 'seite',
+    'nacharbeit', 'release', 'faellig', 'status', 'todo', 'notiz'];
+
+  // Gleicher Fingerabdruck wie bildSignatur() im Worker (Anzahl und Namen)
+  function bildSignatur(bilder) {
+    var l = (bilder || []).filter(function (b) { return b && b.src; });
+    return l.map(function (b) { return b.name || ''; }).join('|') + '#' + l.length;
+  }
+  function bilderGleich(a, b) {
+    var f = function (l) { return JSON.stringify((l || []).map(function (x) { return [x.name || '', x.src || '']; })); };
+    return f(a) === f(b);
+  }
+
+  // Schickt nur die geaenderten Felder und dazu den Stand, den man beim
+  // Bearbeiten gesehen hat ("vorher"). Hat jemand anderes eines dieser Felder
+  // inzwischen geaendert, lehnt der Worker mit 409 ab (siehe konfliktLoesen).
   function update(nr, patch) {
+    if (!darf('bearbeiten')) return verweigert('bearbeiten');
     var e = byNr(nr);
     if (!e) return null;
-    Object.keys(patch).forEach(function (k) {
-      if (e[k] === patch[k]) return;
-      if (k === 'bilder' || k === 'geaendertAm' || k === 'geaendertVon') { e[k] = patch[k]; return; }
-      logEntry(nr, k + ': "' + (e[k] || '–') + '" → "' + (patch[k] || '–') + '"');
-      e[k] = patch[k];
+    var neu = normalizeEntry(Object.assign({}, e, patch));
+    var senden = {}, vorher = {};
+    FELDER.forEach(function (k) {
+      if (!(k in patch) || neu[k] === e[k]) return;
+      logEntry(nr, k + ': "' + (e[k] || '–') + '" → "' + (neu[k] || '–') + '"');
+      senden[k] = neu[k];
+      vorher[k] = e[k];
     });
-    Object.assign(e, normalizeEntry(e));
+    if ('bilder' in patch && !bilderGleich(patch.bilder, e.bilder)) {
+      senden.bilder = patch.bilder;
+      vorher.bilder = bildSignatur(e.bilder);
+    }
+    if (!Object.keys(senden).length) return e;
+    Object.assign(e, neu, { bilder: 'bilder' in senden ? senden.bilder : e.bilder });
     e.geaendertAm = jetzt();
     e.geaendertVon = state.user || 'unbekannt';
     commit();
-    var daten = Object.assign({}, e, { user: state.user });
-    // Release wird in der Roadmap gepflegt; ein evtl. veralteter lokaler Wert
-    // soll eine frische Zuordnung dort nicht ueberschreiben.
-    if (!('release' in patch)) delete daten.release;
-    syncToAPI('PUT', '/api/entries/' + nr, daten);
+    senden.vorher = vorher;
+    API.put('/api/entries/' + nr, senden).catch(function (err) {
+      if (err.status === 409 && err.body && err.body.eintrag) return konfliktLoesen(nr, senden, err.body);
+      syncFehler(err);
+    });
     return e;
   }
 
+  var FELD_NAMEN = {
+    bereich: 'Bereich', thema: 'Thema', prio: 'Prio', verantwortlicher: 'Verantwortlicher',
+    verantwortlichkeit: 'Verantwortlichkeit', baugruppe: 'Baugruppe', seite: 'Seite', nacharbeit: 'Nacharbeit',
+    release: 'Release', faellig: 'Bis wann', status: 'Status', todo: 'To Do', notiz: 'Notiz', bilder: 'Bilder'
+  };
+
+  function lokalErsetzen(nr, eintrag) {
+    var i = state.entries.findIndex(function (x) { return x.nr === nr; });
+    if (i >= 0) state.entries[i] = normalizeEntry(eintrag);
+    commit();
+  }
+
+  function konfliktLoesen(nr, gesendet, info) {
+    var T = global.OPLi18n ? global.OPLi18n.T : function (t, v) {
+      return t.replace(/\{(\w+)\}/g, function (m, k) { return v[k]; });
+    };
+    var felder = info.konflikt.map(function (k) { return T(FELD_NAMEN[k] || k); }).join(', ');
+    var wer = info.wer || T('jemand anderem');
+    var ok = global.confirm(T('Punkt #{nr} wurde inzwischen von {wer} geändert ({felder}).\n\nOK: deine Änderung trotzdem speichern (überschreibt die von {wer}).\nAbbrechen: die Änderung von {wer} behalten.',
+      { nr: nr, wer: wer, felder: felder }));
+    if (ok) {
+      return API.put('/api/entries/' + nr, Object.assign({}, gesendet, { erzwingen: true }))
+        .then(function (eintrag) { lokalErsetzen(nr, eintrag); })
+        .catch(syncFehler);
+    }
+    // Fremden Stand uebernehmen; eigene Aenderungen an anderen Feldern trotzdem speichern
+    lokalErsetzen(nr, info.eintrag);
+    var rest = {};
+    Object.keys(gesendet).forEach(function (k) {
+      if (k !== 'vorher' && info.konflikt.indexOf(k) < 0) rest[k] = gesendet[k];
+    });
+    if (Object.keys(rest).length) update(nr, rest);
+  }
+
   function remove(nr) {
+    if (!darf('admin')) return verweigert('admin');
     var i = state.entries.findIndex(function (e) { return e.nr === nr; });
     if (i < 0) return false;
     state.entries.splice(i, 1);
@@ -351,6 +446,7 @@
   }
 
   function applyImport(entries, modus) {
+    if (!darf(modus === 'ersetzen' ? 'admin' : 'bearbeiten')) return verweigert(modus === 'ersetzen' ? 'admin' : 'bearbeiten');
     var vorher = state.entries.length;
     var bilderProNr = {};
     var erstelltAmProNr = {};
@@ -419,6 +515,7 @@
   }
 
   function reset() {
+    if (!darf('admin')) return verweigert('admin');
     state.entries = (global.OPL_SEED || []).map(normalizeEntry);
     state.log = [];
     commit();
@@ -435,7 +532,7 @@
     state: state,
     load: load, subscribe: subscribe, onError: onError, onStatus: onStatus, isOnline: isOnline,
     add: add, update: update, remove: remove, cycle: cycle, byNr: byNr,
-    setUser: setUser, applyImport: applyImport, reset: reset,
+    setUser: setUser, setRolle: setRolle, darf: darf, applyImport: applyImport, reset: reset,
     istUeberfaellig: istUeberfaellig, heute: heute, clone: clone
   };
 })(window);

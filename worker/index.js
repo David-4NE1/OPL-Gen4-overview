@@ -9,7 +9,7 @@ import { Buffer } from 'node:buffer';
  *   GET    /api/auth              → Auth-Status prüfen
  *   GET    /api/logout            → Abmelden (löscht Cookie)
  *   GET    /api/health            → Erreichbarkeit (kein Auth, keine Daten)
- *   GET    /api/entries           → alle Einträge (Cookie ODER Bearer READ_TOKEN)
+ *   GET    /api/entries           → alle Einträge (Sitzung ODER Bearer READ_TOKEN)
  *   GET    /api/stand             → Aenderungsstand (kleiner Fingerabdruck fuers Polling)
  *   GET    /api/entries/:nr       → ein Eintrag
  *   GET    /api/bild/:nr/:i       → einzelnes Bild als Binaerdatei
@@ -24,8 +24,8 @@ import { Buffer } from 'node:buffer';
  *   POST   /api/import            → Bulk-Import (ersetzen / zusammenführen)
  *   POST   /api/reset             → auf Seed-Stand zurücksetzen
  *   GET    /api/log               → Änderungsprotokoll (neueste zuerst, max 500)
- *   GET    /api/admin/emails      → Freigabeliste lesen (nur Admin)
- *   POST   /api/admin/emails      → E-Mail zur Freigabeliste hinzufuegen (nur Admin)
+ *   GET    /api/admin/emails      → Freigabeliste mit Rollen lesen (nur Admin)
+ *   POST   /api/admin/emails      → E-Mail(s) freischalten bzw. Rolle setzen { email | emails, rolle } (nur Admin)
  *   DELETE /api/admin/emails/:e   → E-Mail von der Freigabeliste entfernen (nur Admin)
  *   POST   /api/translate         → Texte DE→EN maschinell uebersetzen (Workers AI, Cache in D1)
  *   GET    /api/releases          → Releases fuer die Roadmap (Name, Zieltermin, Status, Beschreibung)
@@ -36,24 +36,35 @@ import { Buffer } from 'node:buffer';
  * (PUT /api/entries/:nr { release: '4.0.2' }) und landet im Aenderungsprotokoll.
  *
  * Freigegebene E-Mail-Adressen liegen in der D1-Tabelle "allowed_emails"
- * (Migration: siehe migrations/002_allowed_emails.sql).
+ * (Migration: siehe migrations/002_allowed_emails.sql) mit einer Rolle je Adresse:
+ *   lesen      → nur ansehen und exportieren
+ *   bearbeiten → Punkte anlegen/aendern, Excel zusammenfuehren, Releases pflegen
+ *   admin      → zusaetzlich loeschen, Import "ersetzen", Zuruecksetzen, Zugriff verwalten
+ * Die Rechte prueft der Worker bei jeder Anfrage; die Oberflaeche blendet nur aus.
  */
 
 const ADMIN_EMAIL = 'david.rybinski@neura-robotics.com';
 
-const AUTH_COOKIE = 'opl_auth';
-const TOKEN = 'c4f8a2e1b7d9';
+/* ---------------------------------------------------------- Anmeldung */
+
+// Jede Person bekommt eine eigene, signierte Sitzung (HMAC-SHA256):
+//   opl_session = base64url({"e": email, "x": ablauf_ms}) + "." + base64url(signatur)
+// Der Schluessel kommt aus dem Secret SESSION_SECRET oder wird beim ersten
+// Login zufaellig erzeugt und nur in D1 (Tabelle settings) abgelegt – er steht
+// nie im Quelltext. Bei jeder Anfrage wird zusaetzlich die Freigabeliste
+// geprueft: wer entfernt wird, verliert den Zugang sofort.
+const SESSION_COOKIE = 'opl_session';
+const SESSION_TAGE = 30;
+// Alte Cookies aus der Zeit vor den signierten Sitzungen (werden beim Login/Logout geloescht)
+const ALTE_COOKIES = ['opl_auth', 'opl_user', 'opl_email'];
+const ROLLEN = ['lesen', 'bearbeiten', 'admin'];
+const LOGIN_MAX_FEHLVERSUCHE = 10;
+const LOGIN_SPERRE_MIN = 15;
 
 function getPassword(env) {
-  return env.OPL_PASSWORD || 'OPL-FORANYONE';
+  // Kein Standardwert: ohne Secret OPL_PASSWORD ist kein Login moeglich
+  return env.OPL_PASSWORD || '';
 }
-
-function isAuthenticated(request) {
-  const cookie = request.headers.get('cookie') || '';
-  return cookie.split(';').some(c => c.trim() === `${AUTH_COOKIE}=${TOKEN}`);
-}
-
-const USER_COOKIE = 'opl_user';
 
 function nameFromEmail(email) {
   if (!email) return '';
@@ -61,32 +72,102 @@ function nameFromEmail(email) {
   return local.split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
 }
 
-function getUserName(request) {
+function b64url(bytes) {
+  return Buffer.from(bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64urlBytes(text) {
+  return new Uint8Array(Buffer.from(text.replace(/-/g, '+').replace(/_/g, '/'), 'base64'));
+}
+
+let sessionKey = null;
+async function sitzungsSchluessel(env) {
+  if (sessionKey) return sessionKey;
+  let geheim = env.SESSION_SECRET || '';
+  if (!geheim) {
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)').run();
+    // INSERT OR IGNORE: laufen zwei Isolates gleichzeitig los, gewinnt der erste Wert
+    await env.DB.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('session_secret', ?)")
+      .bind(b64url(crypto.getRandomValues(new Uint8Array(32)))).run();
+    const row = await env.DB.prepare("SELECT value FROM settings WHERE key = 'session_secret'").first();
+    geheim = row.value;
+  }
+  sessionKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(geheim),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+  return sessionKey;
+}
+
+async function sitzungErstellen(env, email) {
+  const daten = new TextEncoder().encode(JSON.stringify({ e: email, x: Date.now() + SESSION_TAGE * 864e5 }));
+  const sig = await crypto.subtle.sign('HMAC', await sitzungsSchluessel(env), daten);
+  return b64url(daten) + '.' + b64url(new Uint8Array(sig));
+}
+
+function cookieWert(request, name) {
   const cookie = request.headers.get('cookie') || '';
   for (const c of cookie.split(';')) {
-    const trimmed = c.trim();
-    if (trimmed.startsWith(USER_COOKIE + '=')) {
-      return decodeURIComponent(trimmed.slice(USER_COOKIE.length + 1));
-    }
+    const t = c.trim();
+    if (t.startsWith(name + '=')) return t.slice(name.length + 1);
   }
   return '';
 }
 
-const EMAIL_COOKIE = 'opl_email';
-
-function getEmail(request) {
-  const cookie = request.headers.get('cookie') || '';
-  for (const c of cookie.split(';')) {
-    const trimmed = c.trim();
-    if (trimmed.startsWith(EMAIL_COOKIE + '=')) {
-      return decodeURIComponent(trimmed.slice(EMAIL_COOKIE.length + 1));
-    }
-  }
-  return '';
+// Liefert { email, name, rolle } oder null. Prueft Signatur (crypto.subtle.verify
+// vergleicht in konstanter Zeit), Ablauf und die aktuelle Freigabeliste.
+async function sitzungPruefen(request, env) {
+  const wert = cookieWert(request, SESSION_COOKIE);
+  const teile = wert.split('.');
+  if (teile.length !== 2 || !teile[0] || !teile[1]) return null;
+  let daten, sig, inhalt;
+  try {
+    daten = b64urlBytes(teile[0]);
+    sig = b64urlBytes(teile[1]);
+  } catch { return null; }
+  const ok = await crypto.subtle.verify('HMAC', await sitzungsSchluessel(env), sig, daten);
+  if (!ok) return null;
+  try { inhalt = JSON.parse(new TextDecoder().decode(daten)); } catch { return null; }
+  if (!inhalt || typeof inhalt.e !== 'string' || !(inhalt.x > Date.now())) return null;
+  const rolle = await rolleVon(env.DB, inhalt.e);
+  if (!rolle) return null;
+  return { email: inhalt.e, name: nameFromEmail(inhalt.e), rolle };
 }
 
-function isAdmin(request) {
-  return isAuthenticated(request) && getEmail(request) === ADMIN_EMAIL;
+async function rolleVon(db, email) {
+  const row = await db.prepare('SELECT rolle FROM allowed_emails WHERE email = ?').bind(email).first();
+  if (!row) return null;
+  if (email === ADMIN_EMAIL) return 'admin';
+  return ROLLEN.includes(row.rolle) ? row.rolle : 'bearbeiten';
+}
+
+const RANG = { lesen: 0, bearbeiten: 1, admin: 2 };
+function darf(sitzung, mindestens) {
+  return RANG[sitzung.rolle] >= RANG[mindestens];
+}
+
+function keinRecht(mindestens) {
+  const text = mindestens === 'admin'
+    ? 'Nur für Admins erlaubt'
+    : 'Nur Lesezugriff – Bearbeiten ist für diesen Zugang nicht freigeschaltet';
+  return json({ error: text }, 403);
+}
+
+function cookiesLoeschen(headers) {
+  for (const n of [SESSION_COOKIE, ...ALTE_COOKIES]) {
+    headers.append('set-cookie', `${n}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
+  }
+}
+
+// Spalte "rolle" und Tabelle fuer Fehlversuche anlegen (einmal je Isolate)
+let authSchemaOk = false;
+async function authSchemaSicherstellen(db) {
+  if (authSchemaOk) return;
+  try {
+    await db.prepare("ALTER TABLE allowed_emails ADD COLUMN rolle TEXT DEFAULT 'bearbeiten'").run();
+  } catch (err) {
+    if (!/duplicate column/i.test(String(err && err.message))) throw err;
+  }
+  await db.prepare('CREATE TABLE IF NOT EXISTS login_fehler (email TEXT NOT NULL, wann TEXT NOT NULL)').run();
+  authSchemaOk = true;
 }
 
 // Read-only Zugang fuer GET /api/entries per Bearer-Token (fuer maschinelle
@@ -135,46 +216,40 @@ async function handleAPI(url, method, request, env) {
 
   // POST /api/login (kein Auth noetig)
   if (path === '/api/login' && method === 'POST') {
+    await authSchemaSicherstellen(env.DB);
     const data = await request.json();
     const email = (data.email || '').trim().toLowerCase();
-    const zugelassen = await env.DB.prepare(
-      'SELECT 1 FROM allowed_emails WHERE email = ?'
-    ).bind(email).first();
-    if (!zugelassen) {
-      return json({ error: 'Diese E-Mail-Adresse ist nicht zugelassen' }, 403);
+    const seit = new Date(Date.now() - LOGIN_SPERRE_MIN * 60e3).toISOString();
+    const fehler = await env.DB.prepare('SELECT COUNT(*) AS n FROM login_fehler WHERE email = ? AND wann > ?')
+      .bind(email, seit).first();
+    if (fehler.n >= LOGIN_MAX_FEHLVERSUCHE) {
+      return json({ error: `Zu viele Fehlversuche – bitte in ${LOGIN_SPERRE_MIN} Minuten erneut versuchen` }, 429);
     }
-    if (data.password === getPassword(env)) {
-      const userName = nameFromEmail(email);
-      const admin = email === ADMIN_EMAIL;
-      const headers = new Headers({ 'content-type': 'application/json' });
-      headers.append('set-cookie', `${AUTH_COOKIE}=${TOKEN}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000`);
-      headers.append('set-cookie', `${EMAIL_COOKIE}=${encodeURIComponent(email)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000`);
-      if (userName) {
-        headers.append('set-cookie', `${USER_COOKIE}=${encodeURIComponent(userName)}; Path=/; SameSite=Strict; Max-Age=2592000`);
-      }
-      return new Response(JSON.stringify({ ok: true, user: userName, isAdmin: admin }), { status: 200, headers });
+    const rolle = await rolleVon(env.DB, email);
+    const passwort = getPassword(env);
+    // Passwort in konstanter Zeit vergleichen (ueber die Hashes, damit auch die Laenge nichts verraet)
+    const [ist, soll] = await Promise.all([String(data.password || ''), passwort].map(t =>
+      crypto.subtle.digest('SHA-256', new TextEncoder().encode(t))));
+    const passwortOk = !!passwort && crypto.subtle.timingSafeEqual(ist, soll);
+    if (!rolle || !passwortOk) {
+      await env.DB.batch([
+        env.DB.prepare('INSERT INTO login_fehler (email, wann) VALUES (?, ?)').bind(email, new Date().toISOString()),
+        env.DB.prepare('DELETE FROM login_fehler WHERE wann < ?').bind(new Date(Date.now() - 864e5).toISOString())
+      ]);
+      // Einheitliche Meldung: verraet nicht, ob die Adresse freigeschaltet ist
+      return json({ error: 'E-Mail-Adresse oder Passwort falsch' }, 401);
     }
-    return json({ error: 'Falsches Passwort' }, 401);
-  }
-
-  // GET /api/auth (kein Auth noetig – prüft nur ob Cookie da ist)
-  if (path === '/api/auth' && method === 'GET') {
-    if (isAuthenticated(request)) {
-      return json({
-        authenticated: true,
-        user: getUserName(request),
-        isAdmin: getEmail(request) === ADMIN_EMAIL
-      });
-    }
-    return json({ authenticated: false }, 401);
+    await env.DB.prepare('DELETE FROM login_fehler WHERE email = ?').bind(email).run();
+    const headers = new Headers({ 'content-type': 'application/json' });
+    cookiesLoeschen(headers);
+    headers.append('set-cookie', `${SESSION_COOKIE}=${await sitzungErstellen(env, email)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_TAGE * 86400}`);
+    return new Response(JSON.stringify({ ok: true, user: nameFromEmail(email), rolle, isAdmin: rolle === 'admin' }), { status: 200, headers });
   }
 
   // GET /api/logout
   if (path === '/api/logout') {
     const headers = new Headers({ 'content-type': 'application/json' });
-    headers.append('set-cookie', `${AUTH_COOKIE}=; Path=/; HttpOnly; Max-Age=0`);
-    headers.append('set-cookie', `${USER_COOKIE}=; Path=/; Max-Age=0`);
-    headers.append('set-cookie', `${EMAIL_COOKIE}=; Path=/; HttpOnly; Max-Age=0`);
+    cookiesLoeschen(headers);
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
   }
 
@@ -191,17 +266,24 @@ async function handleAPI(url, method, request, env) {
     return json(await listeEintraege(env.DB));
   }
 
-  // --- Ab hier: Auth erforderlich ---
-  if (!isAuthenticated(request)) {
+  // --- Ab hier: gueltige Sitzung erforderlich ---
+  await authSchemaSicherstellen(env.DB);
+  const sitzung = await sitzungPruefen(request, env);
+
+  // GET /api/auth – Status der eigenen Sitzung
+  if (path === '/api/auth' && method === 'GET') {
+    if (!sitzung) return json({ authenticated: false }, 401);
+    return json({ authenticated: true, user: sitzung.name, rolle: sitzung.rolle, isAdmin: sitzung.rolle === 'admin' });
+  }
+
+  if (!sitzung) {
     return json({ error: 'Nicht angemeldet' }, 401);
   }
 
-  // --- Admin-Routen: nur der Admin-Account darf die Freigabeliste verwalten ---
+  // --- Admin-Routen: Freigabeliste und Rollen verwalten ---
   if (path.startsWith('/api/admin/')) {
-    if (!isAdmin(request)) {
-      return json({ error: 'Kein Zugriff' }, 403);
-    }
-    return handleAdmin(path, method, request, env);
+    if (!darf(sitzung, 'admin')) return keinRecht('admin');
+    return handleAdmin(path, method, request, env, sitzung);
   }
 
   // POST /api/translate { texts: [...] } → { translations: [...] }
@@ -225,7 +307,7 @@ async function handleAPI(url, method, request, env) {
   }
 
   if (path === '/api/releases' || path.startsWith('/api/releases/')) {
-    return handleReleases(path, method, request, db);
+    return handleReleases(path, method, request, db, sitzung);
   }
 
   // GET /api/bild/:nr/:i
@@ -244,12 +326,13 @@ async function handleAPI(url, method, request, env) {
 
   // POST /api/entries  (neuer Eintrag)
   if (path === '/api/entries' && method === 'POST') {
+    if (!darf(sitzung, 'bearbeiten')) return keinRecht('bearbeiten');
     const data = await request.json();
     data.bilder = await bilderAufloesen(db, data.bilder);
     const maxRow = await db.prepare('SELECT MAX(nr) AS m FROM entries').first();
     const nr = (maxRow?.m || 0) + 1;
     const now = new Date().toISOString();
-    const e = normalize({ ...data, nr, erstelltAm: now.slice(0, 10), geaendertAm: now, geaendertVon: data.user || 'unbekannt' });
+    const e = normalize({ ...data, nr, erstelltAm: now.slice(0, 10), geaendertAm: now, geaendertVon: sitzung.name });
     await insertEntry(db, e);
     await logChange(db, nr, 'angelegt', e.geaendertVon);
     return json(mitBildVerweisen(e), 201);
@@ -257,11 +340,32 @@ async function handleAPI(url, method, request, env) {
 
   // PUT /api/entries/:nr  (Patch)
   if (matchOne && method === 'PUT') {
+    if (!darf(sitzung, 'bearbeiten')) return keinRecht('bearbeiten');
     const nr = +matchOne[1];
     const row = await db.prepare('SELECT * FROM entries WHERE nr = ?').bind(nr).first();
     if (!row) return json({ error: 'Nicht gefunden' }, 404);
     const old = dbToEntry(row);
     const patch = await request.json();
+
+    // Konfliktschutz: "vorher" enthaelt den Stand, den der Client beim Bearbeiten
+    // gesehen hat (nur fuer die geaenderten Felder). Hat jemand anderes eines
+    // dieser Felder inzwischen geaendert, wird nichts gespeichert (409).
+    // Mit "erzwingen: true" ueberschreibt der Client bewusst.
+    if (patch.vorher && typeof patch.vorher === 'object' && !patch.erzwingen) {
+      const konflikte = [];
+      for (const [k, v] of Object.entries(patch.vorher)) {
+        const aktuell = k === 'bilder' ? bildSignatur(old.bilder) : old[k];
+        const neu = k === 'bilder' ? null : patch[k];
+        if (aktuell !== undefined && aktuell !== v && aktuell !== neu) konflikte.push(k);
+      }
+      if (konflikte.length) {
+        return json({ error: 'Konflikt', konflikt: konflikte, wer: old.geaendertVon || '', wann: old.geaendertAm || '',
+          eintrag: mitBildVerweisen(old) }, 409);
+      }
+    }
+    delete patch.vorher;
+    delete patch.erzwingen;
+
     if (patch.bilder !== undefined) patch.bilder = await bilderAufloesen(db, patch.bilder);
     const now = new Date().toISOString();
 
@@ -277,7 +381,7 @@ async function handleAPI(url, method, request, env) {
       ...patch,
       nr,
       geaendertAm: now,
-      geaendertVon: patch.user || old.geaendertVon || 'unbekannt'
+      geaendertVon: sitzung.name
     });
     await updateEntry(db, updated);
     for (const c of changes) await logChange(db, nr, c, updated.geaendertVon);
@@ -286,17 +390,21 @@ async function handleAPI(url, method, request, env) {
 
   // DELETE /api/entries/:nr
   if (matchOne && method === 'DELETE') {
+    if (!darf(sitzung, 'admin')) return keinRecht('admin');
     const nr = +matchOne[1];
     const existing = await db.prepare('SELECT nr FROM entries WHERE nr = ?').bind(nr).first();
     if (!existing) return json({ error: 'Nicht gefunden' }, 404);
     await db.prepare('DELETE FROM entries WHERE nr = ?').bind(nr).run();
-    await logChange(db, nr, 'gelöscht', 'unbekannt');
+    await logChange(db, nr, 'gelöscht', sitzung.name);
     return json({ ok: true });
   }
 
   // POST /api/import
   if (path === '/api/import' && method === 'POST') {
-    const { entries, modus, user } = await request.json();
+    if (!darf(sitzung, 'bearbeiten')) return keinRecht('bearbeiten');
+    const { entries, modus } = await request.json();
+    if (modus === 'ersetzen' && !darf(sitzung, 'admin')) return keinRecht('admin');
+    const user = sitzung.name;
     const now = new Date().toISOString();
     // Bild-Verweise aufloesen, solange die alten Daten noch in der DB stehen
     for (const raw of entries) raw.bilder = await bilderAufloesen(db, raw.bilder);
@@ -337,6 +445,7 @@ async function handleAPI(url, method, request, env) {
 
   // POST /api/reset
   if (path === '/api/reset' && method === 'POST') {
+    if (!darf(sitzung, 'admin')) return keinRecht('admin');
     const seed = (await import('./seed.json', { with: { type: 'json' } })).default;
     await db.prepare('DELETE FROM entries').run();
     await db.prepare('DELETE FROM changelog').run();
@@ -389,13 +498,14 @@ async function listeReleases(db) {
   return results;
 }
 
-async function handleReleases(path, method, request, db) {
+async function handleReleases(path, method, request, db, sitzung) {
   if (path === '/api/releases' && method === 'GET') {
     return json(await listeReleases(db));
   }
 
   // POST /api/releases { name, ziel, status, beschreibung, user } – anlegen oder aendern
   if (path === '/api/releases' && method === 'POST') {
+    if (!darf(sitzung, 'bearbeiten')) return keinRecht('bearbeiten');
     const d = await request.json();
     const name = releaseName(d.name);
     if (!name) return json({ error: 'Release-Name im Format 4.0.1 angeben' }, 400);
@@ -408,13 +518,14 @@ async function handleReleases(path, method, request, db) {
        ON CONFLICT(name) DO UPDATE SET ziel = excluded.ziel, status = excluded.status,
          beschreibung = excluded.beschreibung, geaendert_am = excluded.geaendert_am`
     ).bind(name, ziel, status, beschreibung, new Date().toISOString()).run();
-    await logChange(db, 0, `Release ${name} ${vorher ? 'geändert' : 'angelegt'} (${status}${ziel ? ', Ziel ' + ziel : ''})`, d.user);
+    await logChange(db, 0, `Release ${name} ${vorher ? 'geändert' : 'angelegt'} (${status}${ziel ? ', Ziel ' + ziel : ''})`, sitzung.name);
     return json(await listeReleases(db));
   }
 
   // DELETE /api/releases/:name – zugeordnete Punkte fallen zurueck in "nicht eingeplant"
   const m = path.match(/^\/api\/releases\/([^/]+)$/);
   if (m && method === 'DELETE') {
+    if (!darf(sitzung, 'admin')) return keinRecht('admin');
     const name = releaseName(decodeURIComponent(m[1]));
     if (!name) return json({ error: 'Unbekanntes Release' }, 404);
     const now = new Date().toISOString();
@@ -422,7 +533,7 @@ async function handleReleases(path, method, request, db) {
       "UPDATE entries SET release = '', geaendert_am = ? WHERE release = ?"
     ).bind(now, name).run();
     await db.prepare('DELETE FROM releases WHERE name = ?').bind(name).run();
-    await logChange(db, 0, `Release ${name} gelöscht (${meta.changes || 0} Punkte wieder nicht eingeplant)`, 'unbekannt');
+    await logChange(db, 0, `Release ${name} gelöscht (${meta.changes || 0} Punkte wieder nicht eingeplant)`, sitzung.name);
     return json(await listeReleases(db));
   }
 
@@ -432,26 +543,40 @@ async function handleReleases(path, method, request, db) {
 /* -------------------------------------------------------------- Admin */
 
 async function listeEmails(db) {
-  const { results } = await db.prepare('SELECT email FROM allowed_emails ORDER BY email').all();
-  return results.map(r => r.email);
+  const { results } = await db.prepare('SELECT email, rolle FROM allowed_emails ORDER BY email').all();
+  return results.map(r => ({
+    email: r.email,
+    rolle: r.email === ADMIN_EMAIL ? 'admin' : (ROLLEN.includes(r.rolle) ? r.rolle : 'bearbeiten')
+  }));
 }
 
-async function handleAdmin(path, method, request, env) {
+const EMAIL_MUSTER = /^[^@\s]+@neura-robotics\.com$/;
+
+async function handleAdmin(path, method, request, env, sitzung) {
   const db = env.DB;
 
-  // GET /api/admin/emails
+  // GET /api/admin/emails → [{ email, rolle }]
   if (path === '/api/admin/emails' && method === 'GET') {
     return json(await listeEmails(db));
   }
 
-  // POST /api/admin/emails { email }
+  // POST /api/admin/emails { email | emails: [...], rolle }
+  // Legt Adressen an oder setzt die Rolle bestehender Adressen.
   if (path === '/api/admin/emails' && method === 'POST') {
     const data = await request.json();
-    const email = (data.email || '').trim().toLowerCase();
-    if (!/^[^@\s]+@neura-robotics\.com$/.test(email)) {
-      return json({ error: 'Nur @neura-robotics.com Adressen erlaubt' }, 400);
+    const rolle = ROLLEN.includes(data.rolle) ? data.rolle : 'bearbeiten';
+    const roh = Array.isArray(data.emails) ? data.emails : [data.email];
+    const emails = [...new Set(roh.map(e => String(e || '').trim().toLowerCase()).filter(Boolean))];
+    const ungueltig = emails.filter(e => !EMAIL_MUSTER.test(e));
+    if (!emails.length || ungueltig.length) {
+      return json({ error: 'Nur @neura-robotics.com Adressen erlaubt', ungueltig }, 400);
     }
-    await db.prepare('INSERT OR IGNORE INTO allowed_emails (email) VALUES (?)').bind(email).run();
+    if (emails.length > 200) return json({ error: 'Höchstens 200 Adressen auf einmal' }, 400);
+    const stmts = emails.filter(e => e !== ADMIN_EMAIL).map(e => db.prepare(
+      'INSERT INTO allowed_emails (email, rolle) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET rolle = excluded.rolle'
+    ).bind(e, rolle));
+    if (stmts.length) await db.batch(stmts);
+    await logChange(db, 0, `Zugriff: ${stmts.length} Adresse(n) mit Rolle "${rolle}"`, sitzung.name);
     return json(await listeEmails(db));
   }
 
@@ -463,6 +588,7 @@ async function handleAdmin(path, method, request, env) {
       return json({ error: 'Der Admin-Zugang kann nicht entfernt werden' }, 400);
     }
     await db.prepare('DELETE FROM allowed_emails WHERE email = ?').bind(email).run();
+    await logChange(db, 0, 'Zugriff entzogen: 1 Adresse', sitzung.name);
     return json(await listeEmails(db));
   }
 
@@ -542,6 +668,12 @@ const BILD_VERWEIS = /^\/api\/bild\/(\d+)\/(\d+)(?:\?.*)?$/;
 
 function bildUrl(nr, i, laenge) {
   return `/api/bild/${nr}/${i}?v=${laenge}`;
+}
+
+// Kurzer Fingerabdruck der Bildliste fuer den Konfliktschutz (Anzahl und Namen)
+function bildSignatur(bilder) {
+  const l = (bilder || []).filter(b => b && b.src);
+  return l.map(b => b.name || '').join('|') + '#' + l.length;
 }
 
 function mitBildVerweisen(e) {

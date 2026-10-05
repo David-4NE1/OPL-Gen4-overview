@@ -771,6 +771,7 @@
   }
 
   function oeffneEdit(nr, fokus) {
+    if (nr == null && !Store.darf('bearbeiten')) return;
     editNr = nr == null ? null : nr;
     var e = nr == null ? null : Store.byNr(nr);
     $('#fmBereich').value = e ? e.bereich : (einzigerFilter('bereich') || Store.BEREICHE[0]);
@@ -791,6 +792,10 @@
     editBilder = e ? Store.clone(e.bilder) : [];
     renderEditBilder();
     $('#btnDelete').hidden = !e;
+    // Nur Lesezugriff: Felder sperren, Bilder bleiben per Klick vergroesserbar
+    var nurLesen = !Store.darf('bearbeiten');
+    $$('#formEdit input, #formEdit select, #formEdit textarea').forEach(function (f) { f.disabled = nurLesen; });
+    $('#fmBilder').closest('label').hidden = nurLesen;
 
     // Liste neu bilden, wenn sie fehlt oder veraltet ist (Karte nicht enthalten)
     if (e && editListe.indexOf(nr) < 0) {
@@ -863,7 +868,7 @@
       img.src = b.src;
       img.alt = b.name || '';
       img.addEventListener('click', function () { zeigeLightbox(editBilder, i); });
-      var x = el('button', null, '✕');
+      var x = el('button', 'nur-bearbeiten', '✕');
       x.type = 'button';
       x.title = T('Bild entfernen');
       x.addEventListener('click', function () { editBilder.splice(i, 1); renderEditBilder(); });
@@ -1035,43 +1040,70 @@
 
   /* --------------------------------------------------- Admin: Zugriff */
 
+  var ROLLEN_ANZEIGE = { lesen: 'Lesen', bearbeiten: 'Bearbeiten', admin: 'Admin' };
+
+  function adminAnfrage(method, pfad, daten) {
+    return fetch(pfad, {
+      method: method,
+      headers: daten ? { 'content-type': 'application/json' } : undefined,
+      body: daten ? JSON.stringify(daten) : undefined
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        if (!r.ok) {
+          var msg = T(d.error || 'unbekannter Fehler');
+          if (d.ungueltig && d.ungueltig.length) msg += ': ' + d.ungueltig.join(', ');
+          throw new Error(msg);
+        }
+        return d;
+      });
+    });
+  }
+
   function ladeAdminListe() {
     var box = $('#adminEmailListe');
     box.textContent = T('Lade …');
-    fetch('/api/admin/emails').then(function (r) {
-      if (!r.ok) {
-        return r.json().catch(function () { return {}; }).then(function (e) {
-          throw new Error('HTTP ' + r.status + ': ' + T(e.error || 'unbekannter Fehler'));
-        });
-      }
-      return r.json();
-    }).then(function (emails) {
-      box.textContent = '';
-      emails.forEach(function (email) {
-        var row = el('div');
-        row.style.display = 'flex';
-        row.style.alignItems = 'center';
-        row.style.gap = '8px';
-        row.appendChild(el('span', null, email));
-        var spacer = el('span'); spacer.style.flex = '1';
-        row.appendChild(spacer);
-        if (email !== 'david.rybinski@neura-robotics.com') {
-          var del = el('button', 'btn btn--ghost', T('✕ entfernen'));
-          del.type = 'button';
-          del.addEventListener('click', function () {
-            if (!confirm(T('{email} den Zugang entziehen?', { email: email }))) return;
-            fetch('/api/admin/emails/' + encodeURIComponent(email), { method: 'DELETE' })
-              .then(function (r) { return r.json(); })
-              .then(function () { ladeAdminListe(); toast(T('{email} entfernt.', { email: email })); })
-              .catch(function () { toast(T('Entfernen fehlgeschlagen.'), true); });
-          });
-          row.appendChild(del);
-        }
-        box.appendChild(row);
-      });
-    }).catch(function (err) {
+    adminAnfrage('GET', '/api/admin/emails').then(zeigeAdminListe).catch(function (err) {
       box.textContent = T('Konnte Liste nicht laden: {msg}', { msg: err.message });
     });
+  }
+
+  function zeigeAdminListe(liste) {
+    var box = $('#adminEmailListe');
+    box.textContent = '';
+    var je = { lesen: 0, bearbeiten: 0, admin: 0 };
+    liste.forEach(function (z) {
+      je[z.rolle]++;
+      var row = el('div', 'adminzeile');
+      row.appendChild(el('span', 'adminzeile__mail', z.email));
+      var sel = document.createElement('select');
+      Object.keys(ROLLEN_ANZEIGE).forEach(function (r) { sel.appendChild(new Option(T(ROLLEN_ANZEIGE[r]), r)); });
+      sel.value = z.rolle;
+      var istHaupt = z.email === 'david.rybinski@neura-robotics.com';
+      sel.disabled = istHaupt;
+      sel.title = istHaupt ? T('Haupt-Admin, nicht änderbar') : T('Rolle ändern');
+      sel.addEventListener('change', function () {
+        adminAnfrage('POST', '/api/admin/emails', { email: z.email, rolle: sel.value })
+          .then(function (l) { zeigeAdminListe(l); toast(T('{email}: Rolle {rolle}.', { email: z.email, rolle: T(ROLLEN_ANZEIGE[sel.value]) })); })
+          .catch(function (err) { toast(err.message, true); ladeAdminListe(); });
+      });
+      row.appendChild(sel);
+      if (!istHaupt) {
+        var del = el('button', 'btn btn--ghost', T('✕ entfernen'));
+        del.type = 'button';
+        del.addEventListener('click', function () {
+          if (!confirm(T('{email} den Zugang entziehen?', { email: z.email }))) return;
+          adminAnfrage('DELETE', '/api/admin/emails/' + encodeURIComponent(z.email))
+            .then(function (l) { zeigeAdminListe(l); toast(T('{email} entfernt.', { email: z.email })); })
+            .catch(function () { toast(T('Entfernen fehlgeschlagen.'), true); });
+        });
+        row.appendChild(del);
+      } else {
+        row.appendChild(el('span', 'adminzeile__platz'));
+      }
+      box.appendChild(row);
+    });
+    $('#adminZaehler').textContent = T('{n} Zugänge · {l} Lesen · {b} Bearbeiten · {a} Admin',
+      { n: liste.length, l: je.lesen, b: je.bearbeiten, a: je.admin });
   }
 
   function zeigeAdmin() {
@@ -1134,6 +1166,8 @@
     if (window.__OPL_LOGIN_USER) {
       Store.setUser(window.__OPL_LOGIN_USER);
     }
+    Store.setRolle(window.__OPL_ROLLE);
+    document.body.dataset.rolle = window.__OPL_ROLLE || 'bearbeiten';
     Store.subscribe(render);
     $('#userName').value = Store.state.user || '';
 
@@ -1175,7 +1209,6 @@
       });
     });
 
-    $('#userName').addEventListener('change', function (ev) { Store.setUser(ev.target.value.trim()); });
 
     // Dark Mode
     (function () {
@@ -1238,7 +1271,7 @@
       }
     });
 
-    if (window.__OPL_IS_ADMIN) {
+    if (Store.darf('admin')) {
       $('#btnAdminMenu').hidden = false;
       $('#adminMenuDivider').hidden = false;
     }
@@ -1246,19 +1279,13 @@
     $('#formAdminAdd').addEventListener('submit', function (ev) {
       ev.preventDefault();
       var input = $('#adminNeueEmail');
-      var email = input.value.trim().toLowerCase();
-      if (!email) return;
-      fetch('/api/admin/emails', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: email })
-      }).then(function (r) {
-        if (!r.ok) return r.json().then(function (e) { throw new Error(T(e.error || 'Fehler')); });
-        return r.json();
-      }).then(function () {
+      var emails = input.value.toLowerCase().split(/[\s,;]+/).filter(Boolean);
+      if (!emails.length) return;
+      var rolle = $('#adminNeueRolle').value;
+      adminAnfrage('POST', '/api/admin/emails', { emails: emails, rolle: rolle }).then(function (l) {
         input.value = '';
-        ladeAdminListe();
-        toast(T('{email} hinzugefügt.', { email: email }));
+        zeigeAdminListe(l);
+        toast(T('{n} Adresse(n) mit Rolle {rolle} freigeschaltet.', { n: emails.length, rolle: T(ROLLEN_ANZEIGE[rolle]) }));
       }).catch(function (err) {
         toast(err.message, true);
       });
