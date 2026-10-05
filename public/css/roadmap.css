@@ -1,0 +1,75 @@
+/* roadmap.css – Release-Board; Farben, Buttons, Chips und Dialoge kommen aus app.css */
+
+.topbar a.btn { text-decoration: none; }
+.rm-check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink-soft); white-space: nowrap; }
+
+.rm-board {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 14px 16px; overflow-x: auto; max-width: none;
+  min-height: calc(100vh - 190px);
+}
+
+.rm-col {
+  flex: 0 0 310px; display: flex; flex-direction: column;
+  max-height: calc(100vh - 170px);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  transition: border-color .12s, background .12s;
+}
+.rm-col--backlog { background: transparent; border-style: dashed; box-shadow: none; }
+.rm-col.is-over { border-color: var(--accent); border-style: solid; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+
+.rm-col__head { padding: 11px 12px 9px; border-bottom: 1px solid var(--line); }
+.rm-col__title { display: flex; align-items: center; gap: 8px; }
+.rm-col__title h2 { margin: 0; font-size: 16px; flex: 1; }
+.rm-col__sub { margin: 3px 0 0; font-size: 12px; color: var(--ink-soft); }
+.rm-col__desc { margin: 5px 0 0; font-size: 12.5px; color: var(--ink); white-space: pre-wrap; }
+.rm-col__stats { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 11.5px; color: var(--ink-soft); }
+.rm-col__stats .progress { flex: 1 1 auto; }
+.rm-col__body { padding: 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; min-height: 80px; }
+.rm-col__empty { padding: 22px 8px; text-align: center; font-size: 12.5px; color: var(--ink-soft); border: 1px dashed var(--line); border-radius: 8px; }
+
+.rm-badge { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; padding: 2px 7px; border-radius: 999px; background: var(--bg); color: var(--ink-soft); border: 1px solid var(--line); }
+.rm-badge--in-arbeit { background: var(--arbeit-bg); color: var(--mittel); border-color: transparent; }
+.rm-badge--freigegeben { background: var(--erledigt-bg); color: var(--niedrig); border-color: transparent; }
+.rm-badge--warn { background: var(--hoch-bg); color: var(--hoch); border-color: transparent; }
+
+.rm-card {
+  padding: 8px 9px 7px; background: var(--surface);
+  border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 8px;
+  cursor: grab; font-size: 13px;
+}
+.rm-col--backlog .rm-card { box-shadow: var(--shadow); }
+.rm-card:active { cursor: grabbing; }
+.rm-card.is-dragging { opacity: .4; }
+.rm-card.is-saving { opacity: .6; }
+.rm-card--hoch { border-left-color: var(--hoch); }
+.rm-card--mittel { border-left-color: var(--mittel); }
+.rm-card--niedrig { border-left-color: var(--niedrig); }
+.rm-card--erledigt { opacity: .65; }
+.rm-card--erledigt .rm-card__todo { text-decoration: line-through; text-decoration-color: rgba(0, 0, 0, .25); }
+
+.rm-card__top { display: flex; gap: 6px; align-items: baseline; }
+.rm-card__nr { font-size: 11px; font-weight: 700; color: var(--ink-soft); }
+.rm-card__thema { font-weight: 600; flex: 1; font-size: 12.5px; }
+.rm-card__todo {
+  margin: 3px 0 6px; color: var(--ink);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.rm-card:hover .rm-card__todo, .rm-card:focus-within .rm-card__todo { -webkit-line-clamp: unset; }
+.rm-card__meta { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 11px; }
+.rm-card__meta .chip { padding: 1px 7px; cursor: default; }
+.rm-card__move {
+  margin-left: auto; font-size: 11px; padding: 1px 4px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink-soft);
+}
+
+.rm-hint { margin: 0 16px 20px; font-size: 12px; color: var(--ink-soft); }
+
+.tr-banner a { color: inherit; font-weight: 700; }
+
+@media (max-width: 860px) {
+  .rm-board { flex-direction: column; align-items: stretch; overflow-x: visible; }
+  .rm-col { flex-basis: auto; max-height: none; }
+  .filterbar { position: static; }
+}

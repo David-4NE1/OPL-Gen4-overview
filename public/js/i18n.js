@@ -47,6 +47,8 @@
     '⬇ CSV-Export': '⬇ CSV export',
     '⬆ Excel-Import (.xlsx)': '⬆ Excel import (.xlsx)',
     '🕓 Änderungsprotokoll': '🕓 Change log',
+    '🗺 Roadmap / Releases': '🗺 Roadmap / releases',
+    'Release-Zuordnung in der Roadmap ändern': 'Change release assignment in the roadmap',
     '↺ Auf Excel-Startstand zurücksetzen': '↺ Reset to Excel baseline',
     '🔐 Zugriff verwalten': '🔐 Manage access',
     '🚪 Abmelden': '🚪 Sign out',

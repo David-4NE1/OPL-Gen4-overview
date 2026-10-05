@@ -105,6 +105,7 @@
       verantwortlicher: e.verantwortlicher || '',
       verantwortlichkeit: VERANTWORTLICHKEITEN.indexOf(e.verantwortlichkeit) >= 0 ? e.verantwortlichkeit : '',
       baugruppe: BAUGRUPPEN.indexOf(e.baugruppe) >= 0 ? e.baugruppe : '',
+      release: e.release || '',
       faellig: e.faellig || '',
       status: STATI.indexOf(e.status) >= 0 ? e.status : 'Offen',
       todo: e.todo || '',
@@ -310,7 +311,11 @@
     e.geaendertAm = jetzt();
     e.geaendertVon = state.user || 'unbekannt';
     commit();
-    syncToAPI('PUT', '/api/entries/' + nr, Object.assign({}, e, { user: state.user }));
+    var daten = Object.assign({}, e, { user: state.user });
+    // Release wird in der Roadmap gepflegt; ein evtl. veralteter lokaler Wert
+    // soll eine frische Zuordnung dort nicht ueberschreiben.
+    if (!('release' in patch)) delete daten.release;
+    syncToAPI('PUT', '/api/entries/' + nr, daten);
     return e;
   }
 
@@ -369,6 +374,7 @@
           n.erstelltAm = n.erstelltAm || vorhanden.erstelltAm || heute();
           n.verantwortlichkeit = n.verantwortlichkeit || vorhanden.verantwortlichkeit || teamStandard(n.verantwortlicher);
           n.baugruppe = n.baugruppe || vorhanden.baugruppe;
+          n.release = n.release || vorhanden.release;
           // Altes Freitext-Thema aus der Datei ueberschreibt kein gueltiges Thema
           if (!istThema(n.thema) && istThema(vorhanden.thema)) n.thema = vorhanden.thema;
           else themaEinordnen(n);

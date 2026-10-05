@@ -28,6 +28,12 @@ import { Buffer } from 'node:buffer';
  *   POST   /api/admin/emails      → E-Mail zur Freigabeliste hinzufuegen (nur Admin)
  *   DELETE /api/admin/emails/:e   → E-Mail von der Freigabeliste entfernen (nur Admin)
  *   POST   /api/translate         → Texte DE→EN maschinell uebersetzen (Workers AI, Cache in D1)
+ *   GET    /api/releases          → Releases fuer die Roadmap (Name, Zieltermin, Status, Beschreibung)
+ *   POST   /api/releases          → Release anlegen/aendern { name, ziel, status, beschreibung }
+ *   DELETE /api/releases/:name    → Release loeschen (zugeordnete Punkte werden wieder "nicht eingeplant")
+ *
+ * Die Zuordnung Punkt → Release steht als Feld "release" am Eintrag
+ * (PUT /api/entries/:nr { release: '4.0.2' }) und landet im Aenderungsprotokoll.
  *
  * Freigegebene E-Mail-Adressen liegen in der D1-Tabelle "allowed_emails"
  * (Migration: siehe migrations/002_allowed_emails.sql).
@@ -218,6 +224,10 @@ async function handleAPI(url, method, request, env) {
     return json(await listeEintraege(db));
   }
 
+  if (path === '/api/releases' || path.startsWith('/api/releases/')) {
+    return handleReleases(path, method, request, db);
+  }
+
   // GET /api/bild/:nr/:i
   const matchBild = path.match(/^\/api\/bild\/(\d+)\/(\d+)$/);
   if (matchBild && method === 'GET') {
@@ -256,7 +266,7 @@ async function handleAPI(url, method, request, env) {
     const now = new Date().toISOString();
 
     const changes = [];
-    for (const k of ['bereich','thema','prio','verantwortlicher','verantwortlichkeit','baugruppe','faellig','status','todo','notiz']) {
+    for (const k of ['bereich','thema','prio','verantwortlicher','verantwortlichkeit','baugruppe','release','faellig','status','todo','notiz']) {
       if (patch[k] !== undefined && patch[k] !== old[k]) {
         changes.push(`${k}: "${old[k] || '–'}" → "${patch[k] || '–'}"`);
       }
@@ -292,9 +302,12 @@ async function handleAPI(url, method, request, env) {
     for (const raw of entries) raw.bilder = await bilderAufloesen(db, raw.bilder);
 
     if (modus === 'ersetzen') {
+      // Die Excel kennt keine Releases: bisherige Zuordnung je Nr behalten
+      const { results: alt } = await db.prepare("SELECT nr, release FROM entries WHERE release <> ''").all();
+      const releaseAlt = new Map(alt.map(r => [r.nr, r.release]));
       await db.prepare('DELETE FROM entries').run();
       const stmts = entries.map(raw => {
-        const e = normalize({ ...raw, geaendertAm: now, geaendertVon: user || 'Excel-Import' });
+        const e = normalize({ ...raw, release: raw.release || releaseAlt.get(raw.nr), geaendertAm: now, geaendertVon: user || 'Excel-Import' });
         return insertStmt(db, e);
       });
       await db.batch(stmts);
@@ -305,8 +318,9 @@ async function handleAPI(url, method, request, env) {
     let neu = 0, aktualisiert = 0;
     const stmts = [];
     for (const raw of entries) {
-      const e = normalize({ ...raw, geaendertAm: now, geaendertVon: user || 'Excel-Import' });
-      const existing = await db.prepare('SELECT nr FROM entries WHERE nr = ?').bind(e.nr).first();
+      const existing = await db.prepare('SELECT nr, release FROM entries WHERE nr = ?').bind(raw.nr).first();
+      // Die Excel kennt keine Releases: bestehende Zuordnung behalten
+      const e = normalize({ ...raw, release: raw.release || existing?.release, geaendertAm: now, geaendertVon: user || 'Excel-Import' });
       if (existing) {
         stmts.push(updateStmt(db, e));
         aktualisiert++;
@@ -351,9 +365,67 @@ async function aenderungsStand(db) {
     `SELECT (SELECT COUNT(*) FROM entries) AS n,
             (SELECT MAX(geaendert_am) FROM entries) AS g,
             (SELECT MAX(id) FROM changelog) AS l,
-            (SELECT COUNT(*) FROM changelog) AS lc`
+            (SELECT COUNT(*) FROM changelog) AS lc,
+            (SELECT COUNT(*) || '/' || IFNULL(MAX(geaendert_am), '') FROM releases) AS r`
   ).first();
-  return [row.n, row.g || '', row.l || 0, row.lc].join('|');
+  return [row.n, row.g || '', row.l || 0, row.lc, row.r || ''].join('|');
+}
+
+/* ------------------------------------------------------------ Releases */
+
+const RELEASE_NAME = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+const RELEASE_STATI = ['Geplant', 'In Arbeit', 'Freigegeben'];
+
+function releaseName(v) {
+  const s = String(v == null ? '' : v).trim();
+  return RELEASE_NAME.test(s) ? s : '';
+}
+
+async function listeReleases(db) {
+  const { results } = await db.prepare(
+    'SELECT name, ziel, status, beschreibung, geaendert_am AS geaendertAm FROM releases'
+  ).all();
+  return results;
+}
+
+async function handleReleases(path, method, request, db) {
+  if (path === '/api/releases' && method === 'GET') {
+    return json(await listeReleases(db));
+  }
+
+  // POST /api/releases { name, ziel, status, beschreibung, user } – anlegen oder aendern
+  if (path === '/api/releases' && method === 'POST') {
+    const d = await request.json();
+    const name = releaseName(d.name);
+    if (!name) return json({ error: 'Release-Name im Format 4.0.1 angeben' }, 400);
+    const ziel = /^\d{4}-\d{2}-\d{2}$/.test(d.ziel || '') ? d.ziel : '';
+    const status = RELEASE_STATI.includes(d.status) ? d.status : 'Geplant';
+    const beschreibung = String(d.beschreibung || '').slice(0, 2000);
+    const vorher = await db.prepare('SELECT name FROM releases WHERE name = ?').bind(name).first();
+    await db.prepare(
+      `INSERT INTO releases (name, ziel, status, beschreibung, geaendert_am) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(name) DO UPDATE SET ziel = excluded.ziel, status = excluded.status,
+         beschreibung = excluded.beschreibung, geaendert_am = excluded.geaendert_am`
+    ).bind(name, ziel, status, beschreibung, new Date().toISOString()).run();
+    await logChange(db, 0, `Release ${name} ${vorher ? 'geändert' : 'angelegt'} (${status}${ziel ? ', Ziel ' + ziel : ''})`, d.user);
+    return json(await listeReleases(db));
+  }
+
+  // DELETE /api/releases/:name – zugeordnete Punkte fallen zurueck in "nicht eingeplant"
+  const m = path.match(/^\/api\/releases\/([^/]+)$/);
+  if (m && method === 'DELETE') {
+    const name = releaseName(decodeURIComponent(m[1]));
+    if (!name) return json({ error: 'Unbekanntes Release' }, 404);
+    const now = new Date().toISOString();
+    const { meta } = await db.prepare(
+      "UPDATE entries SET release = '', geaendert_am = ? WHERE release = ?"
+    ).bind(now, name).run();
+    await db.prepare('DELETE FROM releases WHERE name = ?').bind(name).run();
+    await logChange(db, 0, `Release ${name} gelöscht (${meta.changes || 0} Punkte wieder nicht eingeplant)`, 'unbekannt');
+    return json(await listeReleases(db));
+  }
+
+  return json({ error: 'Route nicht gefunden' }, 404);
 }
 
 /* -------------------------------------------------------------- Admin */
@@ -485,7 +557,7 @@ function mitBildVerweisen(e) {
 // D1 per JSON-Funktionen, damit der Worker die grossen Daten nie parsen muss.
 async function listeEintraege(db) {
   const { results } = await db.prepare(
-    `SELECT nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, faellig, status, todo, notiz,
+    `SELECT nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, release, faellig, status, todo, notiz,
             erstellt_am, geaendert_am, geaendert_von,
             (SELECT json_group_array(json_object(
                        'i', CAST(j.key AS INTEGER),
@@ -562,6 +634,25 @@ async function schemaSicherstellen(db) {
   } catch (err) {
     if (!/duplicate column/i.test(String(err && err.message))) throw err;
   }
+  try {
+    await db.prepare("ALTER TABLE entries ADD COLUMN release TEXT DEFAULT ''").run();
+  } catch (err) {
+    if (!/duplicate column/i.test(String(err && err.message))) throw err;
+  }
+  // Releases-Tabelle beim ersten Mal mit den Gen4-Releases vorbelegen;
+  // spaeter geloeschte Releases kommen dadurch nicht wieder.
+  const vorhanden = await db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'releases'"
+  ).first();
+  if (!vorhanden) {
+    await db.batch([
+      db.prepare(`CREATE TABLE IF NOT EXISTS releases (
+        name TEXT PRIMARY KEY, ziel TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'Geplant',
+        beschreibung TEXT NOT NULL DEFAULT '', geaendert_am TEXT NOT NULL DEFAULT '')`),
+      ...['4.0.1', '4.0.2', '4.0.3'].map(n =>
+        db.prepare('INSERT OR IGNORE INTO releases (name) VALUES (?)').bind(n))
+    ]);
+  }
   schemaOk = true;
 }
 
@@ -582,6 +673,7 @@ function normalize(e) {
     verantwortlicher: e.verantwortlicher || '',
     verantwortlichkeit: VERANTWORTLICHKEITEN.includes(e.verantwortlichkeit) ? e.verantwortlichkeit : '',
     baugruppe: BAUGRUPPEN.includes(e.baugruppe) ? e.baugruppe : '',
+    release: releaseName(e.release),
     faellig: e.faellig || '',
     status: STATI.includes(e.status) ? e.status : 'Offen',
     todo: e.todo || '',
@@ -604,6 +696,7 @@ function dbToEntry(row) {
     verantwortlicher: row.verantwortlicher,
     verantwortlichkeit: row.verantwortlichkeit || '',
     baugruppe: row.baugruppe || '',
+    release: row.release || '',
     faellig: row.faellig,
     status: row.status,
     todo: row.todo,
@@ -617,9 +710,9 @@ function dbToEntry(row) {
 
 function insertStmt(db, e) {
   return db.prepare(
-    `INSERT INTO entries (nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, faellig, status, todo, bilder, notiz, erstellt_am, geaendert_am, geaendert_von)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.faellig, e.status, e.todo,
+    `INSERT INTO entries (nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, release, faellig, status, todo, bilder, notiz, erstellt_am, geaendert_am, geaendert_von)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.release, e.faellig, e.status, e.todo,
          JSON.stringify(e.bilder), e.notiz, e.erstelltAm, e.geaendertAm, e.geaendertVon);
 }
 
@@ -629,11 +722,11 @@ function updateStmt(db, e) {
   // erstellt_am ist unveraenderlich, sobald gesetzt – ein leerer/fehlender
   // Wert in der DB wird aber mit dem mitgeschickten Wert aufgefuellt (Backfill).
   return db.prepare(
-    `UPDATE entries SET bereich=?, thema=?, prio=?, verantwortlicher=?, verantwortlichkeit=?, baugruppe=?, faellig=?, status=?, todo=?, bilder=?, notiz=?,
+    `UPDATE entries SET bereich=?, thema=?, prio=?, verantwortlicher=?, verantwortlichkeit=?, baugruppe=?, release=?, faellig=?, status=?, todo=?, bilder=?, notiz=?,
        erstellt_am = CASE WHEN erstellt_am IS NULL OR erstellt_am = '' THEN ? ELSE erstellt_am END,
        geaendert_am=?, geaendert_von=?
      WHERE nr=?`
-  ).bind(e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.faellig, e.status, e.todo,
+  ).bind(e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.release, e.faellig, e.status, e.todo,
          JSON.stringify(e.bilder), e.notiz, e.erstelltAm, e.geaendertAm, e.geaendertVon, e.nr);
 }
 

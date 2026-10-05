@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roadmap · 4NE1 Gen4</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#9679;</text></svg>">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/roadmap.css">
+<script>
+  try { var t = localStorage.getItem('opl.theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+</script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar__title">
+    <h1>Roadmap <span>·</span> 4NE1 Gen4</h1>
+    <p id="standLine">Release-Planung aus der Open Point List</p>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="topbar__actions">
+    <a class="btn btn--ghost" href="./">← OPL</a>
+    <button id="btnDark" class="btn btn--ghost" type="button" title="Dark / Light Mode">☀</button>
+    <button id="btnRelease" class="btn btn--primary" type="button">+ Release</button>
+    <div class="menu">
+      <button id="btnMenu" class="btn btn--ghost" type="button" aria-haspopup="true" aria-expanded="false" title="Mehr">⋯</button>
+      <div class="menu__panel" id="menuPanel" hidden>
+        <button type="button" data-act="notes">📋 Release-Notes kopieren (Markdown)</button>
+        <button type="button" data-act="csv">⬇ Roadmap als CSV</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="filterbar">
+  <input id="suche" class="search" type="search" placeholder="Suchen in Thema, To Do, Verantwortlicher …">
+  <select id="fBereich" class="select"><option value="">Alle Bereiche</option></select>
+  <select id="fBaugruppe" class="select"><option value="">Alle Baugruppen</option></select>
+  <select id="fPrio" class="select"><option value="">Alle Prios</option></select>
+  <select id="fTeam" class="select"><option value="">Alle Verantwortlichkeiten</option></select>
+  <label class="rm-check"><input type="checkbox" id="fErledigt" checked> Erledigte zeigen</label>
+  <button id="btnFilterReset" class="btn btn--ghost" type="button" hidden>Filter zurücksetzen</button>
+</section>
+
+<div id="modeBanner" class="tr-banner tr-banner--warn" hidden></div>
+
+<main id="board" class="rm-board" aria-live="polite"></main>
+
+<p class="rm-hint">Karten per Drag &amp; Drop in ein Release ziehen – oder über das Auswahlfeld unten auf der Karte zuordnen.
+  Jede Zuordnung wird direkt am OPL-Punkt gespeichert und im Änderungsprotokoll vermerkt.</p>
+
+<div id="toast" class="toast" hidden></div>
+
+<!-- Dialog: Release anlegen/bearbeiten -->
+<dialog id="dlgRelease" class="dialog">
+  <form id="formRelease" method="dialog">
+    <div class="dialog__nav"><h2 id="dlgReleaseTitle">Neues Release</h2></div>
+    <div class="grid2">
+      <label><span>Version</span>
+        <input name="name" id="rlName" type="text" required pattern="\d{1,3}\.\d{1,3}\.\d{1,3}" placeholder="z. B. 4.0.4" title="Format 4.0.4">
+      </label>
+      <label><span>Status</span>
+        <select name="status" id="rlStatus">
+          <option>Geplant</option><option>In Arbeit</option><option>Freigegeben</option>
+        </select>
+      </label>
+      <label><span>Zieltermin</span>
+        <input name="ziel" id="rlZiel" type="date">
+      </label>
+    </div>
+    <label><span>Beschreibung / Fokus</span>
+      <textarea name="beschreibung" id="rlBeschreibung" rows="3" placeholder="z. B. Montage-Optimierungen Bein, Kabelführung Torso"></textarea>
+    </label>
+    <footer class="dialog__footer">
+      <button type="button" id="btnReleaseDelete" class="btn btn--danger" hidden>Löschen</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn btn--ghost" data-close>Abbrechen</button>
+      <button type="submit" class="btn btn--primary">Speichern</button>
+    </footer>
+  </form>
+</dialog>
+
+<script src="js/seed.js"></script>
+<script src="js/roadmap.js"></script>
+</body>
+</html>
