@@ -42,14 +42,32 @@
   <select id="fPrio" class="select"><option value="">Alle Prios</option></select>
   <select id="fTeam" class="select"><option value="">Alle Verantwortlichkeiten</option></select>
   <label class="rm-check"><input type="checkbox" id="fErledigt" checked> Erledigte zeigen</label>
+  <button id="btnZone" class="btn btn--ghost" type="button" hidden title="Filter Körperzone entfernen"></button>
   <button id="btnFilterReset" class="btn btn--ghost" type="button" hidden>Filter zurücksetzen</button>
+  <div class="viewswitch" role="group" aria-label="Ansicht">
+    <button type="button" class="is-active" data-view="board" title="Board: Punkte je Release">▥ Board</button>
+    <button type="button" data-view="koerper" title="Körper: Punkte je Baugruppe und Seite">🤖 Körper</button>
+  </div>
 </section>
 
 <div id="modeBanner" class="tr-banner tr-banner--warn" hidden></div>
 
 <main id="board" class="rm-board" aria-live="polite"></main>
 
-<p class="rm-hint">Karten per Drag &amp; Drop in ein Release ziehen – oder über das Auswahlfeld unten auf der Karte zuordnen.
+<main id="koerper" class="rm-body" hidden>
+  <div class="rm-figure">
+    <div class="rm-relsel" id="relSel" role="group" aria-label="Release"></div>
+    <div class="rm-figure__wrap">
+      <img src="assets/img/4ne1-gen4-front.png" alt="4NE1 Gen4 Frontansicht" width="550" height="881">
+      <svg id="figSvg" viewBox="0 0 550 881" role="img" aria-label="Körperzonen"></svg>
+    </div>
+    <div class="rm-figure__extra" id="figExtra"></div>
+    <p class="rm-figure__note">Links/rechts aus Sicht des Roboters. Punkte ohne Seite zählen auf beiden Seiten.</p>
+  </div>
+  <aside class="rm-panel" id="zoneDetail"></aside>
+</main>
+
+<p class="rm-hint" id="boardHint">Karten per Drag &amp; Drop in ein Release ziehen – oder über das Auswahlfeld unten auf der Karte zuordnen.
   Jede Zuordnung wird direkt am OPL-Punkt gespeichert und im Änderungsprotokoll vermerkt.</p>
 
 <div id="toast" class="toast" hidden></div>

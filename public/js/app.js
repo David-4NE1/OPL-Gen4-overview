@@ -419,7 +419,7 @@
     meta.appendChild(tm);
 
     var bg = el('button', 'chip' + (e.baugruppe ? '' : ' chip--none'),
-      '📍 ' + (e.baugruppe ? T(e.baugruppe) : T('Baugruppe offen')));
+      '📍 ' + (e.baugruppe ? T(e.baugruppe) + (e.seite ? ' · ' + T(e.seite) : '') : T('Baugruppe offen')));
     bg.type = 'button';
     bg.title = T('Baugruppe setzen');
     bg.addEventListener('click', function () { oeffneEdit(e.nr, 'baugruppe'); });
@@ -671,6 +671,7 @@
     $('#fmVerant').value = e ? e.verantwortlicher : (Store.state.user || '');
     $('#fmTeam').value = e ? e.verantwortlichkeit : (filter.team && filter.team !== '(offen)' ? filter.team : '');
     $('#fmBaugruppe').value = e ? (e.baugruppe || '') : (filter.baugruppe && filter.baugruppe !== '(offen)' ? filter.baugruppe : '');
+    $('#fmSeite').value = e ? (e.seite || '') : '';
     $('#fmFaellig').value = e ? e.faellig : '';
     $('#fmTodo').value = e ? e.todo : '';
     $('#fmNotiz').value = e ? e.notiz : '';
@@ -712,6 +713,7 @@
       verantwortlicher: $('#fmVerant').value.trim(),
       verantwortlichkeit: $('#fmTeam').value || Store.teamStandard($('#fmVerant').value),
       baugruppe: $('#fmBaugruppe').value,
+      seite: $('#fmSeite').value,
       faellig: $('#fmFaellig').value,
       todo: $('#fmTodo').value.trim(),
       notiz: $('#fmNotiz').value.trim(),
@@ -1013,6 +1015,8 @@
       $('#fBaugruppe').appendChild(new Option(T(v), v));
     });
     $('#fBaugruppe').appendChild(new Option(T('(offen)'), '(offen)'));
+    $('#fmSeite').appendChild(new Option('–', ''));
+    Store.SEITEN.forEach(function (v) { $('#fmSeite').appendChild(new Option(T(v), v)); });
 
     Store.onError(function (msg) { toast(msg, true); });
     Store.onStatus(function (ok) { $('#offlineBanner').hidden = ok; });

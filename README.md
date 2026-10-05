@@ -72,8 +72,19 @@ Spalte **„Nicht eingeplant“** plus je Release eine Spalte (Start: 4.0.1, 4.0
 - Excel-Import überschreibt keine Release-Zuordnung (die Excel kennt das Feld nicht).
 - Ohne Server (Datei lokal geöffnet) läuft die Seite als Demo mit den Startdaten.
 
-Der Worker legt Spalte `release` und Tabelle `releases` beim ersten Aufruf selbst an
-(Dokumentation: `migrations/005_release.sql`).
+**Körperansicht** (Umschalter „🤖 Körper“): Frontansicht des 4NE1 Gen4
+(`assets/img/4ne1-gen4-front.png`) mit klickbaren Zonen – Kopf, Torso, Arm/Bein/Fuß je
+links und rechts, Pelvis/Hüfte. Die Zahl je Zone zeigt die Punkte für das gewählte
+Release (Alle / Nicht eingeplant / 4.0.x), rot = offene Prio-hoch-Punkte darunter.
+Daneben die Matrix **Zone × Release**; ein Klick auf eine Zone listet die Punkte, dort
+lassen sich Release und Seite direkt setzen. „Im Board zeigen“ filtert das Board auf
+die Zone.
+
+Die Seite kommt aus dem neuen OPL-Feld **Seite** (Links / Rechts / Beidseitig, aus Sicht
+des Roboters) im Bearbeiten-Dialog. Punkte ohne Seite zählen auf beiden Seiten.
+
+Der Worker legt die Spalten `release` und `seite` sowie die Tabelle `releases` beim
+ersten Aufruf selbst an (Dokumentation: `migrations/005_release.sql`, `006_seite.sql`).
 
 ## Excel-Export und -Import
 
