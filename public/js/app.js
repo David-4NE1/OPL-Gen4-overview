@@ -1279,7 +1279,10 @@
     $('#formAdminAdd').addEventListener('submit', function (ev) {
       ev.preventDefault();
       var input = $('#adminNeueEmail');
-      var emails = input.value.toLowerCase().split(/[\s,;]+/).filter(Boolean);
+      // Nur die Adressen herausziehen – so geht auch eine kopierte Outlook-Liste
+      // wie "Vorname Nachname <adresse>; ..."; Doppelte zaehlen einmal
+      var emails = (input.value.toLowerCase().match(/[^\s<>,;:"'()\[\]]+@[^\s<>,;:"'()\[\]]+/g) || [])
+        .filter(function (m, i, l) { return l.indexOf(m) === i; });
       if (!emails.length) return;
       var rolle = $('#adminNeueRolle').value;
       adminAnfrage('POST', '/api/admin/emails', { emails: emails, rolle: rolle }).then(function (l) {

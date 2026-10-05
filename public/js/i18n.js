@@ -41,7 +41,7 @@
     '{email}: Rolle {rolle}.': '{email}: role {rolle}.',
     '{n} Zugänge · {l} Lesen · {b} Bearbeiten · {a} Admin': '{n} accounts · {l} read · {b} edit · {a} admin',
     '{n} Adresse(n) mit Rolle {rolle} freigeschaltet.': '{n} address(es) enabled with role {rolle}.',
-    'Neue E-Mail-Adressen (eine pro Zeile, auch mit Komma oder Semikolon getrennt)': 'New email addresses (one per line, or separated by comma or semicolon)',
+    'Neue E-Mail-Adressen (beliebig getrennt, auch als Outlook-Liste „Name <adresse>; …“)': 'New email addresses (any separator, also an Outlook list "Name <address>; …")',
     'Höchstens 200 Adressen auf einmal': 'At most 200 addresses at once',
     'Nur diese E-Mail-Adressen (@neura-robotics.com) dürfen sich anmelden. <b>Lesen</b>: ansehen und exportieren · <b>Bearbeiten</b>: Punkte anlegen und ändern · <b>Admin</b>: zusätzlich löschen, Import „Ersetzen“, Zurücksetzen und Zugriff verwalten. Entfernen wirkt sofort.': 'Only these email addresses (@neura-robotics.com) can sign in. <b>Read</b>: view and export · <b>Edit</b>: create and change items · <b>Admin</b>: also delete, import "Replace", reset and manage access. Removal takes effect immediately.',
     'Fehler': 'Error',
