@@ -95,7 +95,8 @@ jobs:
 
       - name: Secret-Namen (ohne Werte)
         if: inputs.aktion == 'secrets-namen'
-        run: wrangler secret list | grep -o '"name": *"[^"]*"' || echo "keine Secrets gesetzt"
+        run: |
+          wrangler secret list | grep -o '"name": *"[^"]*"' || echo "keine Secrets gesetzt"
 
       - name: Time Travel Restore
         if: inputs.aktion == 'restore'
