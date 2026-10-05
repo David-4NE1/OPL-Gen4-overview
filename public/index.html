@@ -87,13 +87,13 @@
 
 <section class="filterbar">
   <input id="suche" class="search" type="search" placeholder="Suchen in Thema, To Do, Verantwortlicher …" data-i18n-ph>
-  <select id="fBereich" class="select"><option value="" data-i18n>Alle Bereiche</option></select>
-  <select id="fThema" class="select"><option value="" data-i18n>Alle Themen</option></select>
-  <select id="fPrio" class="select"><option value="" data-i18n>Alle Prios</option></select>
-  <select id="fStatus" class="select"><option value="" data-i18n>Alle Status</option></select>
-  <select id="fVerant" class="select"><option value="" data-i18n>Alle Verantwortlichen</option></select>
-  <select id="fTeam" class="select"><option value="" data-i18n>Alle Verantwortlichkeiten</option></select>
-  <select id="fBaugruppe" class="select"><option value="" data-i18n>Alle Baugruppen</option></select>
+  <div id="fBereich" class="msel" data-alle="Alle Bereiche"></div>
+  <div id="fThema" class="msel" data-alle="Alle Themen"></div>
+  <div id="fPrio" class="msel" data-alle="Alle Prios"></div>
+  <div id="fStatus" class="msel" data-alle="Alle Status"></div>
+  <div id="fVerant" class="msel" data-alle="Alle Verantwortlichen"></div>
+  <div id="fTeam" class="msel" data-alle="Alle Verantwortlichkeiten"></div>
+  <div id="fBaugruppe" class="msel" data-alle="Alle Baugruppen"></div>
   <div class="viewswitch" role="group" aria-label="Ansicht" data-i18n-aria>
     <button type="button" class="is-active" data-view="karten" title="Karten-Ansicht" data-i18n-title>▤</button>
     <button type="button" data-view="tabelle" title="Tabellen-Ansicht" data-i18n-title>☰</button>
