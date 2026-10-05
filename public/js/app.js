@@ -17,7 +17,13 @@
   var erledigtOffen = false;
   var importPuffer = null;
 
-  var filter = { suche: '', bereich: '', thema: '', prio: '', status: '', verant: '', team: '', baugruppe: '' };
+  // Auswahlfilter sind Listen (Mehrfachauswahl), leere Liste = alle
+  var FILTER_FELDER = [['#fBereich', 'bereich'], ['#fThema', 'thema'], ['#fPrio', 'prio'], ['#fStatus', 'status'],
+    ['#fVerant', 'verant'], ['#fTeam', 'team'], ['#fBaugruppe', 'baugruppe']];
+  function leererFilter() {
+    return { suche: '', bereich: [], thema: [], prio: [], status: [], verant: [], team: [], baugruppe: [] };
+  }
+  var filter = leererFilter();
 
   var PRIO_RANK = { 'Hoch': 0, 'Mittel': 1, 'Niedrig': 2 };
   var STATUS_RANK = { 'Offen': 0, 'In Arbeit': 1, 'Erledigt': 2 };
@@ -179,16 +185,13 @@
   /* ------------------------------------------------------- Filter/Sort */
 
   function sichtbar(e) {
-    if (filter.bereich && e.bereich !== filter.bereich) return false;
-    if (filter.thema === '(offen)' ? Store.istThema(e.thema) : (filter.thema && e.thema !== filter.thema)) return false;
-    if (filter.prio && e.prio !== filter.prio) return false;
-    if (filter.status && e.status !== filter.status) return false;
-    if (filter.verant) {
-      var v = e.verantwortlicher || '(offen)';
-      if (v !== filter.verant) return false;
-    }
-    if (filter.team && (e.verantwortlichkeit || '(offen)') !== filter.team) return false;
-    if (filter.baugruppe && (e.baugruppe || '(offen)') !== filter.baugruppe) return false;
+    if (!trifft(filter.bereich, e.bereich)) return false;
+    if (!trifft(filter.thema, Store.istThema(e.thema) ? e.thema : '(offen)')) return false;
+    if (!trifft(filter.prio, e.prio)) return false;
+    if (!trifft(filter.status, e.status)) return false;
+    if (!trifft(filter.verant, e.verantwortlicher || '(offen)')) return false;
+    if (!trifft(filter.team, e.verantwortlichkeit || '(offen)')) return false;
+    if (!trifft(filter.baugruppe, e.baugruppe || '(offen)')) return false;
     if (quick === 'offen' && e.status === 'Erledigt') return false;
     if (quick === 'erledigt' && e.status !== 'Erledigt') return false;
     if (quick === 'hoch' && !(e.prio === 'Hoch' && e.status !== 'Erledigt')) return false;
@@ -204,8 +207,18 @@
     return true;
   }
 
+  function trifft(liste, wert) {
+    return !liste.length || liste.indexOf(wert) >= 0;
+  }
+
   function filterAktiv() {
-    return !!(filter.suche || filter.bereich || filter.thema || filter.prio || filter.status || filter.verant || filter.team || filter.baugruppe || quick);
+    return !!(filter.suche || quick || FILTER_FELDER.some(function (f) { return filter[f[1]].length; }));
+  }
+
+  // Vorbelegung fuer neue Karten: nur wenn genau ein Wert gefiltert ist
+  function einzigerFilter(key) {
+    var l = filter[key];
+    return l.length === 1 && l[0] !== '(offen)' ? l[0] : '';
   }
 
   function sortiereKarten(a, b) {
@@ -239,6 +252,7 @@
   function renderInhalt() {
     var alle = Store.state.entries;
     renderKpis(alle);
+    mselFesteOptionen();
     fuelleThemaFilter(alle);
     fuelleVerantFilter(alle);
     var istAktiv = filterAktiv();
@@ -253,13 +267,18 @@
         var ql = { offen: 'Offen', erledigt: 'Erledigt', hoch: 'Prio Hoch', mittel: 'Prio Mittel', niedrig: 'Prio Niedrig', ueberfaellig: 'Überfällig' };
         teile.push(T(ql[quick] || quick));
       }
-      if (filter.bereich) teile.push(T('Bereich: {v}', { v: T(filter.bereich) }));
-      if (filter.thema) teile.push(T('Thema: {v}', { v: filter.thema === '(offen)' ? T('(nicht zugeordnet)') : T(filter.thema) }));
-      if (filter.prio) teile.push(T('Prio: {v}', { v: T(filter.prio) }));
-      if (filter.status) teile.push(T('Status: {v}', { v: T(filter.status) }));
-      if (filter.verant) teile.push(T('Verantwortlich: {v}', { v: T(filter.verant) }));
-      if (filter.team) teile.push(T('Verantwortlichkeit: {v}', { v: T(filter.team) }));
-      if (filter.baugruppe) teile.push(T('Baugruppe: {v}', { v: T(filter.baugruppe) }));
+      var werte = function (key) {
+        return filter[key].map(function (v) {
+          return key === 'thema' && v === '(offen)' ? T('(nicht zugeordnet)') : T(v);
+        }).join(' / ');
+      };
+      if (filter.bereich.length) teile.push(T('Bereich: {v}', { v: werte('bereich') }));
+      if (filter.thema.length) teile.push(T('Thema: {v}', { v: werte('thema') }));
+      if (filter.prio.length) teile.push(T('Prio: {v}', { v: werte('prio') }));
+      if (filter.status.length) teile.push(T('Status: {v}', { v: werte('status') }));
+      if (filter.verant.length) teile.push(T('Verantwortlich: {v}', { v: werte('verant') }));
+      if (filter.team.length) teile.push(T('Verantwortlichkeit: {v}', { v: werte('team') }));
+      if (filter.baugruppe.length) teile.push(T('Baugruppe: {v}', { v: werte('baugruppe') }));
       if (filter.suche) teile.push(T('Suche: "{v}"', { v: filter.suche }));
       $('#filterBannerText').textContent = T('Zeige {n} von {gesamt} Punkten — {teile}',
         { n: liste.length, gesamt: alle.length, teile: teile.join(', ') });
@@ -561,16 +580,10 @@
   }
 
   function fuelleVerantFilter(alle) {
-    var sel = $('#fVerant');
     var namen = {};
     alle.forEach(function (e) { namen[e.verantwortlicher || '(offen)'] = true; });
     var liste = Object.keys(namen).sort();
-    var aktuell = filter.verant;
-    sel.textContent = '';
-    sel.appendChild(new Option(T('Alle Verantwortlichen'), ''));
-    liste.forEach(function (n) { sel.appendChild(new Option(T(n), n)); });
-    sel.value = liste.indexOf(aktuell) >= 0 ? aktuell : '';
-    if (sel.value !== aktuell) filter.verant = sel.value;
+    mselOptionen('#fVerant', 'verant', liste.map(function (n) { return [n, T(n)]; }));
 
     var dl = $('#personen');
     dl.textContent = '';
@@ -579,15 +592,94 @@
   }
 
   function fuelleThemaFilter(alle) {
-    var sel = $('#fThema');
-    var aktuell = filter.thema;
     var ohne = alle.filter(function (e) { return !Store.istThema(e.thema); }).length;
-    sel.textContent = '';
-    sel.appendChild(new Option(T('Alle Themen'), ''));
-    Store.THEMEN.forEach(function (t) { sel.appendChild(new Option(T(t), t)); });
-    if (ohne) sel.appendChild(new Option(T('(nicht zugeordnet)') + ' · ' + ohne, '(offen)'));
-    sel.value = aktuell;
-    if (sel.value !== aktuell) { sel.value = ''; filter.thema = ''; }
+    var opts = Store.THEMEN.map(function (t) { return [t, T(t)]; });
+    if (ohne) opts.push(['(offen)', T('(nicht zugeordnet)') + ' · ' + ohne]);
+    mselOptionen('#fThema', 'thema', opts);
+  }
+
+  /* ------------------------------------------------- Mehrfachauswahl */
+
+  // Filter-Dropdown mit Haekchen. Die Auswahl steht in filter[key].
+  function mselBauen(id, key) {
+    var box = $(id);
+    var btn = el('button', 'select msel__btn');
+    btn.type = 'button';
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+    var panel = el('div', 'msel__panel');
+    panel.hidden = true;
+    var liste = el('div', 'msel__liste');
+    var leeren = el('button', 'msel__leeren', T('Auswahl aufheben'));
+    leeren.type = 'button';
+    panel.appendChild(liste);
+    panel.appendChild(leeren);
+    box.textContent = '';
+    box.appendChild(btn);
+    box.appendChild(panel);
+    box.dataset.key = key;
+
+    btn.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var auf = panel.hidden;
+      mselAlleZu();
+      panel.hidden = !auf;
+      btn.setAttribute('aria-expanded', String(auf));
+    });
+    panel.addEventListener('click', function (ev) { ev.stopPropagation(); });
+    liste.addEventListener('change', function () {
+      filter[key] = $$('input:checked', liste).map(function (c) { return c.value; });
+      render();
+    });
+    leeren.addEventListener('click', function () {
+      filter[key] = [];
+      render();
+    });
+  }
+
+  function mselAlleZu() {
+    $$('.msel__panel').forEach(function (p) { p.hidden = true; });
+    $$('.msel__btn').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
+  }
+
+  // optionen: [[wert, anzeige], ...]; Auswahlen, die es nicht mehr gibt, fallen weg
+  function mselOptionen(id, key, optionen) {
+    var box = $(id);
+    var liste = $('.msel__liste', box);
+    var werte = optionen.map(function (o) { return o[0]; });
+    filter[key] = filter[key].filter(function (v) { return werte.indexOf(v) >= 0; });
+    var sig = JSON.stringify(optionen);
+    if (box.dataset.sig !== sig) {
+      box.dataset.sig = sig;
+      liste.textContent = '';
+      optionen.forEach(function (o) {
+        var lab = el('label', 'msel__opt');
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = o[0];
+        lab.appendChild(cb);
+        lab.appendChild(el('span', null, o[1]));
+        liste.appendChild(lab);
+      });
+    }
+    $$('input', liste).forEach(function (cb) { cb.checked = filter[key].indexOf(cb.value) >= 0; });
+    var gewaehlt = optionen.filter(function (o) { return filter[key].indexOf(o[0]) >= 0; });
+    var btn = $('.msel__btn', box);
+    btn.textContent = !gewaehlt.length ? T(box.dataset.alle)
+      : gewaehlt[0][1] + (gewaehlt.length > 1 ? ' +' + (gewaehlt.length - 1) : '');
+    btn.classList.toggle('is-active', gewaehlt.length > 0);
+    btn.title = gewaehlt.map(function (o) { return o[1]; }).join(', ');
+    $('.msel__leeren', box).hidden = !gewaehlt.length;
+  }
+
+  function mselFesteOptionen() {
+    mselOptionen('#fBereich', 'bereich', Store.BEREICHE.map(function (b) { return [b, T(b)]; }));
+    mselOptionen('#fPrio', 'prio', Store.PRIOS.map(function (p) { return [p, T(p)]; }));
+    mselOptionen('#fStatus', 'status', Store.STATI.map(function (p) { return [p, T(p)]; }));
+    mselOptionen('#fTeam', 'team', Store.VERANTWORTLICHKEITEN.map(function (v) { return [v, T(v)]; })
+      .concat([['(offen)', T('(offen)')]]));
+    mselOptionen('#fBaugruppe', 'baugruppe', Store.BAUGRUPPEN.map(function (v) { return [v, T(v)]; })
+      .concat([['(offen)', T('(offen)')]]));
   }
 
   /* ---------------------------------------------------------- Lightbox */
@@ -664,13 +756,13 @@
   function oeffneEdit(nr, fokus) {
     editNr = nr == null ? null : nr;
     var e = nr == null ? null : Store.byNr(nr);
-    $('#fmBereich').value = e ? e.bereich : (filter.bereich || Store.BEREICHE[0]);
-    themaAuswahl(e ? e.thema : (Store.istThema(filter.thema) ? filter.thema : ''));
+    $('#fmBereich').value = e ? e.bereich : (einzigerFilter('bereich') || Store.BEREICHE[0]);
+    themaAuswahl(e ? e.thema : einzigerFilter('thema'));
     $('#fmPrio').value = e ? e.prio : 'Mittel';
     $('#fmStatus').value = e ? e.status : 'Offen';
     $('#fmVerant').value = e ? e.verantwortlicher : (Store.state.user || '');
-    $('#fmTeam').value = e ? e.verantwortlichkeit : (filter.team && filter.team !== '(offen)' ? filter.team : '');
-    $('#fmBaugruppe').value = e ? (e.baugruppe || '') : (filter.baugruppe && filter.baugruppe !== '(offen)' ? filter.baugruppe : '');
+    $('#fmTeam').value = e ? e.verantwortlichkeit : einzigerFilter('team');
+    $('#fmBaugruppe').value = e ? (e.baugruppe || '') : einzigerFilter('baugruppe');
     $('#fmSeite').value = e ? (e.seite || '') : '';
     $('#fmFaellig').value = e ? e.faellig : '';
     $('#fmTodo').value = e ? e.todo : '';
@@ -1000,21 +1092,15 @@
     fuelleSelect($('#fmBereich'), Store.BEREICHE);
     fuelleSelect($('#fmPrio'), Store.PRIOS);
     fuelleSelect($('#fmStatus'), Store.STATI);
-    Store.BEREICHE.forEach(function (b) { $('#fBereich').appendChild(new Option(b, b)); });
-    Store.PRIOS.forEach(function (p) { $('#fPrio').appendChild(new Option(p, p)); });
-    Store.STATI.forEach(function (s) { $('#fStatus').appendChild(new Option(s, s)); });
+    FILTER_FELDER.forEach(function (f) { mselBauen(f[0], f[1]); });
     $('#fmTeam').appendChild(new Option(T('– offen –'), ''));
     Store.VERANTWORTLICHKEITEN.forEach(function (v) {
       $('#fmTeam').appendChild(new Option(T(v), v));
-      $('#fTeam').appendChild(new Option(T(v), v));
     });
-    $('#fTeam').appendChild(new Option(T('(offen)'), '(offen)'));
     $('#fmBaugruppe').appendChild(new Option(T('– offen –'), ''));
     Store.BAUGRUPPEN.forEach(function (v) {
       $('#fmBaugruppe').appendChild(new Option(T(v), v));
-      $('#fBaugruppe').appendChild(new Option(T(v), v));
     });
-    $('#fBaugruppe').appendChild(new Option(T('(offen)'), '(offen)'));
     $('#fmSeite').appendChild(new Option('–', ''));
     Store.SEITEN.forEach(function (v) { $('#fmSeite').appendChild(new Option(T(v), v)); });
 
@@ -1034,18 +1120,17 @@
       var v = ev.target.value.trim().toLowerCase();
       t = setTimeout(function () { filter.suche = v; render(); }, 120);
     });
-    [['#fBereich', 'bereich'], ['#fThema', 'thema'], ['#fPrio', 'prio'], ['#fStatus', 'status'], ['#fVerant', 'verant'], ['#fTeam', 'team'], ['#fBaugruppe', 'baugruppe']]
-      .forEach(function (pair) {
-        $(pair[0]).addEventListener('change', function (ev) {
-          filter[pair[1]] = ev.target.value;
-          render();
-        });
-      });
+    document.addEventListener('click', mselAlleZu);
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Escape') return;
+      var offen = $$('.msel__panel').filter(function (p) { return !p.hidden; })[0];
+      if (offen) offen.parentNode.querySelector('.msel__btn').focus();
+      mselAlleZu();
+    });
     function resetFilter() {
-      filter = { suche: '', bereich: '', thema: '', prio: '', status: '', verant: '', team: '', baugruppe: '' };
+      filter = leererFilter();
       quick = null;
       $('#suche').value = '';
-      ['#fBereich', '#fThema', '#fPrio', '#fStatus', '#fVerant', '#fTeam', '#fBaugruppe'].forEach(function (s) { $(s).value = ''; });
       render();
     }
     $('#btnFilterReset').addEventListener('click', resetFilter);

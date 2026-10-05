@@ -66,6 +66,7 @@
     'Alle Verantwortlichen': 'All owners',
     'Alle Verantwortlichkeiten': 'All responsibilities',
     'Alle Baugruppen': 'All assemblies',
+    'Auswahl aufheben': 'Clear selection',
     // Feste Themen und Baugruppen
     'Thema': 'Topic',
     'Baugruppe': 'Assembly',

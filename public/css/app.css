@@ -190,6 +190,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .search { flex: 1 1 240px; min-width: 180px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
 .select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.msel { position: relative; }
+.msel__btn { cursor: pointer; text-align: left; max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msel__btn::after { content: " ▾"; color: var(--ink-soft); }
+.msel__btn.is-active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 600; }
+.msel__panel {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 40;
+  min-width: 220px; max-height: 360px; overflow: auto; padding: 6px;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.15);
+}
+.msel__opt { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.msel__opt:hover { background: var(--bg); }
+.msel__leeren { width: 100%; margin-top: 4px; padding: 6px 8px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--accent); cursor: pointer; text-align: left; }
 .filterbar .btn--ghost { background: var(--bg); color: var(--ink); border-color: var(--line); }
 
 .viewswitch { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
