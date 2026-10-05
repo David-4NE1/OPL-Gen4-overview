@@ -11,6 +11,7 @@ name: D1 Wartung (Diagnose / Time Travel)
 #           Rueckgaengig per restore auf den Zeitpunkt vor dem Lauf.
 # verantwortlichkeit-standard: fuellt leere Verantwortlichkeiten nach Person (.github/d1/verantwortlichkeit-standard.sql).
 # owner-stand: zaehlt Punkte ohne Owner bzw. Termin (.github/d1/owner-stand.sql), nur Zaehlungen.
+# secrets-namen: listet nur die NAMEN der Worker-Secrets (keine Werte), z. B. ob OPL_PASSWORD gesetzt ist.
 # nacharbeit-zuordnen: setzt Re-Milling/Modification fuer die Nacharbeits-Punkte (.github/d1/nacharbeit-zuordnen.sql), nur leere Felder.
 
 on:
@@ -21,7 +22,7 @@ on:
         required: true
         default: diagnose
         type: choice
-        options: [diagnose, restore, bilder-diagnose, bilder-duplikate-entfernen, themen-umstellen, verantwortlichkeit-standard, owner-stand, nacharbeit-zuordnen]
+        options: [diagnose, restore, bilder-diagnose, bilder-duplikate-entfernen, themen-umstellen, verantwortlichkeit-standard, owner-stand, nacharbeit-zuordnen, secrets-namen]
       zeitpunkt:
         description: 'Nur fuer restore: Zeitpunkt in UTC (RFC3339), z. B. 2026-10-02T08:35:00Z'
         required: false
@@ -91,6 +92,10 @@ jobs:
             wrangler d1 execute opl-gen4 --remote --command "ALTER TABLE entries ADD COLUMN nacharbeit TEXT DEFAULT ''"
           wrangler d1 execute opl-gen4 --remote --command "$(grep -v '^--' .github/d1/nacharbeit-zuordnen.sql)"
           wrangler d1 execute opl-gen4 --remote --command "SELECT nacharbeit, COUNT(*) AS anzahl FROM entries GROUP BY nacharbeit ORDER BY anzahl DESC"
+
+      - name: Secret-Namen (ohne Werte)
+        if: inputs.aktion == 'secrets-namen'
+        run: wrangler secret list | grep -o '"name": *"[^"]*"' || echo "keine Secrets gesetzt"
 
       - name: Time Travel Restore
         if: inputs.aktion == 'restore'
