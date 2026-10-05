@@ -228,7 +228,9 @@
   // Gepollt wird nur der kleine Aenderungsstand (/api/stand); die volle Liste
   // kommt nur, wenn er sich geaendert hat. Sonst kostet jede Abfrage im Worker
   // so viel CPU-Zeit, dass das Cloudflare-Free-Tier-Limit (10 ms) reisst.
-  var POLL_MS = 10000;
+  // 30 s statt 10 s: bei ~60 Nutzern bleibt die Zahl der Anfragen pro Tag
+  // im Rahmen des Free-Tiers; beim Zurueckwechseln in den Tab wird sofort geprueft.
+  var POLL_MS = 30000;
   var pollTimer = null;
   var letzterStand = null;
 

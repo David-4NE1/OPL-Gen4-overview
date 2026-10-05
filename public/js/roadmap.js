@@ -21,7 +21,7 @@
   var RELEASE_STATI = ['Geplant', 'In Arbeit', 'Freigegeben'];
   var STANDARD_RELEASES = ['4.0.1', '4.0.2', '4.0.3'];
   var DEMO_KEY = 'opl.roadmap.demo.v1';
-  var POLL_MS = 10000;
+  var POLL_MS = 30000; // wie in store.js
 
   var SEITEN = ['Links', 'Rechts', 'Beidseitig'];
   var PAARIG = ['Arm', 'Bein', 'Fuß'];
