@@ -90,6 +90,8 @@
     'Alle Verantwortlichkeiten': 'All responsibilities',
     'Alle Baugruppen': 'All assemblies',
     'Auswahl aufheben': 'Clear selection',
+    'Filter': 'Filters',
+    'Foto aufnehmen oder Bild wählen': 'Take a photo or choose an image',
     'Nacharbeit': 'Rework',
     'Nacharbeit am Teil': 'Rework on part',
     'Nacharbeit: {v}': 'Rework: {v}',

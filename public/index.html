@@ -87,6 +87,11 @@
 
 <section class="filterbar">
   <input id="suche" class="search" type="search" placeholder="Suchen in Thema, To Do, Verantwortlicher …" data-i18n-ph>
+  <!-- nur auf dem Smartphone sichtbar: klappt die Auswahlfilter auf -->
+  <button id="btnFilterToggle" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filterAuswahl">
+    <span data-i18n>Filter</span> <span id="filterZahl" class="filter-toggle__zahl" hidden></span>
+  </button>
+  <div id="filterAuswahl" class="filterbar__auswahl">
   <div id="fBereich" class="msel" data-alle="Alle Bereiche"></div>
   <div id="fThema" class="msel" data-alle="Alle Themen"></div>
   <div id="fPrio" class="msel" data-alle="Alle Prios"></div>
@@ -95,6 +100,7 @@
   <div id="fTeam" class="msel" data-alle="Alle Verantwortlichkeiten"></div>
   <div id="fBaugruppe" class="msel" data-alle="Alle Baugruppen"></div>
   <div id="fNacharbeit" class="msel" data-alle="Nacharbeit"></div>
+  </div>
   <div class="viewswitch" role="group" aria-label="Ansicht" data-i18n-aria>
     <button type="button" class="is-active" data-view="karten" title="Karten-Ansicht" data-i18n-title>▤</button>
     <button type="button" data-view="tabelle" title="Tabellen-Ansicht" data-i18n-title>☰</button>
@@ -111,6 +117,9 @@
 <div id="trBanner" class="tr-banner" hidden></div>
 
 <main id="content"></main>
+
+<!-- Smartphone: schneller Zugriff auf "Neuer Punkt" -->
+<button id="btnNeuFab" class="fab nur-bearbeiten" type="button" aria-label="Neuer Punkt" title="Neuer Punkt" data-i18n-title data-i18n-aria>+</button>
 
 <div id="toast" class="toast" hidden></div>
 
@@ -131,45 +140,45 @@
     </div>
     <p id="fmLangHint" class="hint" hidden data-i18n>Inhalte werden auf Deutsch gespeichert – bitte auf Deutsch eintragen. Hier steht der Originaltext.</p>
     <div class="grid2">
-      <label><span data-i18n>Bereich</span>
+      <label class="f-bereich"><span data-i18n>Bereich</span>
         <select name="bereich" id="fmBereich" required></select>
       </label>
-      <label><span data-i18n>Thema</span>
+      <label class="f-thema"><span data-i18n>Thema</span>
         <select name="thema" id="fmThema" required></select>
       </label>
-      <label><span data-i18n>Prio</span>
+      <label class="f-prio"><span data-i18n>Prio</span>
         <select name="prio" id="fmPrio"></select>
       </label>
-      <label><span data-i18n>Status</span>
+      <label class="f-status"><span data-i18n>Status</span>
         <select name="status" id="fmStatus"></select>
       </label>
-      <label><span data-i18n>Verantwortlicher</span>
+      <label class="f-verant"><span data-i18n>Verantwortlicher</span>
         <input name="verantwortlicher" id="fmVerant" type="text" list="personen" placeholder="z. B. Thorsten Grelle" data-i18n-ph>
         <datalist id="personen"></datalist>
       </label>
-      <label><span data-i18n>Bis wann</span>
+      <label class="f-faellig"><span data-i18n>Bis wann</span>
         <input name="faellig" id="fmFaellig" type="date">
       </label>
-      <label><span data-i18n>Verantwortlichkeit</span>
+      <label class="f-team"><span data-i18n>Verantwortlichkeit</span>
         <select name="verantwortlichkeit" id="fmTeam"></select>
       </label>
-      <label><span data-i18n>Baugruppe</span>
+      <label class="f-baugruppe"><span data-i18n>Baugruppe</span>
         <select name="baugruppe" id="fmBaugruppe"></select>
       </label>
-      <label><span data-i18n>Seite (aus Sicht des Roboters)</span>
+      <label class="f-seite"><span data-i18n>Seite (aus Sicht des Roboters)</span>
         <select name="seite" id="fmSeite"></select>
       </label>
-      <label><span data-i18n>Nacharbeit am Teil</span>
+      <label class="f-nacharbeit"><span data-i18n>Nacharbeit am Teil</span>
         <select name="nacharbeit" id="fmNacharbeit"></select>
       </label>
     </div>
-    <label><span data-i18n>To Do</span>
+    <label class="f-todo"><span data-i18n>To Do</span>
       <textarea name="todo" id="fmTodo" rows="5" placeholder="Konkrete Beschreibung der Aufgabe" data-i18n-ph></textarea>
     </label>
-    <label><span data-i18n>Notiz zur Bildspalte (Excel, Spalte „Bild“)</span>
+    <label class="f-notiz"><span data-i18n>Notiz zur Bildspalte (Excel, Spalte „Bild“)</span>
       <input name="notiz" id="fmNotiz" type="text" placeholder="z. B. s. Anhang Thorsten (2 Bilder)" data-i18n-ph>
     </label>
-    <label><span data-i18n>Bilder</span>
+    <label class="f-bilder"><span data-i18n>Bilder</span>
       <input id="fmBilder" type="file" accept="image/*" multiple>
     </label>
     <div id="fmBilderListe" class="thumbrow"></div>
