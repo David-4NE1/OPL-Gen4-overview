@@ -261,6 +261,10 @@
     fuelleVerantFilter(alle);
     var istAktiv = filterAktiv();
     $('#btnFilterReset').hidden = !istAktiv;
+    // Smartphone: Zahl der aktiven Auswahlfilter am Knopf "Filter"
+    var nAuswahl = FILTER_FELDER.filter(function (f) { return filter[f[1]].length; }).length;
+    $('#filterZahl').textContent = nAuswahl;
+    $('#filterZahl').hidden = !nAuswahl;
 
     var liste = alle.filter(sichtbar);
 
@@ -1294,8 +1298,18 @@
       });
     });
 
-    // Neuer Punkt
+    // Neuer Punkt (oben bzw. runder Knopf auf dem Smartphone)
     $('#btnNeu').addEventListener('click', function () { oeffneEdit(null); });
+    $('#btnNeuFab').addEventListener('click', function () { oeffneEdit(null); });
+
+    // Smartphone: Auswahlfilter auf- und zuklappen
+    $('#btnFilterToggle').addEventListener('click', function () {
+      var bar = $('.filterbar');
+      var auf = !bar.classList.contains('is-offen');
+      bar.classList.toggle('is-offen', auf);
+      this.setAttribute('aria-expanded', String(auf));
+      if (!auf) mselAlleZu();
+    });
 
     // Edit-Dialog
     $('#fmThema').addEventListener('change', aktualisiereEditTitel);
