@@ -20,7 +20,7 @@
     <form id="loginForm">
       <label for="loginEmail" data-i18n>E-Mail</label>
       <input id="loginEmail" type="email" required placeholder="vorname.nachname@neura-robotics.com" autocomplete="email" autofocus
-             pattern=".+@neura-robotics\.com$" title="Nur @neura-robotics.com Adressen erlaubt" data-i18n-ph data-i18n-title>
+             data-i18n-ph>
       <label for="loginPw" data-i18n>Passwort</label>
       <input id="loginPw" type="password" required>
       <button type="submit" class="btn btn--primary login-btn" data-i18n>Anmelden</button>
@@ -229,8 +229,8 @@
 <!-- Dialog: Admin – Zugriff verwalten -->
 <dialog id="dlgAdmin" class="dialog">
   <h2 data-i18n>Zugriff verwalten</h2>
-  <p class="hint" data-i18n-html>Nur diese E-Mail-Adressen (@neura-robotics.com) dürfen sich anmelden.
-    <b>Lesen</b>: ansehen und exportieren · <b>Bearbeiten</b>: Punkte anlegen und ändern ·
+  <p class="hint" data-i18n-html>Nur diese E-Mail-Adressen dürfen sich anmelden. Externe Adressen (nicht
+    @neura-robotics.com) nur nach Bestätigung. <b>Lesen</b>: ansehen und exportieren · <b>Bearbeiten</b>: Punkte anlegen und ändern ·
     <b>Admin</b>: zusätzlich löschen, Import „Ersetzen“, Zurücksetzen und Zugriff verwalten.
     Entfernen wirkt sofort.</p>
   <div id="adminZaehler" class="hint"></div>
