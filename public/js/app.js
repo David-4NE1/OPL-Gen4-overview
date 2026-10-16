@@ -1056,7 +1056,10 @@
         if (!r.ok) {
           var msg = T(d.error || 'unbekannter Fehler');
           if (d.ungueltig && d.ungueltig.length) msg += ': ' + d.ungueltig.join(', ');
-          throw new Error(msg);
+          var err = new Error(msg);
+          err.status = r.status;
+          err.body = d;
+          throw err;
         }
         return d;
       });
@@ -1078,7 +1081,13 @@
     liste.forEach(function (z) {
       je[z.rolle]++;
       var row = el('div', 'adminzeile');
-      row.appendChild(el('span', 'adminzeile__mail', z.email));
+      var mail = el('span', 'adminzeile__mail', z.email);
+      if (z.extern) {
+        var ext = el('span', 'adminzeile__extern', T('extern'));
+        ext.title = T('Adresse außerhalb von NEURA');
+        mail.appendChild(ext);
+      }
+      row.appendChild(mail);
       var sel = document.createElement('select');
       Object.keys(ROLLEN_ANZEIGE).forEach(function (r) { sel.appendChild(new Option(T(ROLLEN_ANZEIGE[r]), r)); });
       sel.value = z.rolle;
@@ -1289,12 +1298,22 @@
         .filter(function (m, i, l) { return l.indexOf(m) === i; });
       if (!emails.length) return;
       var rolle = $('#adminNeueRolle').value;
-      adminAnfrage('POST', '/api/admin/emails', { emails: emails, rolle: rolle }).then(function (l) {
+      function senden(extern) {
+        return adminAnfrage('POST', '/api/admin/emails', { emails: emails, rolle: rolle, extern: extern });
+      }
+      senden(false).catch(function (err) {
+        // Externe Adressen (nicht @neura-robotics.com) nur nach ausdruecklicher Bestaetigung
+        if (err.status !== 409 || !err.body || !err.body.extern) throw err;
+        var ok = confirm(T('Externe Adresse(n) – nicht @neura-robotics.com:\n\n{liste}\n\nDiese Person(en) sehen dann alle OPL-Punkte inkl. Bilder. Wirklich freischalten?',
+          { liste: err.body.extern.join('\n') }));
+        if (!ok) { var abbruch = new Error(T('Abgebrochen – nichts freigeschaltet.')); abbruch.still = true; throw abbruch; }
+        return senden(true);
+      }).then(function (l) {
         input.value = '';
         zeigeAdminListe(l);
         toast(T('{n} Adresse(n) mit Rolle {rolle} freigeschaltet.', { n: emails.length, rolle: T(ROLLEN_ANZEIGE[rolle]) }));
       }).catch(function (err) {
-        toast(err.message, true);
+        toast(err.message, !err.still);
       });
     });
 

@@ -546,11 +546,15 @@ async function listeEmails(db) {
   const { results } = await db.prepare('SELECT email, rolle FROM allowed_emails ORDER BY email').all();
   return results.map(r => ({
     email: r.email,
-    rolle: r.email === ADMIN_EMAIL ? 'admin' : (ROLLEN.includes(r.rolle) ? r.rolle : 'bearbeiten')
+    rolle: r.email === ADMIN_EMAIL ? 'admin' : (ROLLEN.includes(r.rolle) ? r.rolle : 'bearbeiten'),
+    extern: !istIntern(r.email)
   }));
 }
 
-const EMAIL_MUSTER = /^[^@\s]+@neura-robotics\.com$/;
+// Gueltige Adresse ueberhaupt; NEURA-Adressen gehen direkt, externe (z. B.
+// Berater) nur, wenn der Admin sie ausdruecklich bestaetigt (extern: true)
+const EMAIL_MUSTER = /^[^@\s]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+const istIntern = e => /@neura-robotics\.com$/.test(e);
 
 async function handleAdmin(path, method, request, env, sitzung) {
   const db = env.DB;
@@ -569,14 +573,19 @@ async function handleAdmin(path, method, request, env, sitzung) {
     const emails = [...new Set(roh.map(e => String(e || '').trim().toLowerCase()).filter(Boolean))];
     const ungueltig = emails.filter(e => !EMAIL_MUSTER.test(e));
     if (!emails.length || ungueltig.length) {
-      return json({ error: 'Nur @neura-robotics.com Adressen erlaubt', ungueltig }, 400);
+      return json({ error: 'Ungültige E-Mail-Adresse', ungueltig }, 400);
     }
     if (emails.length > 200) return json({ error: 'Höchstens 200 Adressen auf einmal' }, 400);
+    const extern = emails.filter(e => !istIntern(e));
+    if (extern.length && data.extern !== true) {
+      return json({ error: 'Externe Adresse – bitte ausdrücklich bestätigen', extern }, 409);
+    }
     const stmts = emails.filter(e => e !== ADMIN_EMAIL).map(e => db.prepare(
       'INSERT INTO allowed_emails (email, rolle) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET rolle = excluded.rolle'
     ).bind(e, rolle));
     if (stmts.length) await db.batch(stmts);
-    await logChange(db, 0, `Zugriff: ${stmts.length} Adresse(n) mit Rolle "${rolle}"`, sitzung.name);
+    await logChange(db, 0, `Zugriff: ${stmts.length} Adresse(n) mit Rolle "${rolle}"` +
+      (extern.length ? ` (davon ${extern.length} extern)` : ''), sitzung.name);
     return json(await listeEmails(db));
   }
 

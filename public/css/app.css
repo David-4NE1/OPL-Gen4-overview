@@ -469,6 +469,7 @@ body:not([data-rolle="admin"]) .nur-admin { display: none !important; }
 .adminzeile__mail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .adminzeile select { padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
 .adminzeile__platz { width: 98px; }
+.adminzeile__extern { margin-left: 6px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--mittel); color: var(--mittel); font-size: 11px; }
 #formAdminAdd textarea { width: 100%; }
 .user-input[readonly] { cursor: default; }
 
