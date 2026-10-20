@@ -324,6 +324,7 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 .chip--due.is-overdue { background: var(--hoch); color: #fff; border-color: var(--hoch); font-weight: 700; }
 .chip--due.is-soon { background: var(--mittel-bg); border-color: #efd9a8; }
 .chip--none { color: var(--ink-soft); background: var(--mittel-bg); border-color: var(--line); }
+.chip--ziel { color: var(--ink); border-color: var(--ink-soft); background: transparent; font-weight: 600; }
 .chip--nacharbeit { color: var(--accent); border-color: var(--accent); background: transparent; }
 .chip--warn { color: var(--hoch); border-color: var(--hoch); background: transparent; font-weight: 600; }
 td.is-warn { color: var(--hoch); }
@@ -567,6 +568,7 @@ body:not([data-rolle="admin"]) .nur-admin { display: none !important; }
   .f-status { order: 10; }
   .f-team { order: 11; }
   .f-nacharbeit { order: 12; }
+  .f-zielrelease { order: 12; }
   .f-bereich { order: 13; }
   .f-notiz { order: 14; }
   #formEdit .dialog__footer {

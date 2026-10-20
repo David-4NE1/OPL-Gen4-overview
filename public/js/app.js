@@ -19,9 +19,10 @@
 
   // Auswahlfilter sind Listen (Mehrfachauswahl), leere Liste = alle
   var FILTER_FELDER = [['#fBereich', 'bereich'], ['#fThema', 'thema'], ['#fPrio', 'prio'], ['#fStatus', 'status'],
-    ['#fVerant', 'verant'], ['#fTeam', 'team'], ['#fBaugruppe', 'baugruppe'], ['#fNacharbeit', 'nacharbeit']];
+    ['#fVerant', 'verant'], ['#fTeam', 'team'], ['#fBaugruppe', 'baugruppe'], ['#fNacharbeit', 'nacharbeit'],
+    ['#fZielRelease', 'zielRelease']];
   function leererFilter() {
-    return { suche: '', bereich: [], thema: [], prio: [], status: [], verant: [], team: [], baugruppe: [], nacharbeit: [] };
+    return { suche: '', bereich: [], thema: [], prio: [], status: [], verant: [], team: [], baugruppe: [], nacharbeit: [], zielRelease: [] };
   }
   var filter = leererFilter();
 
@@ -192,6 +193,7 @@
     if (!trifft(filter.verant, e.verantwortlicher || '(offen)')) return false;
     if (!trifft(filter.team, e.verantwortlichkeit || '(offen)')) return false;
     if (!trifft(filter.baugruppe, e.baugruppe || '(offen)')) return false;
+    if (!trifft(filter.zielRelease, e.zielRelease || '(offen)')) return false;
     // "Re-Milling + Modification" erscheint unter beiden Filterwerten
     if (filter.nacharbeit.length && !filter.nacharbeit.some(function (v) {
       return v === '(keine)' ? !e.nacharbeit : (e.nacharbeit || '').indexOf(v) >= 0;
@@ -203,7 +205,7 @@
     if (quick === 'niedrig' && !(e.prio === 'Niedrig' && e.status !== 'Erledigt')) return false;
     if (quick === 'ueberfaellig' && !Store.istUeberfaellig(e)) return false;
     if (filter.suche) {
-      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.nacharbeit, e.bereich, e.notiz,
+      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.nacharbeit, e.zielRelease, e.bereich, e.notiz,
         TR[e.thema], TR[e.todo], TR[e.notiz], T(e.bereich), T(e.status), T(e.prio)]
         .join(' ').toLowerCase();
       if (hay.indexOf(filter.suche) < 0) return false;
@@ -288,6 +290,7 @@
       if (filter.team.length) teile.push(T('Verantwortlichkeit: {v}', { v: werte('team') }));
       if (filter.baugruppe.length) teile.push(T('Baugruppe: {v}', { v: werte('baugruppe') }));
       if (filter.nacharbeit.length) teile.push(T('Nacharbeit: {v}', { v: werte('nacharbeit') }));
+      if (filter.zielRelease.length) teile.push(T('Ziel-Release: {v}', { v: werte('zielRelease') }));
       if (filter.suche) teile.push(T('Suche: "{v}"', { v: filter.suche }));
       $('#filterBannerText').textContent = T('Zeige {n} von {gesamt} Punkten — {teile}',
         { n: liste.length, gesamt: alle.length, teile: teile.join(', ') });
@@ -453,6 +456,14 @@
     bg.addEventListener('click', function () { oeffneEdit(e.nr, 'baugruppe'); });
     meta.appendChild(bg);
 
+    if (e.zielRelease) {
+      var zr = el('button', 'chip chip--ziel', '🎯 ' + e.zielRelease);
+      zr.type = 'button';
+      zr.title = T('Ziel-Release');
+      zr.addEventListener('click', function () { oeffneEdit(e.nr, 'zielRelease'); });
+      meta.appendChild(zr);
+    }
+
     if (e.nacharbeit) {
       var na = el('button', 'chip chip--nacharbeit', '🛠 ' + T(e.nacharbeit));
       na.type = 'button';
@@ -509,6 +520,7 @@
     { feld: 'thema', label: 'Thema' },
     { feld: 'baugruppe', label: 'Baugruppe' },
     { feld: 'nacharbeit', label: 'Nacharbeit' },
+    { feld: 'zielRelease', label: 'Ziel-Release' },
     { feld: 'prio', label: 'Prio' },
     { feld: 'verantwortlicher', label: 'Verantwortlicher' },
     { feld: 'verantwortlichkeit', label: 'Verantwortlichkeit' },
@@ -546,6 +558,7 @@
       row.appendChild(el('td', Store.istThema(e.thema) ? null : 'is-warn', Store.istThema(e.thema) ? T(e.thema) : (e.thema ? '⚠ ' + tx(e.thema) : '⚠')));
       row.appendChild(el('td', null, e.baugruppe ? T(e.baugruppe) : '–'));
       row.appendChild(el('td', null, e.nacharbeit ? T(e.nacharbeit) : '–'));
+      row.appendChild(el('td', null, e.zielRelease || '–'));
 
       var tdP = el('td');
       var p = el('button', 'chip');
@@ -701,6 +714,8 @@
       .concat([['(offen)', T('(offen)')]]));
     mselOptionen('#fNacharbeit', 'nacharbeit', [['Re-Milling', T('Re-Milling')], ['Modification', T('Modification')],
       ['(keine)', T('(keine Nacharbeit)')]]);
+    mselOptionen('#fZielRelease', 'zielRelease', Store.ZIEL_RELEASES.map(function (v) { return [v, v]; })
+      .concat([['(offen)', T('(offen)')]]));
   }
 
   /* ---------------------------------------------------------- Lightbox */
@@ -787,6 +802,7 @@
     $('#fmBaugruppe').value = e ? (e.baugruppe || '') : einzigerFilter('baugruppe');
     $('#fmSeite').value = e ? (e.seite || '') : '';
     $('#fmNacharbeit').value = e ? (e.nacharbeit || '') : '';
+    $('#fmZielRelease').value = e ? (e.zielRelease || '') : einzigerFilter('zielRelease');
     $('#fmFaellig').value = e ? e.faellig : '';
     $('#fmTodo').value = e ? e.todo : '';
     $('#fmNotiz').value = e ? e.notiz : '';
@@ -820,6 +836,7 @@
       else if (fokus === 'team') $('#fmTeam').focus();
       else if (fokus === 'baugruppe') $('#fmBaugruppe').focus();
       else if (fokus === 'nacharbeit') $('#fmNacharbeit').focus();
+      else if (fokus === 'zielRelease') $('#fmZielRelease').focus();
       else $('#fmThema').focus();
     }, 30);
   }
@@ -835,6 +852,7 @@
       baugruppe: $('#fmBaugruppe').value,
       seite: $('#fmSeite').value,
       nacharbeit: $('#fmNacharbeit').value,
+      zielRelease: $('#fmZielRelease').value,
       faellig: $('#fmFaellig').value,
       todo: $('#fmTodo').value.trim(),
       notiz: $('#fmNotiz').value.trim(),
@@ -957,7 +975,8 @@
         bereiche: Store.BEREICHE,
         themen: Store.THEMEN,
         baugruppen: Store.BAUGRUPPEN,
-        nacharbeit: Store.NACHARBEIT
+        nacharbeit: Store.NACHARBEIT,
+        zielReleases: Store.ZIEL_RELEASES
       });
       download(blob, exportName('xlsx'));
       var st = entries.bildStatistik;
@@ -974,7 +993,7 @@
 
   function exportCsv() {
     var kopf = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit'];
+                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit', 'Ziel-Release'];
     function q(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
     var zeilen = [kopf.map(q).join(';')];
     var auswahl = exportEintraege();
@@ -986,7 +1005,8 @@
         Xlsx.ddmmyyyy(e.erstelltAm),
         e.verantwortlichkeit,
         e.baugruppe,
-        e.nacharbeit
+        e.nacharbeit,
+        e.zielRelease
       ].map(q).join(';'));
     });
     // BOM, damit Excel UTF-8 erkennt
@@ -1172,6 +1192,8 @@
     Store.SEITEN.forEach(function (v) { $('#fmSeite').appendChild(new Option(T(v), v)); });
     $('#fmNacharbeit').appendChild(new Option(T('– keine –'), ''));
     Store.NACHARBEIT.forEach(function (v) { $('#fmNacharbeit').appendChild(new Option(T(v), v)); });
+    $('#fmZielRelease').appendChild(new Option(T('– offen –'), ''));
+    Store.ZIEL_RELEASES.forEach(function (v) { $('#fmZielRelease').appendChild(new Option(v, v)); });
 
     Store.onError(function (msg) { toast(msg, true); });
     Store.onStatus(function (ok) { $('#offlineBanner').hidden = ok; });
@@ -1333,6 +1355,10 @@
     // Edit-Dialog
     $('#fmThema').addEventListener('change', aktualisiereEditTitel);
     // Verantwortlichkeit nach Person vorbelegen, solange sie leer ist
+    // Erledigt ohne Ziel-Release → 4.1.1 vorschlagen (der Server setzt es ohnehin)
+    $('#fmStatus').addEventListener('change', function () {
+      if ($('#fmStatus').value === 'Erledigt' && !$('#fmZielRelease').value) $('#fmZielRelease').value = '4.1.1';
+    });
     $('#fmVerant').addEventListener('change', function () {
       if (!$('#fmTeam').value) $('#fmTeam').value = Store.teamStandard($('#fmVerant').value);
     });
