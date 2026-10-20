@@ -58,6 +58,9 @@
   var SEITEN = ['Links', 'Rechts', 'Beidseitig'];
   // Nacharbeit an bestehenden Teilen
   var NACHARBEIT = ['Re-Milling', 'Modification', 'Re-Milling + Modification'];
+  // Ziel-Release je Punkt; erledigte Punkte ohne Angabe laufen unter 4.1.1 (wie im Worker)
+  var ZIEL_RELEASES = ['4.1.1', '4.1.2', '4.1.3', '4.2.0'];
+  var ZIEL_RELEASE_ERLEDIGT = '4.1.1';
   // Alte Freitext-Themen ohne eigenen Informationsgehalt: fallen beim Einordnen weg
   var THEMEN_GENERISCH = ['CAD', 'Montage', 'Kabel', 'Design', 'Schrauben', 'Berechnung', 'Passung',
     'Kollision', 'Elektrik', 'Thermik', 'Lagerung', 'Simulation', 'Material', 'Design-Regel'];
@@ -123,6 +126,8 @@
       baugruppe: BAUGRUPPEN.indexOf(e.baugruppe) >= 0 ? e.baugruppe : '',
       seite: SEITEN.indexOf(e.seite) >= 0 ? e.seite : '',
       nacharbeit: NACHARBEIT.indexOf(e.nacharbeit) >= 0 ? e.nacharbeit : '',
+      zielRelease: ZIEL_RELEASES.indexOf(e.zielRelease) >= 0 ? e.zielRelease
+        : (e.status === 'Erledigt' ? ZIEL_RELEASE_ERLEDIGT : ''),
       release: e.release || '',
       faellig: e.faellig || '',
       status: STATI.indexOf(e.status) >= 0 ? e.status : 'Offen',
@@ -343,7 +348,7 @@
   }
 
   var FELDER = ['bereich', 'thema', 'prio', 'verantwortlicher', 'verantwortlichkeit', 'baugruppe', 'seite',
-    'nacharbeit', 'release', 'faellig', 'status', 'todo', 'notiz'];
+    'nacharbeit', 'zielRelease', 'release', 'faellig', 'status', 'todo', 'notiz'];
 
   // Gleicher Fingerabdruck wie bildSignatur() im Worker (Anzahl und Namen)
   function bildSignatur(bilder) {
@@ -389,7 +394,7 @@
 
   var FELD_NAMEN = {
     bereich: 'Bereich', thema: 'Thema', prio: 'Prio', verantwortlicher: 'Verantwortlicher',
-    verantwortlichkeit: 'Verantwortlichkeit', baugruppe: 'Baugruppe', seite: 'Seite', nacharbeit: 'Nacharbeit',
+    verantwortlichkeit: 'Verantwortlichkeit', baugruppe: 'Baugruppe', seite: 'Seite', nacharbeit: 'Nacharbeit', zielRelease: 'Ziel-Release',
     release: 'Release', faellig: 'Bis wann', status: 'Status', todo: 'To Do', notiz: 'Notiz', bilder: 'Bilder'
   };
 
@@ -481,6 +486,7 @@
           n.release = n.release || vorhanden.release;
           n.seite = n.seite || vorhanden.seite;
           n.nacharbeit = n.nacharbeit || vorhanden.nacharbeit;
+          if (vorhanden.zielRelease && (!n.zielRelease || (n.zielRelease === ZIEL_RELEASE_ERLEDIGT && !raw.zielRelease))) n.zielRelease = vorhanden.zielRelease;
           // Altes Freitext-Thema aus der Datei ueberschreibt kein gueltiges Thema
           if (!istThema(n.thema) && istThema(vorhanden.thema)) n.thema = vorhanden.thema;
           else themaEinordnen(n);
@@ -530,7 +536,7 @@
 
   global.OPLStore = {
     BEREICHE: BEREICHE, PRIOS: PRIOS, STATI: STATI, VERANTWORTLICHKEITEN: VERANTWORTLICHKEITEN,
-    THEMEN: THEMEN, BAUGRUPPEN: BAUGRUPPEN, SEITEN: SEITEN, NACHARBEIT: NACHARBEIT, istThema: istThema, teamStandard: teamStandard, altesThemaInsTodo: altesThemaInsTodo,
+    THEMEN: THEMEN, BAUGRUPPEN: BAUGRUPPEN, SEITEN: SEITEN, NACHARBEIT: NACHARBEIT, ZIEL_RELEASES: ZIEL_RELEASES, istThema: istThema, teamStandard: teamStandard, altesThemaInsTodo: altesThemaInsTodo,
     state: state,
     load: load, subscribe: subscribe, onError: onError, onStatus: onStatus, isOnline: isOnline,
     add: add, update: update, remove: remove, cycle: cycle, byNr: byNr,
