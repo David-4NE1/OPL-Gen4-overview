@@ -301,7 +301,7 @@
       '<w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="50" w:type="dxa"/><w:left w:w="90" w:type="dxa"/>' +
       '<w:bottom w:w="50" w:type="dxa"/><w:right w:w="90" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>' +
       breiten.map(function (b) { return '<w:gridCol w:w="' + b + '"/>'; }).join('') + '</w:tblGrid>';
-    xml += '<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>' + kopf.map(function (k, i) {
+    if (kopf) xml += '<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>' + kopf.map(function (k, i) {
       return zelle(para(run(k, { b: true, color: 'FFFFFF', sz: 17 }), { after: 0 }), breiten[i], NAVY);
     }).join('') + '</w:tr>';
     zeilen.forEach(function (z) {
@@ -310,6 +310,57 @@
       }).join('') + '</w:tr>';
     });
     return xml + '</w:tbl>';
+  }
+
+  // Word-Paket (document, styles, footer) um einen fertigen Body bauen
+  function docxPaket(body, fussText, rand) {
+    var sect = '<w:sectPr><w:footerReference w:type="default" r:id="rId2"/><w:pgSz w:w="11906" w:h="16838"/>' +
+      '<w:pgMar w:top="' + rand + '" w:right="1134" w:bottom="' + rand + '" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr>';
+    var NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+    var dokument = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ' + NS + '><w:body>' + body + sect + '</w:body></w:document>';
+    var fuss = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' + NS + '><w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="' + BREITE + '"/></w:tabs></w:pPr>' +
+      run(fussText, { sz: 16, color: GRAU }) +
+      '<w:r><w:rPr><w:color w:val="' + GRAU + '"/><w:sz w:val="16"/></w:rPr><w:tab/><w:t xml:space="preserve">Seite </w:t></w:r>' +
+      '<w:r><w:rPr><w:color w:val="' + GRAU + '"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>' +
+      '<w:r><w:rPr><w:color w:val="' + GRAU + '"/><w:sz w:val="16"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>' +
+      '<w:r><w:rPr><w:color w:val="' + GRAU + '"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r>' +
+      '<w:r><w:rPr><w:color w:val="' + GRAU + '"/><w:sz w:val="16"/></w:rPr><w:t>1</w:t></w:r>' +
+      '<w:r><w:rPr><w:color w:val="' + GRAU + '"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>';
+    var stile = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Calibri" w:cs="Calibri"/>' +
+      '<w:sz w:val="19"/><w:szCs w:val="19"/><w:lang w:val="de-DE"/></w:rPr></w:rPrDefault><w:pPrDefault/></w:docDefaults>' +
+      '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
+      '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/>' +
+      '<w:pPr><w:keepNext/><w:spacing w:before="120" w:after="120"/><w:outlineLvl w:val="0"/></w:pPr>' +
+      '<w:rPr><w:b/><w:color w:val="' + NAVY + '"/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr></w:style>' +
+      '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/>' +
+      '<w:pPr><w:keepNext/><w:spacing w:before="200" w:after="80"/><w:outlineLvl w:val="1"/></w:pPr>' +
+      '<w:rPr><w:b/><w:color w:val="' + NAVY + '"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:style></w:styles>';
+    var enc = new TextEncoder();
+    var dateien = [
+      { name: '[Content_Types].xml', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+        '<Default Extension="xml" ContentType="application/xml"/>' +
+        '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+        '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+        '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' +
+        '</Types>') },
+      { name: '_rels/.rels', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+        '</Relationships>') },
+      { name: 'word/_rels/document.xml.rels', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>' +
+        '</Relationships>') },
+      { name: 'word/document.xml', data: enc.encode(dokument) },
+      { name: 'word/styles.xml', data: enc.encode(stile) },
+      { name: 'word/footer1.xml', data: enc.encode(fuss) }
+    ];
+    return new Blob([Xlsx.zipBuild(dateien)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   }
 
   function exportDocx(eintraege, stand, opts) {
@@ -371,54 +422,91 @@
       });
     });
 
-    var sect = '<w:sectPr><w:footerReference w:type="default" r:id="rId2"/><w:pgSz w:w="11906" w:h="16838"/>' +
-      '<w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr>';
-    var NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' +
-      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
-    var dokument = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ' + NS + '><w:body>' + body + sect + '</w:body></w:document>';
-    var fuss = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' + NS + '><w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="' + BREITE + '"/></w:tabs></w:pPr>' +
-      run('Lastenheft-Übersicht 4NE1 Gen4 · Stand ' + stand + ' · aus der OPL abgeleitet', { sz: 16, color: GRAU }) +
-      '<w:r><w:rPr><w:color w:val="' + GRAU + '"/><w:sz w:val="16"/></w:rPr><w:tab/><w:t xml:space="preserve">Seite </w:t></w:r>' +
-      '<w:r><w:rPr><w:color w:val="' + GRAU + '"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>' +
-      '<w:r><w:rPr><w:color w:val="' + GRAU + '"/><w:sz w:val="16"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>' +
-      '<w:r><w:rPr><w:color w:val="' + GRAU + '"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r>' +
-      '<w:r><w:rPr><w:color w:val="' + GRAU + '"/><w:sz w:val="16"/></w:rPr><w:t>1</w:t></w:r>' +
-      '<w:r><w:rPr><w:color w:val="' + GRAU + '"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>';
-    var stile = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-      '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Calibri" w:cs="Calibri"/>' +
-      '<w:sz w:val="19"/><w:szCs w:val="19"/><w:lang w:val="de-DE"/></w:rPr></w:rPrDefault><w:pPrDefault/></w:docDefaults>' +
-      '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
-      '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/>' +
-      '<w:pPr><w:keepNext/><w:spacing w:before="120" w:after="120"/><w:outlineLvl w:val="0"/></w:pPr>' +
-      '<w:rPr><w:b/><w:color w:val="' + NAVY + '"/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr></w:style>' +
-      '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/>' +
-      '<w:pPr><w:keepNext/><w:spacing w:before="200" w:after="80"/><w:outlineLvl w:val="1"/></w:pPr>' +
-      '<w:rPr><w:b/><w:color w:val="' + NAVY + '"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:style></w:styles>';
-    var enc = new TextEncoder();
-    var dateien = [
-      { name: '[Content_Types].xml', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
-        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
-        '<Default Extension="xml" ContentType="application/xml"/>' +
-        '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
-        '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
-        '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' +
-        '</Types>') },
-      { name: '_rels/.rels', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
-        '</Relationships>') },
-      { name: 'word/_rels/document.xml.rels', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
-        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>' +
-        '</Relationships>') },
-      { name: 'word/document.xml', data: enc.encode(dokument) },
-      { name: 'word/styles.xml', data: enc.encode(stile) },
-      { name: 'word/footer1.xml', data: enc.encode(fuss) }
-    ];
-    return new Blob([Xlsx.zipBuild(dateien)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    return docxPaket(body, 'Lastenheft-Übersicht 4NE1 Gen4 · Stand ' + stand + ' · aus der OPL abgeleitet', 1134);
   }
 
-  global.OPLLastenheft = { id: id, struktur: struktur, schluessel: schluessel, TRENNER: TRENNER, render: render, exportXlsx: exportXlsx, exportDocx: exportDocx };
+  /* ------------------------------------------- Word-Kurzfassung (Management) */
+
+  // 2–3 Seiten: Kennzahlen, Anforderung/Ziel/Stand je Kategorie, Steuerungsbedarf
+  // und die offenen Punkte mit Prio Hoch – alles aus dem aktuellen Stand berechnet
+  function exportKurzfassung(eintraege, stand, opts) {
+    opts = opts || {};
+    var ziele = opts.ziele || {};
+    var kap = struktur(eintraege);
+    var z = zahlen(eintraege);
+    var offen = eintraege.filter(function (e) { return e.status !== 'Erledigt'; });
+    var hoch = offen.filter(function (e) { return e.prio === 'Hoch'; });
+    var hochTermin = hoch.filter(function (e) { return e.faellig; }).length;
+    var hochRelease = hoch.filter(function (e) { return e.zielRelease; }).length;
+    var ohneRelease = offen.filter(function (e) { return !e.zielRelease; }).length;
+    var ueberfaellig = offen.filter(function (e) { return e.faellig && e.faellig < opts.heute; }).length;
+    var nacharbeit = eintraege.filter(function (e) { return e.nacharbeit; }).length;
+    var ohneZiel = kap.filter(function (k) { var zz = ziele[k.name]; return !(zz && zz.anforderung && zz.ziel); }).length;
+    var datum = function (d) { return d ? Xlsx.ddmmyyyy(d) : ''; };
+    var klein = function (t, o) { return { xml: para(run(t, Object.assign({ sz: 17 }, o || {})), { after: 0, jc: o && o.jc }) }; };
+
+    var body = '';
+    body += para(run('4NE1 Gen4 · Management-Kurzfassung aus der Open Point List', { sz: 20, color: GRAU }), { after: 20 });
+    body += para(run('Anforderungen, Ziele und Steuerungsbedarf', { b: true, sz: 40, color: NAVY }), { after: 60 });
+    body += para(run('Stand ' + stand + (opts.filterHinweis ? ' · ' + opts.filterHinweis : ''), { sz: 20, color: GRAU }), { after: 140 });
+
+    // Kennzahlen als Kachelzeile
+    var KPI = [[z.gesamt, 'OPL-Punkte'], [z.offen, 'offen'], [z.hoch, 'offen mit Prio Hoch'],
+      [hochTermin + ' / ' + z.hoch, 'Prio Hoch mit Termin'], [nacharbeit, 'mit Nacharbeit am Teil']];
+    var kb = Math.floor(BREITE / KPI.length);
+    body += tabelle(KPI.map(function () { return kb; }), null, [KPI.map(function (k) {
+      return { xml: para(run(k[0], { b: true, sz: 32, color: NAVY }), { after: 0, jc: 'center' }) +
+        para(run(k[1], { sz: 15, color: GRAU }), { after: 0, jc: 'center' }), fill: 'F1F3F5' };
+    })]);
+
+    body += para(run('Anforderung und Ziel je Kategorie', { b: true, sz: 26, color: NAVY }), { style: 'Heading2' });
+    var leer = function (zz, feld) {
+      return zz && zz[feld] ? run(zz[feld], { sz: 17 }) : run('– noch nicht formuliert –', { sz: 17, i: true, color: GRAU });
+    };
+    body += tabelle([2250, 3150, 2788, 1450], ['Kategorie', 'Anforderung', 'Ziel', 'Stand'], kap.map(function (k) {
+      var zk = zahlen(k.punkte), zz = ziele[k.name];
+      return [klein(k.name, { b: true, sz: 18 }),
+        { xml: para(leer(zz, 'anforderung'), { after: 0 }) },
+        { xml: para(leer(zz, 'ziel'), { after: 0 }) },
+        { xml: para(run(zk.offen + ' offen', { sz: 17, b: true }), { after: 0, jc: 'center' }) +
+          para(run((zk.hoch ? zk.hoch + ' × Prio Hoch' : 'kein Prio Hoch'), { sz: 15, color: zk.hoch ? 'B02A2A' : GRAU }), { after: 0, jc: 'center' }) +
+          para(run(zk.umgesetzt + '/' + zk.gesamt + ' umgesetzt', { sz: 15, color: GRAU }), { after: 0, jc: 'center' }) }];
+    }));
+
+    body += para(run('Steuerungsbedarf', { b: true, sz: 26, color: NAVY }), { style: 'Heading2' });
+    var bedarf = [];
+    if (z.hoch) bedarf.push(['Termine für Prio Hoch: ', (z.hoch - hochTermin) + ' von ' + z.hoch + ' offenen Prio-Hoch-Punkten haben keinen Termin, ' +
+      (z.hoch - hochRelease) + ' kein Ziel-Release.']);
+    if (ohneRelease) bedarf.push(['Release-Zuordnung: ', ohneRelease + ' von ' + z.offen + ' offenen Punkten sind keinem Ziel-Release zugeordnet.']);
+    if (ueberfaellig) bedarf.push(['Überfällig: ', ueberfaellig + ' offene Punkte haben ihren Termin überschritten.']);
+    var schwer = kap.map(function (k) { return [k.name, zahlen(k.punkte).hoch]; })
+      .filter(function (x) { return x[1]; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 3);
+    if (schwer.length) bedarf.push(['Schwerpunkte: ', 'die meisten offenen Prio-Hoch-Punkte liegen in ' +
+      schwer.map(function (x) { return x[0] + ' (' + x[1] + ')'; }).join(', ') + '.']);
+    if (nacharbeit) bedarf.push(['Nacharbeit: ', nacharbeit + ' Punkte erforderten Nacharbeit am Teil (Fräsen, Schleifen o. Ä.) – Ursache im CAD/Freigabeprozess abstellen.']);
+    if (ohneZiel) bedarf.push(['Ziele festlegen: ', 'für ' + ohneZiel + ' von ' + kap.length + ' Kategorien sind Anforderung und Ziel noch nicht vollständig formuliert.']);
+    if (!bedarf.length) bedarf.push(['', 'Kein akuter Steuerungsbedarf erkannt.']);
+    bedarf.forEach(function (b, i) {
+      body += para(run((i + 1) + '.  ', { b: true, color: NAVY }) + run(b[0], { b: true }) + run(b[1]), { after: 50 });
+    });
+
+    if (hoch.length) {
+      body += para(run('Offene Punkte mit Prio Hoch (' + hoch.length + ')', { b: true, sz: 26, color: NAVY }), { style: 'Heading2' });
+      var reihe = {};
+      kap.forEach(function (k, i) { reihe[k.name] = i; });
+      hoch.sort(function (a, b) { return (reihe[a.thema] - reihe[b.thema]) || (a.nr - b.nr); });
+      body += tabelle([700, 2050, 4038, 1650, 1200], ['OPL', 'Kategorie', 'Punkt', 'Verantwortlich', 'Termin / Release'], hoch.map(function (e) {
+        var text = e.lhTitel || String(e.todo || '').trim().replace(/:?\s*\r?\n\s*/g, ' / ').replace(/\s+/g, ' ');
+        if (text.length > 160) text = text.slice(0, 157) + '…';
+        var termin = [datum(e.faellig), e.zielRelease].filter(Boolean).join(' · ');
+        return [klein('#' + e.nr, { b: true }), klein(e.thema + (e.unterthema ? ' › ' + e.unterthema : ''), { sz: 15 }), klein(text),
+          klein([e.verantwortlicher, e.verantwortlichkeit].filter(Boolean).join(', ') || '–', { sz: 15 }),
+          termin ? klein(termin, { jc: 'center' }) : { xml: para(run('fehlt', { sz: 17, b: true, color: 'B02A2A' }), { after: 0, jc: 'center' }), fill: 'FDECEC' }];
+      }));
+    }
+    body += para(run('Quelle: OPL 4NE1 Gen4, Stand ' + stand + '. Anforderung und Ziel aus dem Reiter Lastenheft; #-Nummern verweisen auf OPL-Punkte.', { sz: 15, color: GRAU }), { after: 0 });
+    return docxPaket(body, '4NE1 Gen4 · Management-Kurzfassung aus der OPL · Stand ' + stand, 850);
+  }
+
+  global.OPLLastenheft = { id: id, struktur: struktur, schluessel: schluessel, TRENNER: TRENNER, render: render, exportXlsx: exportXlsx, exportDocx: exportDocx, exportKurzfassung: exportKurzfassung };
 })(window);
