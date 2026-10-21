@@ -558,6 +558,26 @@ function forderungNormalisieren(d) {
 const FORDERUNG_SPALTEN = 'id, kategorie, text, detail, beispiele, pos, geaendert_am AS geaendertAm, geaendert_von AS geaendertVon';
 
 async function handleForderungen(path, method, request, db, sitzung) {
+  // Fokus-Kategorien (z. B. aktuell Kabel & Steckverbinder): fuer alle sichtbar oben
+  if (path === '/api/forderungen/fokus') {
+    await db.prepare('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)').run();
+    if (method === 'GET') {
+      const row = await db.prepare("SELECT value FROM settings WHERE key = 'lh_fokus'").first();
+      let liste = [];
+      try { liste = JSON.parse(row ? row.value : '[]'); } catch { liste = []; }
+      return json(Array.isArray(liste) ? liste.filter(k => UNTERTHEMEN[k]) : []);
+    }
+    if (method === 'PUT') {
+      if (!darf(sitzung, 'bearbeiten')) return keinRecht('bearbeiten');
+      const d = await request.json();
+      const liste = [...new Set((Array.isArray(d.kategorien) ? d.kategorien : []).map(String))].filter(k => UNTERTHEMEN[k]);
+      await db.prepare("INSERT INTO settings (key, value) VALUES ('lh_fokus', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        .bind(JSON.stringify(liste)).run();
+      await logChange(db, 0, `Lastenheft-Fokus: ${liste.length ? liste.join(', ') : 'keiner'}`, sitzung.name);
+      return json({ ok: true, kategorien: liste });
+    }
+    return json({ error: 'Route nicht gefunden' }, 404);
+  }
   if (path === '/api/forderungen' && method === 'GET') {
     const { results } = await db.prepare(`SELECT ${FORDERUNG_SPALTEN} FROM forderungen ORDER BY kategorie, pos, id`).all();
     return json(results);

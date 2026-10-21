@@ -324,7 +324,8 @@
         setModus: function (m) { lhModus = m; try { localStorage.setItem('opl_lh_modus', m); } catch (e) { /* egal */ } render(); },
         forderungBearbeiten: forderungBearbeiten,
         exportKategorie: lastenheftExportKategorie,
-        umschalten: function (key) { lhOffen[key] = !lhOffen[key]; render(); },
+        fokus: lhFokus, fokusUmschalten: fokusUmschalten,
+        umschalten: function (key, wert) { lhOffen[key] = wert === undefined ? !lhOffen[key] : wert; render(); },
         bearbeiten: zielBearbeiten,
         oeffnen: function (nr) { oeffneEdit(nr, 'anforderung'); }
       }));
@@ -1090,15 +1091,32 @@
   var lhForderungenLaedt = false;
   var lhModus = (function () { try { return localStorage.getItem('opl_lh_modus') || 'forderungen'; } catch (e) { return 'forderungen'; } })();
 
+  var lhFokus = [];             // Fokus-Kategorien (fuer alle oben)
+
   function lhForderungenLaden() {
     if (lhForderungenLaedt) return Promise.resolve();
     lhForderungenLaedt = true;
-    return fetch('/api/forderungen').then(function (r) { return r.ok ? r.json() : []; }).then(function (liste) {
-      lhForderungen = liste;
+    return Promise.all([
+      fetch('/api/forderungen').then(function (r) { return r.ok ? r.json() : []; }),
+      fetch('/api/forderungen/fokus').then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return lhFokus; })
+    ]).then(function (x) {
+      lhForderungen = x[0];
+      lhFokus = x[1];
     }).catch(function () { lhForderungen = lhForderungen || []; }).then(function () {
       lhForderungenLaedt = false;
       if (view === 'lastenheft') render();
     });
+  }
+
+  function fokusUmschalten(kategorie) {
+    var neu = lhFokus.indexOf(kategorie) >= 0
+      ? lhFokus.filter(function (k) { return k !== kategorie; })
+      : lhFokus.concat([kategorie]);
+    forderungAnfrage('PUT', '/fokus', { kategorien: neu }).then(function (r) {
+      lhFokus = r.kategorien;
+      toast(neu.indexOf(kategorie) >= 0 ? T('„{k}“ steht jetzt als Fokus oben.', { k: T(kategorie) }) : T('Fokus für „{k}“ entfernt.', { k: T(kategorie) }));
+      render();
+    }).catch(function (err) { toast(err.message, true); });
   }
 
   function forderungAnfrage(method, pfad, body) {
