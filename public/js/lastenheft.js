@@ -3,7 +3,7 @@
  *
  * Jeder OPL-Punkt ist eine Anforderung. Ist sie (noch) nicht als Zielzustand
  * formuliert (Feld "anforderung"), steht der To-Do-Text als Platzhalter da.
- * Gliederung: feste Kategorie (Thema) -> Baugruppe von Kopf bis Fuss -> Prio -> Nr.
+ * Gliederung: feste Kategorie (Thema) -> Unterthema -> Baugruppe von Kopf bis Fuss -> Prio -> Nr.
  * IDs sind an die OPL-Nummer gebunden und damit stabil: LH-<Kuerzel>-<Nr>.
  */
 (function (global) {
@@ -20,6 +20,7 @@
     'Industrialisierung & Design': 'ID'
   };
   var OHNE_BG = 'nicht zugeordnet';
+  var OHNE_UT = 'Ohne Unterthema';
   var OHNE_THEMA = 'Ohne Kategorie';
   var PRIO_RANG = { Hoch: 0, Mittel: 1, Niedrig: 2 };
 
@@ -30,15 +31,16 @@
   function struktur(eintraege) {
     var themen = Store.THEMEN.concat([OHNE_THEMA]);
     var baugruppen = Store.BAUGRUPPEN.concat([OHNE_BG]);
+    var bgRang = function (e) { return baugruppen.indexOf(e.baugruppe || OHNE_BG); };
     return themen.map(function (thema) {
       var punkte = eintraege.filter(function (e) {
         return thema === OHNE_THEMA ? !Store.istThema(e.thema) : e.thema === thema;
       });
-      var gruppen = baugruppen.map(function (bg) {
+      var gruppen = Store.unterthemenVon(thema).concat([OHNE_UT]).map(function (ut) {
         return {
-          name: bg,
-          punkte: punkte.filter(function (e) { return (e.baugruppe || OHNE_BG) === bg; })
-            .sort(function (a, b) { return PRIO_RANG[a.prio] - PRIO_RANG[b.prio] || a.nr - b.nr; })
+          name: ut,
+          punkte: punkte.filter(function (e) { return (e.unterthema || OHNE_UT) === ut; })
+            .sort(function (a, b) { return bgRang(a) - bgRang(b) || PRIO_RANG[a.prio] - PRIO_RANG[b.prio] || a.nr - b.nr; })
         };
       }).filter(function (g) { return g.punkte.length; });
       return { name: thema, punkte: punkte, gruppen: gruppen };
@@ -137,8 +139,10 @@
       text.appendChild(p);
     }
     if (e.nacharbeit) text.appendChild(el('small', null, T('Nacharbeit am Teil') + ': ' + T(e.nacharbeit)));
+    var meta0 = el('span', 'lh__bgchip', '📍 ' + T(e.baugruppe || OHNE_BG));
     z.appendChild(text);
     var meta = el('div', 'lh__meta');
+    meta.appendChild(meta0);
     meta.appendChild(el('span', 'lh__opl', 'OPL #' + e.nr));
     meta.appendChild(el('span', 'pill pill--' + String(e.prio).toLowerCase(), T(e.prio)));
     meta.appendChild(el('span', 'lh__status' + (e.status === 'Erledigt' ? ' is-umgesetzt' : ''), statusText(e)));
@@ -156,7 +160,7 @@
     struktur(eintraege).forEach(function (k) {
       k.gruppen.forEach(function (g) {
         g.punkte.forEach(function (e) {
-          zeilen.push([id(e), k.name, g.name, e.lhTitel, e.anforderung || '', e.nr, e.prio,
+          zeilen.push([id(e), k.name, g.name, e.baugruppe || OHNE_BG, e.lhTitel, e.anforderung || '', e.nr, e.prio,
             e.status === 'Erledigt' ? 'umgesetzt' : e.status, e.zielRelease, e.nacharbeit,
             e.verantwortlichkeit, e.verantwortlicher, e.anforderung ? '' : 'ja', e.todo]);
         });
@@ -166,9 +170,9 @@
       blatt: 'Lastenheft',
       titel: 'Lastenheft-Übersicht 4NE1 Gen4',
       untertitel: 'Aus der Open Point List abgeleitet · Stand ' + stand + ' · ' + zeilen.length + ' Anforderungen',
-      kopf: ['ID', 'Kategorie', 'Baugruppe', 'Titel', 'Anforderung', 'OPL-Nr', 'Prio', 'Status', 'Ziel-Release',
+      kopf: ['ID', 'Kategorie', 'Unterthema', 'Baugruppe', 'Titel', 'Anforderung', 'OPL-Nr', 'Prio', 'Status', 'Ziel-Release',
         'Nacharbeit', 'Verantwortlichkeit', 'Verantwortlicher', 'Noch nicht formuliert', 'OPL-Text (To Do)'],
-      breiten: [12, 24, 15, 30, 60, 8, 9, 11, 11, 16, 18, 18, 11, 60],
+      breiten: [12, 24, 26, 15, 30, 60, 8, 9, 11, 11, 16, 18, 18, 11, 60],
       zeilen: zeilen
     });
   }
@@ -231,7 +235,7 @@
     body += para(run('Anforderungen abgeleitet aus der Open Point List (OPL) · Stand ' + stand, { sz: 22, color: GRAU }), { after: 200 });
     body += para(run(z.gesamt + ' Anforderungen, davon ' + z.offen + ' offen (' + z.hoch + ' mit Priorität Hoch) und ' +
       z.umgesetzt + ' umgesetzt.' + (opts.filterHinweis ? ' ' + opts.filterHinweis : '')));
-    body += para(run('Gliederung nach Kategorie, darin nach Baugruppe von Kopf bis Fuß und Priorität. Die ID LH-<Kategorie>-<OPL-Nr.> ' +
+    body += para(run('Gliederung nach Kategorie und Unterthema, darin nach Baugruppe von Kopf bis Fuß und Priorität. Die ID LH-<Kategorie>-<OPL-Nr.> ' +
       'verweist auf den Ursprungspunkt in der OPL. „umgesetzt“ = in der OPL erledigt.' +
       (z.ohneText ? ' ' + z.ohneText + ' Punkte sind noch nicht als Anforderung formuliert; dort steht kursiv der OPL-Text.' : ''),
       { sz: 18, color: GRAU }), { after: 160 });
@@ -253,7 +257,7 @@
           var text = (e.lhTitel ? para(run(e.lhTitel, { b: true, sz: 18 }), { after: 30 }) : '') +
             (e.anforderung ? para(run(e.anforderung, { sz: 18 }), { after: 0 })
               : para(run('[noch nicht formuliert] ', { b: true, sz: 16, color: 'B8860B' }) + run(e.todo, { i: true, sz: 17, color: GRAU }), { after: 0 })) +
-            (e.nacharbeit ? para(run('Nacharbeit am Teil: ' + e.nacharbeit, { sz: 16, color: GRAU }), { after: 0 }) : '');
+            para(run('Baugruppe: ' + (e.baugruppe || OHNE_BG) + (e.nacharbeit ? ' · Nacharbeit am Teil: ' + e.nacharbeit : ''), { sz: 16, color: GRAU }), { after: 0 });
           var mitte = function (t, fill) { return { xml: para(run(t, { sz: 17 }), { after: 0, jc: 'center' }), fill: fill }; };
           return [
             { xml: para(run(id(e), { b: true, sz: 16 }), { after: 0 }) },

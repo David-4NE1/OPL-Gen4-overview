@@ -20,9 +20,9 @@
   // Auswahlfilter sind Listen (Mehrfachauswahl), leere Liste = alle
   var FILTER_FELDER = [['#fBereich', 'bereich'], ['#fThema', 'thema'], ['#fPrio', 'prio'], ['#fStatus', 'status'],
     ['#fVerant', 'verant'], ['#fTeam', 'team'], ['#fBaugruppe', 'baugruppe'], ['#fNacharbeit', 'nacharbeit'],
-    ['#fZielRelease', 'zielRelease']];
+    ['#fZielRelease', 'zielRelease'], ['#fUnterthema', 'unterthema']];
   function leererFilter() {
-    return { suche: '', bereich: [], thema: [], prio: [], status: [], verant: [], team: [], baugruppe: [], nacharbeit: [], zielRelease: [] };
+    return { suche: '', bereich: [], thema: [], prio: [], status: [], verant: [], team: [], baugruppe: [], nacharbeit: [], zielRelease: [], unterthema: [] };
   }
   var filter = leererFilter();
 
@@ -194,6 +194,7 @@
     if (!trifft(filter.team, e.verantwortlichkeit || '(offen)')) return false;
     if (!trifft(filter.baugruppe, e.baugruppe || '(offen)')) return false;
     if (!trifft(filter.zielRelease, e.zielRelease || '(offen)')) return false;
+    if (!trifft(filter.unterthema, e.unterthema || '(offen)')) return false;
     // "Re-Milling + Modification" erscheint unter beiden Filterwerten
     if (filter.nacharbeit.length && !filter.nacharbeit.some(function (v) {
       return v === '(keine)' ? !e.nacharbeit : (e.nacharbeit || '').indexOf(v) >= 0;
@@ -205,7 +206,7 @@
     if (quick === 'niedrig' && !(e.prio === 'Niedrig' && e.status !== 'Erledigt')) return false;
     if (quick === 'ueberfaellig' && !Store.istUeberfaellig(e)) return false;
     if (filter.suche) {
-      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.nacharbeit, e.zielRelease, e.lhTitel, e.anforderung, e.bereich, e.notiz,
+      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.nacharbeit, e.zielRelease, e.unterthema, e.lhTitel, e.anforderung, e.bereich, e.notiz,
         TR[e.thema], TR[e.todo], TR[e.notiz], T(e.bereich), T(e.status), T(e.prio)]
         .join(' ').toLowerCase();
       if (hay.indexOf(filter.suche) < 0) return false;
@@ -291,6 +292,7 @@
       if (filter.baugruppe.length) teile.push(T('Baugruppe: {v}', { v: werte('baugruppe') }));
       if (filter.nacharbeit.length) teile.push(T('Nacharbeit: {v}', { v: werte('nacharbeit') }));
       if (filter.zielRelease.length) teile.push(T('Ziel-Release: {v}', { v: werte('zielRelease') }));
+      if (filter.unterthema.length) teile.push(T('Unterthema: {v}', { v: werte('unterthema') }));
       if (filter.suche) teile.push(T('Suche: "{v}"', { v: filter.suche }));
       $('#filterBannerText').textContent = T('Zeige {n} von {gesamt} Punkten — {teile}',
         { n: liste.length, gesamt: alle.length, teile: teile.join(', ') });
@@ -399,7 +401,9 @@
 
     var top = el('div', 'card__top');
     top.appendChild(el('span', 'card__nr', '#' + e.nr));
-    top.appendChild(el('span', 'card__thema', e.thema ? (Store.istThema(e.thema) ? T(e.thema) : tx(e.thema)) : T('(ohne Thema)')));
+    var themaBox = el('span', 'card__thema', e.thema ? (Store.istThema(e.thema) ? T(e.thema) : tx(e.thema)) : T('(ohne Thema)'));
+    if (e.unterthema) themaBox.appendChild(el('span', 'card__unterthema', T(e.unterthema)));
+    top.appendChild(themaBox);
     var edit = el('button', 'card__edit', '✎');
     edit.type = 'button';
     edit.title = T('Bearbeiten');
@@ -525,6 +529,7 @@
     { feld: 'nr', label: 'Nr' },
     { feld: 'bereich', label: 'Bereich' },
     { feld: 'thema', label: 'Thema' },
+    { feld: 'unterthema', label: 'Unterthema' },
     { feld: 'baugruppe', label: 'Baugruppe' },
     { feld: 'nacharbeit', label: 'Nacharbeit' },
     { feld: 'zielRelease', label: 'Ziel-Release' },
@@ -563,6 +568,7 @@
       row.appendChild(el('td', null, String(e.nr)));
       row.appendChild(el('td', null, T(e.bereich)));
       row.appendChild(el('td', Store.istThema(e.thema) ? null : 'is-warn', Store.istThema(e.thema) ? T(e.thema) : (e.thema ? '⚠ ' + tx(e.thema) : '⚠')));
+      row.appendChild(el('td', null, e.unterthema ? T(e.unterthema) : '–'));
       row.appendChild(el('td', null, e.baugruppe ? T(e.baugruppe) : '–'));
       row.appendChild(el('td', null, e.nacharbeit ? T(e.nacharbeit) : '–'));
       row.appendChild(el('td', null, e.zielRelease || '–'));
@@ -723,6 +729,24 @@
       ['(keine)', T('(keine Nacharbeit)')]]);
     mselOptionen('#fZielRelease', 'zielRelease', Store.ZIEL_RELEASES.map(function (v) { return [v, v]; })
       .concat([['(offen)', T('(offen)')]]));
+    // Unterthemen: bei gefilterten Kategorien nur deren Unterthemen
+    var themen = filter.thema.filter(Store.istThema);
+    var unter = [];
+    (themen.length ? themen : Store.THEMEN).forEach(function (t) {
+      Store.unterthemenVon(t).forEach(function (u) { unter.push([u, T(u)]); });
+    });
+    mselOptionen('#fUnterthema', 'unterthema', unter.concat([['(offen)', T('(offen)')]]));
+  }
+
+  // Auswahl im Dialog passend zur gewaehlten Kategorie
+  function unterthemaAuswahl(wert) {
+    var sel = $('#fmUnterthema');
+    var liste = Store.unterthemenVon($('#fmThema').value);
+    sel.textContent = '';
+    sel.appendChild(new Option(liste.length ? T('– offen –') : T('– erst Thema wählen –'), ''));
+    liste.forEach(function (u) { sel.appendChild(new Option(T(u), u)); });
+    sel.value = liste.indexOf(wert) >= 0 ? wert : '';
+    sel.disabled = !liste.length || !Store.darf('bearbeiten');
   }
 
   /* ---------------------------------------------------------- Lightbox */
@@ -802,6 +826,7 @@
     var e = nr == null ? null : Store.byNr(nr);
     $('#fmBereich').value = e ? e.bereich : (einzigerFilter('bereich') || Store.BEREICHE[0]);
     themaAuswahl(e ? e.thema : einzigerFilter('thema'));
+    unterthemaAuswahl(e ? e.unterthema : einzigerFilter('unterthema'));
     $('#fmPrio').value = e ? e.prio : 'Mittel';
     $('#fmStatus').value = e ? e.status : 'Offen';
     $('#fmVerant').value = e ? e.verantwortlicher : (Store.state.user || '');
@@ -824,6 +849,7 @@
     // Nur Lesezugriff: Felder sperren, Bilder bleiben per Klick vergroesserbar
     var nurLesen = !Store.darf('bearbeiten');
     $$('#formEdit input, #formEdit select, #formEdit textarea').forEach(function (f) { f.disabled = nurLesen; });
+    unterthemaAuswahl($('#fmUnterthema').value); // Sperre je nach Thema wiederherstellen
     $('#fmBilder').closest('label').hidden = nurLesen;
 
     // Liste neu bilden, wenn sie fehlt oder veraltet ist (Karte nicht enthalten)
@@ -855,6 +881,7 @@
     var data = {
       bereich: $('#fmBereich').value,
       thema: $('#fmThema').value,
+      unterthema: $('#fmUnterthema').value,
       prio: $('#fmPrio').value,
       status: $('#fmStatus').value,
       verantwortlicher: $('#fmVerant').value.trim(),
@@ -992,7 +1019,7 @@
     knopf(T('⬇ Word'), T('Lastenheft als Word-Datei (.docx)'), function () { lastenheftExport('docx'); });
     knopf(T('⬇ Excel'), T('Lastenheft als Excel-Tabelle'), function () { lastenheftExport('xlsx'); });
     knopf(T('🖨 Drucken / PDF'), T('Über den Druckdialog auch als PDF speichern'), function () { window.print(); });
-    knopf(T('⬆ Texte übernehmen'), T('Anforderungstexte aus einer Excel mit den Spalten „OPL-Nr“, „Titel“ und „Anforderung“ übernehmen'),
+    knopf(T('⬆ Aus Excel übernehmen'), T('Anforderungstexte und/oder Unterthemen aus einer Excel übernehmen (Spalten „OPL-Nr“ und „Anforderung“, „Titel“ bzw. „Unterthema“)'),
       function () { $('#lhDatei').click(); }, 'nur-bearbeiten');
     return box;
   }
@@ -1012,14 +1039,19 @@
   // Formulierte Anforderungen per Excel uebernehmen (Spalten OPL-Nr, Titel, Anforderung)
   function lastenheftTexteUebernehmen(datei) {
     datei.arrayBuffer().then(Xlsx.importAnforderungen).then(function (zeilen) {
-      var unbekannt = 0, gleich = 0, ueberschreibt = 0;
+      var unbekannt = 0, gleich = 0, ueberschreibt = 0, unpassend = 0;
       var patches = [];
       zeilen.forEach(function (z) {
         var e = Store.byNr(z.nr);
         if (!e) { unbekannt++; return; }
         var patch = {};
-        if (z.anforderung !== e.anforderung) patch.anforderung = z.anforderung;
+        if (z.anforderung && z.anforderung !== e.anforderung) patch.anforderung = z.anforderung;
         if (z.titel && z.titel !== e.lhTitel) patch.lhTitel = z.titel;
+        if (z.unterthema && z.unterthema !== e.unterthema) {
+          // nur Unterthemen, die zur Kategorie der Karte gehoeren
+          if (Store.unterthemenVon(e.thema).indexOf(z.unterthema) >= 0) patch.unterthema = z.unterthema;
+          else unpassend++;
+        }
         if (!Object.keys(patch).length) { gleich++; return; }
         if (e.anforderung && patch.anforderung) ueberschreibt++;
         patches.push({ nr: z.nr, patch: patch });
@@ -1028,7 +1060,10 @@
         toast(T('Nichts zu übernehmen: {g} Texte sind schon aktuell, {u} OPL-Nummern unbekannt.', { g: gleich, u: unbekannt }));
         return;
       }
-      var frage = T('{n} Anforderungstexte übernehmen?', { n: patches.length }) +
+      var nUt = patches.filter(function (x) { return x.patch.unterthema; }).length;
+      var nAnf = patches.filter(function (x) { return x.patch.anforderung || x.patch.lhTitel; }).length;
+      var frage = T('{n} Karten aktualisieren? ({a} mit Anforderungstext, {u} mit Unterthema)', { n: patches.length, a: nAnf, u: nUt }) +
+        (unpassend ? '\n' + T('{n} Unterthemen passen nicht zur Kategorie der Karte – werden übersprungen.', { n: unpassend }) : '') +
         (ueberschreibt ? '\n' + T('Davon überschreiben {n} bereits vorhandene Texte.', { n: ueberschreibt }) : '') +
         (unbekannt ? '\n' + T('{n} OPL-Nummern aus der Datei gibt es im Board nicht – werden übersprungen.', { n: unbekannt }) : '');
       if (!confirm(frage)) return;
@@ -1036,7 +1071,7 @@
       Store.updateNacheinander(patches, function (fertig, gesamt) {
         if (fertig % 10 === 0 || fertig === gesamt) toast(T('Übernehme Texte … {f} von {n}', { f: fertig, n: gesamt }));
       }).then(function (n) {
-        toast(T('{n} Anforderungstexte übernommen.', { n: n }));
+        toast(T('{n} Karten aktualisiert.', { n: n }));
         render();
       });
     }).catch(function (err) {
@@ -1072,7 +1107,7 @@
 
   function exportCsv() {
     var kopf = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit', 'Ziel-Release'];
+                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit', 'Ziel-Release', 'Unterthema'];
     function q(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
     var zeilen = [kopf.map(q).join(';')];
     var auswahl = exportEintraege();
@@ -1085,7 +1120,8 @@
         e.verantwortlichkeit,
         e.baugruppe,
         e.nacharbeit,
-        e.zielRelease
+        e.zielRelease,
+        e.unterthema
       ].map(q).join(';'));
     });
     // BOM, damit Excel UTF-8 erkennt
@@ -1433,6 +1469,7 @@
 
     // Edit-Dialog
     $('#fmThema').addEventListener('change', aktualisiereEditTitel);
+    $('#fmThema').addEventListener('change', function () { unterthemaAuswahl($('#fmUnterthema').value); });
     // Verantwortlichkeit nach Person vorbelegen, solange sie leer ist
     // Erledigt ohne Ziel-Release → 4.1.1 vorschlagen (der Server setzt es ohnehin)
     $('#fmStatus').addEventListener('change', function () {
