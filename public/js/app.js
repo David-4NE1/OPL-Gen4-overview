@@ -1020,9 +1020,42 @@
       box.appendChild(b);
       return b;
     }
-    knopf(T('⬇ Word'), T('Lastenheft als Word-Datei (.docx)'), function () { lastenheftExport('docx'); });
-    knopf(T('⬇ Excel'), T('Lastenheft als Excel-Tabelle'), function () { lastenheftExport('xlsx'); });
-    knopf(T('🖨 Drucken / PDF'), T('Über den Druckdialog auch als PDF speichern'), function () { window.print(); });
+    // Export als Auswahlmenue
+    var menu = el('div', 'menu lh__export');
+    var auf = el('button', 'btn btn--ghost lh__knopf', T('⬇ Export ▾'));
+    auf.type = 'button';
+    auf.setAttribute('aria-haspopup', 'true');
+    auf.setAttribute('aria-expanded', 'false');
+    var panel = el('div', 'menu__panel lh__exportpanel');
+    panel.hidden = true;
+    [['kurz', T('📄 Word – Management-Kurzfassung'), T('2–3 Seiten: Kennzahlen, Anforderung/Ziel je Kategorie, Steuerungsbedarf, offene Prio-Hoch-Punkte')],
+      ['docx', T('📘 Word – Lastenheft vollständig'), T('Alle Anforderungen je Kategorie und Unterthema (.docx)')],
+      ['xlsx', T('📊 Excel – Lastenheft'), T('Lastenheft als Excel-Tabelle')],
+      ['druck', T('🖨 Drucken / PDF'), T('Über den Druckdialog auch als PDF speichern')]].forEach(function (a) {
+      var b = el('button', 'lh__exportwahl', a[1]);
+      b.type = 'button';
+      b.title = a[2];
+      b.dataset.art = a[0];
+      panel.appendChild(b);
+    });
+    function zu() { panel.hidden = true; auf.setAttribute('aria-expanded', 'false'); }
+    auf.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      panel.hidden = !panel.hidden;
+      auf.setAttribute('aria-expanded', String(!panel.hidden));
+      if (!panel.hidden) document.addEventListener('click', zu, { once: true });
+    });
+    panel.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var art = ev.target.dataset && ev.target.dataset.art;
+      if (!art) return;
+      zu();
+      if (art === 'druck') window.print();
+      else lastenheftExport(art);
+    });
+    menu.appendChild(auf);
+    menu.appendChild(panel);
+    box.appendChild(menu);
     knopf(T('⬆ Aus Excel übernehmen'), T('Anforderungstexte und/oder Unterthemen aus einer Excel übernehmen (Spalten „OPL-Nr“ und „Anforderung“, „Titel“ bzw. „Unterthema“)'),
       function () { $('#lhDatei').click(); }, 'nur-bearbeiten');
     return box;
@@ -1074,9 +1107,16 @@
     var auswahl = exportEintraege();
     if (!auswahl.length) { toast(T('Keine Punkte im aktuellen Filter – nichts zu exportieren.'), true); return; }
     var stand = Xlsx.ddmmyyyy(Store.heute());
+    var hinweis = filterAktiv() ? T('Gefilterter Auszug: {n} von {g} OPL-Punkten.', { n: auswahl.length, g: Store.state.entries.length }) : '';
+    if (art === 'kurz') {
+      download(window.OPLLastenheft.exportKurzfassung(auswahl, stand, { ziele: lhZiele || {}, filterHinweis: hinweis, heute: Store.heute() }),
+        '4NE1_Gen4_Management-Kurzfassung_' + dateiStempel() + (filterAktiv() ? '_gefiltert' : '') + '.docx');
+      toast(T('Management-Kurzfassung exportiert.') + exportHinweis());
+      return;
+    }
     var name = '4NE1_Gen4_Lastenheft_' + dateiStempel() + (filterAktiv() ? '_gefiltert' : '') + '.' + art;
     var blob = art === 'docx'
-      ? window.OPLLastenheft.exportDocx(auswahl, stand, { ziele: lhZiele || {}, filterHinweis: filterAktiv() ? T('Gefilterter Auszug: {n} von {g} OPL-Punkten.', { n: auswahl.length, g: Store.state.entries.length }) : '' })
+      ? window.OPLLastenheft.exportDocx(auswahl, stand, { ziele: lhZiele || {}, filterHinweis: hinweis })
       : window.OPLLastenheft.exportXlsx(auswahl, stand, lhZiele || {});
     download(blob, name);
     toast(T('Lastenheft exportiert ({n} Anforderungen).', { n: auswahl.length }) + exportHinweis());

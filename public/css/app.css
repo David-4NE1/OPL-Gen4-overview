@@ -471,6 +471,8 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
 .lh__hinweis { margin: 6px 0 0; font-size: 12.5px; color: var(--mittel); }
 .lh__aktionen { display: flex; flex-wrap: wrap; gap: 6px; }
 .lh__aktionen .btn--ghost { background: var(--surface); color: var(--ink); border-color: var(--line); }
+.lh__exportpanel { left: auto; right: 0; min-width: 300px; }
+.lh__exportpanel button { white-space: nowrap; }
 .lh__zahlen { border-collapse: collapse; width: 100%; max-width: 640px; margin-bottom: 18px; font-size: 13px;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .lh__zahlen th { background: var(--navy); color: #fff; text-align: left; padding: 6px 10px; font-weight: 600; }
@@ -547,6 +549,9 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
   .lh__meta { justify-content: flex-start; }
   .lh__aktionen { width: 100%; }
   .lh__aktionen .btn { flex: 1 1 auto; }
+  .lh__export { flex: 1 1 auto; display: flex; }
+  .lh__exportpanel { min-width: 0; width: 100%; left: 0; }
+  .lh__exportpanel button { white-space: normal; }
   .f-lhtitel { order: 12; }
   .f-anforderung { order: 12; }
 }
