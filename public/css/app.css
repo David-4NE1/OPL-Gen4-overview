@@ -581,6 +581,16 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
 .fovor__belegt::before { content: '↳ '; }
 
 /* Forderungs-Dialog gross: breite Liste, gut lesbare Schrift */
+.fovor__text { flex: 1; min-width: 0; }
+.fovor__auf { flex: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); border-radius: 6px;
+  width: 30px; height: 28px; cursor: pointer; font-size: 14px; line-height: 1; }
+.fovor__auf:hover { color: var(--accent); border-color: var(--accent); }
+.fovor__voll { margin-top: 8px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); cursor: default; }
+.fovor__volltext { margin: 4px 0 0; white-space: pre-line; }
+.fovor__notiz { margin: 6px 0 0; white-space: pre-line; color: var(--ink-soft); }
+.fovor__meta { margin: 6px 0 0; font-size: 13px; color: var(--ink-soft); }
+.fovor__bilder { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.fovor__bilder img { height: 110px; max-width: 220px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); cursor: zoom-in; }
 #dlgForderung h2 { font-size: 22px; }
 #dlgForderung label { font-size: 14px; }
 #dlgForderung label > input, #dlgForderung label > textarea { font-size: 16px; padding: 10px 12px; }

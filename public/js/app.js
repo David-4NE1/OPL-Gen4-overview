@@ -1122,6 +1122,7 @@
     $('#btnFoLoeschen').hidden = !f;
     d.dataset.kategorie = kategorie;
     d.dataset.id = f ? f.id : '';
+    vorAuf = {};
     vorschlaegeZeigen();
     d.showModal();
     $('#foText').focus();
@@ -1131,6 +1132,8 @@
   function beispielNrsImFeld() {
     return ($('#foBeispiele').value.match(/\d+/g) || []).map(Number);
   }
+
+  var vorAuf = {};   // aufgeklappte Vorschlaege (OPL-Nr)
 
   function vorschlaegeZeigen() {
     var box = $('#foVorschlaege');
@@ -1177,11 +1180,46 @@
       var txt = el('span', 'fovor__text', window.OPLLastenheft.kurztext(e, 120));
       txt.appendChild(el('small', null, ' · ' + T(e.thema) + (e.status === 'Erledigt' ? ' · ' + T('erledigt') : '') +
         ' · ' + T('Treffer: {w}', { w: v.treffer.join(', ') })));
+      // Aufklappen: vollstaendiger Text, Status, Verantwortlich, Bilder
+      var auf = el('button', 'fovor__auf', vorAuf[e.nr] ? '▾' : '▸');
+      auf.type = 'button';
+      auf.title = vorAuf[e.nr] ? T('Zuklappen') : T('Vollständig anzeigen');
+      auf.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        vorAuf[e.nr] = !vorAuf[e.nr];
+        vorschlaegeZeigen();
+      });
       if (belegt[e.nr]) {
         var hinweis = belegt[e.nr];
         txt.appendChild(el('span', 'fovor__belegt', T('schon bei: {f}', { f: '„' + hinweis.slice(0, 2).join('“, „') + '“' + (hinweis.length > 2 ? ' +' + (hinweis.length - 2) : '') })));
       }
+      if (vorAuf[e.nr]) {
+        var voll = el('div', 'fovor__voll');
+        if (e.lhTitel) voll.appendChild(el('b', null, e.lhTitel));
+        voll.appendChild(el('p', 'fovor__volltext', e.todo || ''));
+        if (e.notiz) voll.appendChild(el('p', 'fovor__notiz', T('Notiz') + ': ' + e.notiz));
+        voll.appendChild(el('p', 'fovor__meta', [T(e.status), e.verantwortlicher, e.verantwortlichkeit, e.baugruppe,
+          e.faellig ? T('bis {d}', { d: Xlsx.ddmmyyyy(e.faellig) }) : '', e.zielRelease ? '🎯 ' + e.zielRelease : '']
+          .filter(Boolean).join(' · ')));
+        var bilder = (e.bilder || []).filter(function (b) { return b && b.src; });
+        if (bilder.length) {
+          var reihe = el('div', 'fovor__bilder');
+          bilder.forEach(function (b, i) {
+            var img = el('img');
+            img.src = b.src;
+            img.alt = b.name || '';
+            img.loading = 'lazy';
+            img.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); zeigeLightbox(bilder, i); });
+            reihe.appendChild(img);
+          });
+          voll.appendChild(reihe);
+        }
+        voll.addEventListener('click', function (ev) { ev.preventDefault(); });
+        txt.appendChild(voll);
+      }
       zeile.appendChild(txt);
+      zeile.appendChild(auf);
       box.appendChild(zeile);
     });
   }
