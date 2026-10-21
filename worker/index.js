@@ -31,6 +31,8 @@ import { Buffer } from 'node:buffer';
  *   GET    /api/releases          → Releases fuer die Roadmap (Name, Zieltermin, Status, Beschreibung)
  *   POST   /api/releases          → Release anlegen/aendern { name, ziel, status, beschreibung }
  *   DELETE /api/releases/:name    → Release loeschen (zugeordnete Punkte werden wieder "nicht eingeplant")
+ *   GET    /api/ziele             → Lastenheft: Anforderung/Ziel je Kategorie bzw. Unterthema
+ *   PUT    /api/ziele             → { schluessel, anforderung, ziel } setzen (leer = loeschen)
  *
  * Die Zuordnung Punkt → Release steht als Feld "release" am Eintrag
  * (PUT /api/entries/:nr { release: '4.0.2' }) und landet im Aenderungsprotokoll.
@@ -310,6 +312,10 @@ async function handleAPI(url, method, request, env) {
     return handleReleases(path, method, request, db, sitzung);
   }
 
+  if (path === '/api/ziele') {
+    return handleZiele(method, request, db, sitzung);
+  }
+
   // GET /api/bild/:nr/:i
   const matchBild = path.match(/^\/api\/bild\/(\d+)\/(\d+)$/);
   if (matchBild && method === 'GET') {
@@ -486,6 +492,47 @@ async function aenderungsStand(db) {
             (SELECT COUNT(*) || '/' || IFNULL(MAX(geaendert_am), '') FROM releases) AS r`
   ).first();
   return [row.n, row.g || '', row.l || 0, row.lc, row.r || ''].join('|');
+}
+
+/* ------------------------------------------------------ Lastenheft-Ziele */
+
+// Zusammenfassung je Kategorie bzw. Unterthema: "Anforderung" (was muss erfuellt
+// sein) und "Ziel" (woran erkennen wir, dass es erreicht ist).
+// Schluessel: "<Kategorie>" oder "<Kategorie> › <Unterthema>".
+const ZIEL_TRENNER = ' › ';
+
+function zielSchluesselGueltig(k) {
+  const [thema, unter, rest] = String(k || '').split(ZIEL_TRENNER);
+  if (rest !== undefined || !UNTERTHEMEN[thema]) return false;
+  return unter === undefined || UNTERTHEMEN[thema].includes(unter);
+}
+
+async function handleZiele(method, request, db, sitzung) {
+  if (method === 'GET') {
+    const { results } = await db.prepare(
+      'SELECT schluessel, anforderung, ziel, geaendert_am AS geaendertAm, geaendert_von AS geaendertVon FROM lastenheft_ziele'
+    ).all();
+    return json(results);
+  }
+  if (method === 'PUT') {
+    if (!darf(sitzung, 'bearbeiten')) return keinRecht('bearbeiten');
+    const d = await request.json();
+    if (!zielSchluesselGueltig(d.schluessel)) return json({ error: 'Unbekannte Kategorie bzw. Unterthema' }, 400);
+    const anforderung = String(d.anforderung || '').trim().slice(0, 2000);
+    const ziel = String(d.ziel || '').trim().slice(0, 2000);
+    if (!anforderung && !ziel) {
+      await db.prepare('DELETE FROM lastenheft_ziele WHERE schluessel = ?').bind(d.schluessel).run();
+    } else {
+      await db.prepare(
+        `INSERT INTO lastenheft_ziele (schluessel, anforderung, ziel, geaendert_am, geaendert_von) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(schluessel) DO UPDATE SET anforderung = excluded.anforderung, ziel = excluded.ziel,
+           geaendert_am = excluded.geaendert_am, geaendert_von = excluded.geaendert_von`
+      ).bind(d.schluessel, anforderung, ziel, new Date().toISOString(), sitzung.name).run();
+    }
+    await logChange(db, 0, `Lastenheft: Anforderung/Ziel „${d.schluessel}“ geändert`, sitzung.name);
+    return json({ ok: true });
+  }
+  return json({ error: 'Route nicht gefunden' }, 404);
 }
 
 /* ------------------------------------------------------------ Releases */
@@ -809,6 +856,9 @@ async function schemaSicherstellen(db) {
         .bind(ZIEL_RELEASE_ERLEDIGT)
     ]);
   }
+  await db.prepare(`CREATE TABLE IF NOT EXISTS lastenheft_ziele (
+    schluessel TEXT PRIMARY KEY, anforderung TEXT NOT NULL DEFAULT '', ziel TEXT NOT NULL DEFAULT '',
+    geaendert_am TEXT NOT NULL DEFAULT '', geaendert_von TEXT NOT NULL DEFAULT '')`).run();
   // Releases-Tabelle beim ersten Mal mit den Gen4-Releases vorbelegen;
   // spaeter geloeschte Releases kommen dadurch nicht wieder.
   const vorhanden = await db.prepare(
