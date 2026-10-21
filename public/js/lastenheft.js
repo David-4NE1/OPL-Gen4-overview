@@ -255,6 +255,11 @@
       zahl.appendChild(el('span', 'fo__zahl', T('{o} offen', { o: zk.offen })));
       if (zk.hoch) zahl.appendChild(el('span', 'fo__zahl fo__zahl--hoch', T('{h} Prio Hoch', { h: zk.hoch })));
       kopf.appendChild(zahl);
+      var wd = el('button', 'lh__stift fo__word', '⬇ Word');
+      wd.type = 'button';
+      wd.title = T('Forderungen und Beispiele dieser Kategorie als Word');
+      wd.addEventListener('click', function () { opts.exportKategorie(k.name); });
+      kopf.appendChild(wd);
       if (opts.darfBearbeiten) {
         var neu = el('button', 'lh__stift fo__neu', '+');
         neu.type = 'button';
@@ -585,6 +590,74 @@
     return docxPaket(body, 'Lastenheft-Übersicht 4NE1 Gen4 · Stand ' + stand + ' · aus der OPL abgeleitet', 1134);
   }
 
+  /* ------------------------------------------ Word: Forderungen einer Kategorie */
+
+  // Oben die Forderungen als knappe Liste, darunter je Forderung einige OPL-Beispiele
+  function exportKategorie(eintraege, kategorie, stand, opts) {
+    opts = opts || {};
+    var punkte = eintraege.filter(function (e) { return e.thema === kategorie; });
+    var liste = forderungenVon(opts.forderungen, kategorie);
+    var zk = zahlen(punkte), zz = (opts.ziele || {})[kategorie];
+    var nachNr = {};
+    eintraege.forEach(function (e) { nachNr[e.nr] = e; });
+    var MAX = 4;
+    var langtext = function (e) {
+      var t = (e.lhTitel ? e.lhTitel + ': ' : '') + String(e.todo || '').trim().replace(/:?\s*\r?\n\s*/g, ' / ').replace(/\s+/g, ' ');
+      return t.length > 320 ? t.slice(0, 319) + '…' : t;
+    };
+    var sortiert = function (l) {
+      return l.slice().sort(function (a, b) { return (a.status === 'Erledigt') - (b.status === 'Erledigt') || PRIO_RANG[a.prio] - PRIO_RANG[b.prio] || a.nr - b.nr; });
+    };
+    var zelleText = function (t, o) { return { xml: para(run(t, Object.assign({ sz: 17 }, o || {})), { after: 0, jc: o && o.jc }) }; };
+    var beispielTabelle = function (l) {
+      return tabelle([700, 5338, 900, 1100, 1600], ['OPL', 'Punkt', 'Prio', 'Status', 'Verantwortlich'], l.map(function (e) {
+        return [zelleText('#' + e.nr, { b: true }), zelleText(langtext(e)),
+          { xml: para(run(e.prio, { sz: 16 }), { after: 0, jc: 'center' }), fill: PRIO_FARBE[e.prio] },
+          zelleText(e.status === 'Erledigt' ? 'erledigt' : e.status, { sz: 16, jc: 'center' }),
+          zelleText(e.verantwortlicher || e.verantwortlichkeit || '–', { sz: 15 })];
+      }));
+    };
+
+    var body = '';
+    body += para(run('4NE1 Gen4 · Forderungen aus der Open Point List · Stand ' + stand, { sz: 18, color: GRAU }), { after: 40 });
+    body += para(run(kategorie, { b: true, sz: 44, color: NAVY }), { after: 20 });
+    if (frage(kategorie)) body += para(run(frage(kategorie), { sz: 28, color: BLAU }), { after: 80 });
+    body += para(run(zk.offen + ' offene Punkte · ' + zk.hoch + ' mit Prio Hoch · ' + zk.umgesetzt + ' von ' + zk.gesamt + ' umgesetzt', { sz: 18, color: GRAU }) +
+      (zz && zz.ziel ? '<w:r><w:br/></w:r>' + run('Ziel: ', { sz: 18, b: true, color: GRAU }) + run(zz.ziel, { sz: 18, color: GRAU, i: true }) : ''), { after: 200 });
+
+    if (liste.length) {
+      body += para(run('Was wir brauchen', { b: true, sz: 26, color: NAVY }), { style: 'Heading2' });
+      liste.forEach(function (f) {
+        body += para(run('•', { b: true, color: BLAU, sz: 24 }) + '<w:r><w:tab/></w:r>' + run(f.text, { b: true, sz: 23 }), { ind: [400, 300], after: 70 });
+      });
+    } else {
+      body += para(run('Für diese Kategorie sind noch keine Forderungen formuliert.', { i: true, color: GRAU }));
+    }
+
+    var verknuepft = {};
+    (opts.forderungen || []).forEach(function (f) { beispielNrs(f).forEach(function (n) { verknuepft[n] = true; }); });
+    var mitBeispiel = liste.filter(function (f) { return beispielNrs(f).some(function (n) { return nachNr[n]; }); });
+    if (mitBeispiel.length) {
+      body += para(run('Beispiele aus der OPL', { b: true, sz: 26, color: NAVY }), { style: 'Heading2', before: 240 });
+      mitBeispiel.forEach(function (f, i) {
+        var bsp = sortiert(beispielNrs(f).map(function (n) { return nachNr[n]; }).filter(Boolean));
+        body += para(run((i + 1) + '.  ' + f.text, { b: true, sz: 20, color: NAVY }), { before: 140, after: 30, keepNext: true });
+        if (f.detail) body += para(run(f.detail, { sz: 17, i: true, color: GRAU }), { after: 50, keepNext: true });
+        body += beispielTabelle(bsp.slice(0, MAX));
+        if (bsp.length > MAX) {
+          body += para(run('Weitere: ' + bsp.slice(MAX).map(function (e) { return '#' + e.nr; }).join(', '), { sz: 16, color: GRAU }), { before: 30, after: 0 });
+        }
+      });
+    }
+    var rest = sortiert(punkte.filter(function (e) { return e.status !== 'Erledigt' && !verknuepft[e.nr]; }));
+    if (rest.length) {
+      body += para(run('Weitere offene Punkte ohne Forderung', { b: true, sz: 20, color: NAVY }), { before: 200, after: 50, keepNext: true });
+      body += beispielTabelle(rest);
+    }
+    body += para(run('Quelle: OPL 4NE1 Gen4, Stand ' + stand + '. Alle Punkte und Details im Board, Reiter Lastenheft → Forderungen.', { sz: 15, color: GRAU }), { before: 160, after: 0 });
+    return docxPaket(body, '4NE1 Gen4 · ' + kategorie + ' · Forderungen aus der OPL · Stand ' + stand, 1000);
+  }
+
   /* ------------------------------------------- Word-Kurzfassung (Management) */
 
   // 2–3 Seiten: Kennzahlen, Anforderung/Ziel/Stand je Kategorie, Steuerungsbedarf
@@ -688,5 +761,5 @@
     return docxPaket(body, '4NE1 Gen4 · Management-Kurzfassung aus der OPL · Stand ' + stand, 850);
   }
 
-  global.OPLLastenheft = { id: id, frage: frage, struktur: struktur, schluessel: schluessel, TRENNER: TRENNER, render: render, exportXlsx: exportXlsx, exportDocx: exportDocx, exportKurzfassung: exportKurzfassung };
+  global.OPLLastenheft = { id: id, frage: frage, struktur: struktur, schluessel: schluessel, TRENNER: TRENNER, render: render, exportXlsx: exportXlsx, exportDocx: exportDocx, exportKurzfassung: exportKurzfassung, exportKategorie: exportKategorie };
 })(window);
