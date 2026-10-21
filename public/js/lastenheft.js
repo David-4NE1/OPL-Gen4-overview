@@ -611,6 +611,70 @@
     return docxPaket(body, 'Lastenheft-Übersicht 4NE1 Gen4 · Stand ' + stand + ' · aus der OPL abgeleitet', 1134);
   }
 
+  /* ------------------------------------------ Beispiel-Vorschlaege (ohne KI) */
+
+  // Woerter ohne Aussagekraft
+  var STOPP = ('und oder aber der die das den dem des ein eine einer eines einem einen mit für fuer von vom zu zum zur im in am an auf aus bei bis ' +
+    'ist sind wird werden wurde muss müssen soll sollen kann können alle allen jeder jede nicht kein keine nur auch wie was welche welcher ' +
+    'bisher inkl dann wenn ja nein noch als über ueber unter nach vor ohne sowie bzw ggf etc pro je beim durch damit dass sich wir uns hat haben ' +
+    'nötig noetig notwendig verbaut angeschlossen liefern sollte sollten möglich moeglich aktuell momentan immer mehr gibt geben ' +
+    'the and for with from not are can all').split(' ');
+  var STOPP_SET = {};
+  STOPP.forEach(function (w) { STOPP_SET[w] = true; });
+  // Begriffe, die in der OPL unterschiedlich geschrieben werden
+  var SYNONYME = { glasfaser: ['lwl', 'fiber', 'faser'], lwl: ['glasfaser'], ethercat: ['ether'], kamera: ['camera', 'kameras'],
+    stecker: ['connector', 'buchse'], zugentlastung: ['entlastung', 'clip'], halterung: ['halter', 'clip'], cad: ['modell', 'konstruktion'] };
+
+  function woerter(text) {
+    return String(text || '').toLowerCase().replace(/ß/g, 'ss').split(/[^a-z0-9äöü]+/)
+      .filter(function (w) { return w.length >= 3 && !STOPP_SET[w] && !/^\d+$/.test(w); });
+  }
+  // Wortstamm grob: die ersten 5 Zeichen (Kabel/Kabelbaum, trennbar/Trennstelle, Kamera/Kameras)
+  function stamm(w) { return w.length > 5 ? w.slice(0, 5) : w; }
+
+  // Liefert passende OPL-Punkte zu einer Forderung, beste zuerst:
+  // [{ e, punkte, treffer: ['kabel', ...] }]
+  function vorschlaege(eintraege, kategorie, text, detail, max) {
+    var anfrage = {};
+    var add = function (w, gewicht) {
+      [w].concat(SYNONYME[w] || []).forEach(function (x) {
+        var st = stamm(x);
+        if (!anfrage[st] || anfrage[st].g < gewicht) anfrage[st] = { g: gewicht, wort: w };
+      });
+      // zusammengesetzte Woerter: auch den hinteren Teil suchen (Kabel|halterungen)
+      if (w.length >= 10) {
+        var rest = w.slice(5), st2 = stamm(rest);
+        if (rest.length >= 5 && !STOPP_SET[rest] && (!anfrage[st2] || anfrage[st2].g < gewicht * 0.8)) anfrage[st2] = { g: gewicht * 0.8, wort: w };
+      }
+    };
+    woerter(text).forEach(function (w) { add(w, 1); });
+    woerter(detail).forEach(function (w) { add(w, 0.6); });
+    var staemme = Object.keys(anfrage);
+    if (!staemme.length) return [];
+    // Seltene Begriffe zaehlen mehr (IDF)
+    var doks = eintraege.map(function (e) {
+      var set = {};
+      woerter([e.lhTitel, e.todo, e.anforderung, e.notiz, e.unterthema].join(' ')).forEach(function (w) { set[stamm(w)] = true; });
+      return set;
+    });
+    var df = {};
+    staemme.forEach(function (st) { df[st] = doks.filter(function (d) { return d[st]; }).length; });
+    var n = eintraege.length || 1;
+    return eintraege.map(function (e, i) {
+      var punkte = 0, treffer = [];
+      staemme.forEach(function (st) {
+        if (!doks[i][st]) return;
+        punkte += anfrage[st].g * Math.log(1 + n / df[st]);
+        if (treffer.indexOf(anfrage[st].wort) < 0) treffer.push(anfrage[st].wort);
+      });
+      if (!punkte) return null;
+      if (e.thema === kategorie) punkte += 1;
+      if (e.status !== 'Erledigt') punkte += 1.5;
+      if (e.status !== 'Erledigt' && e.prio === 'Hoch') punkte += 0.4;
+      return { e: e, punkte: punkte, treffer: treffer };
+    }).filter(Boolean).sort(function (a, b) { return b.punkte - a.punkte || a.e.nr - b.e.nr; }).slice(0, max || 12);
+  }
+
   /* ------------------------------------------ Word: Forderungen einer Kategorie */
 
   // OPL-Nummern, die im Export einer Kategorie vorkommen (Beispiele + Punkte der Kategorie)
@@ -804,5 +868,5 @@
     return docxPaket(body, '4NE1 Gen4 · Management-Kurzfassung aus der OPL · Stand ' + stand, 850);
   }
 
-  global.OPLLastenheft = { id: id, frage: frage, struktur: struktur, schluessel: schluessel, TRENNER: TRENNER, render: render, exportXlsx: exportXlsx, exportDocx: exportDocx, exportKurzfassung: exportKurzfassung, exportKategorie: exportKategorie, kategorieNrs: kategorieNrs };
+  global.OPLLastenheft = { id: id, frage: frage, struktur: struktur, schluessel: schluessel, TRENNER: TRENNER, render: render, exportXlsx: exportXlsx, exportDocx: exportDocx, exportKurzfassung: exportKurzfassung, exportKategorie: exportKategorie, kategorieNrs: kategorieNrs, vorschlaege: vorschlaege, kurztext: kurztext };
 })(window);
