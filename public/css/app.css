@@ -579,6 +579,23 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
 .dialog .fovor__zeile.is-belegt .fovor__text { color: var(--ink-soft); }
 .fovor__belegt { display: block; font-size: 11.5px; color: #9a6a00; margin-top: 1px; }
 .fovor__belegt::before { content: '↳ '; }
+
+/* Forderungs-Dialog gross: breite Liste, gut lesbare Schrift */
+#dlgForderung h2 { font-size: 22px; }
+#dlgForderung label { font-size: 14px; }
+#dlgForderung label > input, #dlgForderung label > textarea { font-size: 16px; padding: 10px 12px; }
+#dlgForderung .hint { font-size: 14px; }
+#dlgForderung .fovor__kopf { font-size: 14px; }
+#dlgForderung .fovor__zeile { font-size: 15px; line-height: 1.45; padding: 8px 10px; }
+#dlgForderung .fovor__zeile > input { width: 18px; height: 18px; margin-top: 3px; }
+#dlgForderung .fovor__text small { font-size: 13px; }
+#dlgForderung .fovor__belegt { font-size: 13px; }
+#dlgForderung .pill { font-size: 12px; }
+#dlgForderung .dialog__footer { position: sticky; bottom: -24px; background: var(--surface); padding: 12px 0; margin-bottom: -12px; z-index: 1; }
+@media (min-width: 641px) {
+  #dlgForderung { width: min(1100px, calc(100vw - 48px)); max-height: calc(100vh - 32px); padding: 24px 28px; }
+  #dlgForderung .fovor { max-height: max(240px, calc(100vh - 610px)); }
+}
 .fo__tief { padding: 0 8px 10px 26px; display: flex; flex-direction: column; gap: 6px; }
 .fo__detail { margin: 0; color: var(--ink-soft); white-space: pre-line; }
 .fo__rest { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px; }
