@@ -105,6 +105,7 @@
   <div class="viewswitch" role="group" aria-label="Ansicht" data-i18n-aria>
     <button type="button" class="is-active" data-view="karten" title="Karten-Ansicht" data-i18n-title>▤</button>
     <button type="button" data-view="tabelle" title="Tabellen-Ansicht" data-i18n-title>☰</button>
+    <button type="button" data-view="lastenheft" class="viewswitch__text" title="Lastenheft-Übersicht nach Kategorie" data-i18n-title><span data-i18n>Lastenheft</span></button>
   </div>
   <button id="btnFilterReset" class="btn btn--ghost" type="button" hidden data-i18n>Filter zurücksetzen</button>
 </section>
@@ -118,6 +119,7 @@
 <div id="trBanner" class="tr-banner" hidden></div>
 
 <main id="content"></main>
+<input id="lhDatei" type="file" accept=".xlsx" hidden>
 
 <!-- Smartphone: schneller Zugriff auf "Neuer Punkt" -->
 <button id="btnNeuFab" class="fab nur-bearbeiten" type="button" aria-label="Neuer Punkt" title="Neuer Punkt" data-i18n-title data-i18n-aria>+</button>
@@ -178,6 +180,12 @@
     </div>
     <label class="f-todo"><span data-i18n>To Do</span>
       <textarea name="todo" id="fmTodo" rows="5" placeholder="Konkrete Beschreibung der Aufgabe" data-i18n-ph></textarea>
+    </label>
+    <label class="f-lhtitel"><span data-i18n>Lastenheft: Titel der Anforderung</span>
+      <input name="lhTitel" id="fmLhTitel" type="text" maxlength="200" placeholder="z. B. Freigängigkeit Hardstop Kniegelenk" data-i18n-ph>
+    </label>
+    <label class="f-anforderung"><span data-i18n>Lastenheft: Anforderung (Zielzustand)</span>
+      <textarea name="anforderung" id="fmAnforderung" rows="3" maxlength="4000" placeholder="z. B. Das Bauteil muss … (leer = To-Do-Text wird angezeigt)" data-i18n-ph></textarea>
     </label>
     <label class="f-notiz"><span data-i18n>Notiz zur Bildspalte (Excel, Spalte „Bild“)</span>
       <input name="notiz" id="fmNotiz" type="text" placeholder="z. B. s. Anhang Thorsten (2 Bilder)" data-i18n-ph>
@@ -288,7 +296,7 @@
   }
 
   function loadScripts() {
-    var scripts = ['js/seed.js', 'js/xlsx-io.js', 'js/store.js', 'js/app.js'];
+    var scripts = ['js/seed.js', 'js/xlsx-io.js', 'js/store.js', 'js/lastenheft.js', 'js/app.js'];
     var i = 0;
     function next() {
       if (i >= scripts.length) return;

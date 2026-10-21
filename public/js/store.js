@@ -128,6 +128,9 @@
       nacharbeit: NACHARBEIT.indexOf(e.nacharbeit) >= 0 ? e.nacharbeit : '',
       zielRelease: ZIEL_RELEASES.indexOf(e.zielRelease) >= 0 ? e.zielRelease
         : (e.status === 'Erledigt' ? ZIEL_RELEASE_ERLEDIGT : ''),
+      // Lastenheft: Kurztitel und Anforderung (Zielzustand) zum OPL-Punkt
+      lhTitel: String(e.lhTitel || '').trim(),
+      anforderung: String(e.anforderung || '').trim(),
       release: e.release || '',
       faellig: e.faellig || '',
       status: STATI.indexOf(e.status) >= 0 ? e.status : 'Offen',
@@ -348,7 +351,7 @@
   }
 
   var FELDER = ['bereich', 'thema', 'prio', 'verantwortlicher', 'verantwortlichkeit', 'baugruppe', 'seite',
-    'nacharbeit', 'zielRelease', 'release', 'faellig', 'status', 'todo', 'notiz'];
+    'nacharbeit', 'zielRelease', 'release', 'faellig', 'status', 'todo', 'notiz', 'lhTitel', 'anforderung'];
 
   // Gleicher Fingerabdruck wie bildSignatur() im Worker (Anzahl und Namen)
   function bildSignatur(bilder) {
@@ -364,9 +367,28 @@
   // Bearbeiten gesehen hat ("vorher"). Hat jemand anderes eines dieser Felder
   // inzwischen geaendert, lehnt der Worker mit 409 ab (siehe konfliktLoesen).
   function update(nr, patch) {
-    if (!darf('bearbeiten')) return verweigert('bearbeiten');
+    return aendern(nr, patch).eintrag;
+  }
+
+  // Mehrere Karten nacheinander speichern (z. B. Lastenheft-Texte uebernehmen);
+  // fortschritt(fertig, gesamt) wird nach jeder Karte aufgerufen.
+  function updateNacheinander(liste, fortschritt) {
+    var fertig = 0;
+    return liste.reduce(function (kette, x) {
+      return kette.then(function () {
+        return aendern(x.nr, x.patch).sync;
+      }).then(function () {
+        fertig++;
+        if (fortschritt) fortschritt(fertig, liste.length);
+      });
+    }, Promise.resolve()).then(function () { return fertig; });
+  }
+
+  // -> { eintrag, sync: Promise }
+  function aendern(nr, patch) {
+    if (!darf('bearbeiten')) return { eintrag: verweigert('bearbeiten'), sync: Promise.resolve() };
     var e = byNr(nr);
-    if (!e) return null;
+    if (!e) return { eintrag: null, sync: Promise.resolve() };
     var neu = normalizeEntry(Object.assign({}, e, patch));
     var senden = {}, vorher = {};
     FELDER.forEach(function (k) {
@@ -379,23 +401,24 @@
       senden.bilder = patch.bilder;
       vorher.bilder = bildSignatur(e.bilder);
     }
-    if (!Object.keys(senden).length) return e;
+    if (!Object.keys(senden).length) return { eintrag: e, sync: Promise.resolve() };
     Object.assign(e, neu, { bilder: 'bilder' in senden ? senden.bilder : e.bilder });
     e.geaendertAm = jetzt();
     e.geaendertVon = state.user || 'unbekannt';
     commit();
     senden.vorher = vorher;
-    API.put('/api/entries/' + nr, senden).catch(function (err) {
+    var sync = API.put('/api/entries/' + nr, senden).catch(function (err) {
       if (err.status === 409 && err.body && err.body.eintrag) return konfliktLoesen(nr, senden, err.body);
       syncFehler(err);
     });
-    return e;
+    return { eintrag: e, sync: sync };
   }
 
   var FELD_NAMEN = {
     bereich: 'Bereich', thema: 'Thema', prio: 'Prio', verantwortlicher: 'Verantwortlicher',
     verantwortlichkeit: 'Verantwortlichkeit', baugruppe: 'Baugruppe', seite: 'Seite', nacharbeit: 'Nacharbeit', zielRelease: 'Ziel-Release',
-    release: 'Release', faellig: 'Bis wann', status: 'Status', todo: 'To Do', notiz: 'Notiz', bilder: 'Bilder'
+    release: 'Release', faellig: 'Bis wann', status: 'Status', todo: 'To Do', notiz: 'Notiz', bilder: 'Bilder',
+    lhTitel: 'Lastenheft-Titel', anforderung: 'Anforderung'
   };
 
   function lokalErsetzen(nr, eintrag) {
@@ -486,6 +509,8 @@
           n.release = n.release || vorhanden.release;
           n.seite = n.seite || vorhanden.seite;
           n.nacharbeit = n.nacharbeit || vorhanden.nacharbeit;
+          n.lhTitel = n.lhTitel || vorhanden.lhTitel;
+          n.anforderung = n.anforderung || vorhanden.anforderung;
           if (vorhanden.zielRelease && (!n.zielRelease || (n.zielRelease === ZIEL_RELEASE_ERLEDIGT && !raw.zielRelease))) n.zielRelease = vorhanden.zielRelease;
           // Altes Freitext-Thema aus der Datei ueberschreibt kein gueltiges Thema
           if (!istThema(n.thema) && istThema(vorhanden.thema)) n.thema = vorhanden.thema;
@@ -539,7 +564,7 @@
     THEMEN: THEMEN, BAUGRUPPEN: BAUGRUPPEN, SEITEN: SEITEN, NACHARBEIT: NACHARBEIT, ZIEL_RELEASES: ZIEL_RELEASES, istThema: istThema, teamStandard: teamStandard, altesThemaInsTodo: altesThemaInsTodo,
     state: state,
     load: load, subscribe: subscribe, onError: onError, onStatus: onStatus, isOnline: isOnline,
-    add: add, update: update, remove: remove, cycle: cycle, byNr: byNr,
+    add: add, update: update, updateNacheinander: updateNacheinander, remove: remove, cycle: cycle, byNr: byNr,
     setUser: setUser, setRolle: setRolle, darf: darf, applyImport: applyImport, reset: reset,
     istUeberfaellig: istUeberfaellig, heute: heute, clone: clone
   };

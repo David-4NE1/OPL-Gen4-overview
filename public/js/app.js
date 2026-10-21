@@ -205,7 +205,7 @@
     if (quick === 'niedrig' && !(e.prio === 'Niedrig' && e.status !== 'Erledigt')) return false;
     if (quick === 'ueberfaellig' && !Store.istUeberfaellig(e)) return false;
     if (filter.suche) {
-      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.nacharbeit, e.zielRelease, e.bereich, e.notiz,
+      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.nacharbeit, e.zielRelease, e.lhTitel, e.anforderung, e.bereich, e.notiz,
         TR[e.thema], TR[e.todo], TR[e.notiz], T(e.bereich), T(e.status), T(e.prio)]
         .join(' ').toLowerCase();
       if (hay.indexOf(filter.suche) < 0) return false;
@@ -312,6 +312,13 @@
     }
 
     if (view === 'tabelle') { content.appendChild(renderTabelle(liste)); return; }
+    if (view === 'lastenheft') {
+      content.appendChild(window.OPLLastenheft.render(liste, {
+        gesamt: alle.length, filterAktiv: istAktiv, aktionen: lastenheftAktionen(),
+        oeffnen: function (nr) { oeffneEdit(nr, 'anforderung'); }
+      }));
+      return;
+    }
 
     var offeneListe = liste.filter(function (e) { return e.status !== 'Erledigt'; });
     var erledigt = liste.filter(function (e) { return e.status === 'Erledigt'; });
@@ -803,6 +810,8 @@
     $('#fmSeite').value = e ? (e.seite || '') : '';
     $('#fmNacharbeit').value = e ? (e.nacharbeit || '') : '';
     $('#fmZielRelease').value = e ? (e.zielRelease || '') : einzigerFilter('zielRelease');
+    $('#fmLhTitel').value = e ? (e.lhTitel || '') : '';
+    $('#fmAnforderung').value = e ? (e.anforderung || '') : '';
     $('#fmFaellig').value = e ? e.faellig : '';
     $('#fmTodo').value = e ? e.todo : '';
     $('#fmNotiz').value = e ? e.notiz : '';
@@ -837,6 +846,7 @@
       else if (fokus === 'baugruppe') $('#fmBaugruppe').focus();
       else if (fokus === 'nacharbeit') $('#fmNacharbeit').focus();
       else if (fokus === 'zielRelease') $('#fmZielRelease').focus();
+      else if (fokus === 'anforderung') $('#fmAnforderung').focus();
       else $('#fmThema').focus();
     }, 30);
   }
@@ -853,6 +863,8 @@
       seite: $('#fmSeite').value,
       nacharbeit: $('#fmNacharbeit').value,
       zielRelease: $('#fmZielRelease').value,
+      lhTitel: $('#fmLhTitel').value.trim(),
+      anforderung: $('#fmAnforderung').value.trim(),
       faellig: $('#fmFaellig').value,
       todo: $('#fmTodo').value.trim(),
       notiz: $('#fmNotiz').value.trim(),
@@ -963,6 +975,73 @@
     return filterAktiv()
       ? ' ' + T('Filter aktiv: {n} von {g} Punkten.', { n: exportEintraege().length, g: Store.state.entries.length })
       : '';
+  }
+
+  /* --------------------------------------------------------- Lastenheft */
+
+  function lastenheftAktionen() {
+    var box = el('div', 'lh__aktionen');
+    function knopf(text, titel, fn, cls) {
+      var b = el('button', 'btn btn--ghost lh__knopf' + (cls ? ' ' + cls : ''), text);
+      b.type = 'button';
+      b.title = titel;
+      b.addEventListener('click', fn);
+      box.appendChild(b);
+      return b;
+    }
+    knopf(T('⬇ Word'), T('Lastenheft als Word-Datei (.docx)'), function () { lastenheftExport('docx'); });
+    knopf(T('⬇ Excel'), T('Lastenheft als Excel-Tabelle'), function () { lastenheftExport('xlsx'); });
+    knopf(T('🖨 Drucken / PDF'), T('Über den Druckdialog auch als PDF speichern'), function () { window.print(); });
+    knopf(T('⬆ Texte übernehmen'), T('Anforderungstexte aus einer Excel mit den Spalten „OPL-Nr“, „Titel“ und „Anforderung“ übernehmen'),
+      function () { $('#lhDatei').click(); }, 'nur-bearbeiten');
+    return box;
+  }
+
+  function lastenheftExport(art) {
+    var auswahl = exportEintraege();
+    if (!auswahl.length) { toast(T('Keine Punkte im aktuellen Filter – nichts zu exportieren.'), true); return; }
+    var stand = Xlsx.ddmmyyyy(Store.heute());
+    var name = '4NE1_Gen4_Lastenheft_' + dateiStempel() + (filterAktiv() ? '_gefiltert' : '') + '.' + art;
+    var blob = art === 'docx'
+      ? window.OPLLastenheft.exportDocx(auswahl, stand, { filterHinweis: filterAktiv() ? T('Gefilterter Auszug: {n} von {g} OPL-Punkten.', { n: auswahl.length, g: Store.state.entries.length }) : '' })
+      : window.OPLLastenheft.exportXlsx(auswahl, stand);
+    download(blob, name);
+    toast(T('Lastenheft exportiert ({n} Anforderungen).', { n: auswahl.length }) + exportHinweis());
+  }
+
+  // Formulierte Anforderungen per Excel uebernehmen (Spalten OPL-Nr, Titel, Anforderung)
+  function lastenheftTexteUebernehmen(datei) {
+    datei.arrayBuffer().then(Xlsx.importAnforderungen).then(function (zeilen) {
+      var unbekannt = 0, gleich = 0, ueberschreibt = 0;
+      var patches = [];
+      zeilen.forEach(function (z) {
+        var e = Store.byNr(z.nr);
+        if (!e) { unbekannt++; return; }
+        var patch = {};
+        if (z.anforderung !== e.anforderung) patch.anforderung = z.anforderung;
+        if (z.titel && z.titel !== e.lhTitel) patch.lhTitel = z.titel;
+        if (!Object.keys(patch).length) { gleich++; return; }
+        if (e.anforderung && patch.anforderung) ueberschreibt++;
+        patches.push({ nr: z.nr, patch: patch });
+      });
+      if (!patches.length) {
+        toast(T('Nichts zu übernehmen: {g} Texte sind schon aktuell, {u} OPL-Nummern unbekannt.', { g: gleich, u: unbekannt }));
+        return;
+      }
+      var frage = T('{n} Anforderungstexte übernehmen?', { n: patches.length }) +
+        (ueberschreibt ? '\n' + T('Davon überschreiben {n} bereits vorhandene Texte.', { n: ueberschreibt }) : '') +
+        (unbekannt ? '\n' + T('{n} OPL-Nummern aus der Datei gibt es im Board nicht – werden übersprungen.', { n: unbekannt }) : '');
+      if (!confirm(frage)) return;
+      toast(T('Übernehme Texte … {f} von {n}', { f: 0, n: patches.length }));
+      Store.updateNacheinander(patches, function (fertig, gesamt) {
+        if (fertig % 10 === 0 || fertig === gesamt) toast(T('Übernehme Texte … {f} von {n}', { f: fertig, n: gesamt }));
+      }).then(function (n) {
+        toast(T('{n} Anforderungstexte übernommen.', { n: n }));
+        render();
+      });
+    }).catch(function (err) {
+      toast(T('Datei konnte nicht gelesen werden: {msg}', { msg: err.message }), true);
+    });
   }
 
   function exportXlsx() {
@@ -1412,6 +1491,11 @@
     });
 
     // Import-Dialog
+    $('#lhDatei').addEventListener('change', function (ev) {
+      var f = ev.target.files[0];
+      ev.target.value = '';
+      if (f) lastenheftTexteUebernehmen(f);
+    });
     $('#impFile').addEventListener('change', function (ev) {
       if (ev.target.files[0]) vorschauImport(ev.target.files[0]);
     });

@@ -460,6 +460,64 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
   main { padding: 12px; }
 }
 
+/* --------------------------------------------------------- Lastenheft */
+
+.viewswitch__text { font-size: 13px; font-weight: 600; }
+.lh { max-width: 1200px; margin: 0 auto; }
+.lh__kopf { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; }
+.lh__titel h2 { margin: 0; font-size: 20px; color: var(--ink); }
+.lh__sub { margin: 4px 0 0; color: var(--ink-soft); font-size: 13px; }
+.lh__hinweis { margin: 6px 0 0; font-size: 12.5px; color: var(--mittel); }
+.lh__aktionen { display: flex; flex-wrap: wrap; gap: 6px; }
+.lh__aktionen .btn--ghost { background: var(--surface); color: var(--ink); border-color: var(--line); }
+.lh__zahlen { border-collapse: collapse; width: 100%; max-width: 640px; margin-bottom: 18px; font-size: 13px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.lh__zahlen th { background: var(--navy); color: #fff; text-align: left; padding: 6px 10px; font-weight: 600; }
+.lh__zahlen td { padding: 5px 10px; border-top: 1px solid var(--line); }
+.lh__zahlen td:not(:first-child), .lh__zahlen th:not(:first-child) { text-align: center; }
+.lh__zahlen a { color: var(--accent); text-decoration: none; }
+.lh__kap { margin: 26px 0 6px; font-size: 18px; color: var(--ink); scroll-margin-top: 120px; }
+.lh__kap small { display: block; font-size: 12.5px; font-weight: 400; color: var(--ink-soft); margin-top: 2px; }
+.lh__bg { margin: 14px 0 6px; font-size: 14px; color: var(--ink-soft); }
+.lh__liste { display: flex; flex-direction: column; gap: 6px; }
+.lh__anf {
+  display: grid; grid-template-columns: 110px 1fr 220px; gap: 12px; align-items: start;
+  padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  cursor: pointer; box-shadow: var(--shadow);
+}
+.lh__anf:hover, .lh__anf:focus { border-color: var(--accent); outline: none; }
+.lh__anf.is-umgesetzt { opacity: .75; }
+.lh__id { font-weight: 700; font-size: 12.5px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.lh__text b { display: block; margin-bottom: 2px; }
+.lh__text p { margin: 0; white-space: pre-wrap; font-size: 13.5px; }
+.lh__text small { display: block; margin-top: 4px; color: var(--ink-soft); font-size: 12px; }
+.lh__platzhalter { font-style: italic; color: var(--ink-soft); }
+.lh__marke { font-style: normal; font-size: 11px; font-weight: 700; color: var(--mittel); border: 1px solid var(--mittel);
+  border-radius: 999px; padding: 0 6px; margin-right: 6px; }
+.lh__meta { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-end; font-size: 12px; }
+.lh__meta > span { padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.lh__meta .pill { border: 0; font-size: 12px; }
+.lh__status.is-umgesetzt { background: var(--erledigt-bg); }
+
+@media (max-width: 640px) {
+  .lh__anf { grid-template-columns: 1fr; gap: 6px; }
+  .lh__meta { justify-content: flex-start; }
+  .lh__aktionen { width: 100%; }
+  .lh__aktionen .btn { flex: 1 1 auto; }
+  .f-lhtitel { order: 12; }
+  .f-anforderung { order: 12; }
+}
+
+/* Drucken / PDF: nur das Lastenheft, ohne Bedienelemente */
+@media print {
+  .topbar, .filterbar, .filter-banner, .fab, .toast, .lh__aktionen, .tr-banner { display: none !important; }
+  body { background: #fff; }
+  main { padding: 0; max-width: none; }
+  .lh__anf { box-shadow: none; break-inside: avoid; }
+  .lh__kap { break-before: page; }
+  .lh__bg { break-after: avoid; }
+}
+
 /* ------------------------------------------------------------- Rollen */
 /* Nur Anzeige – die Rechte prueft der Worker bei jeder Anfrage */
 body[data-rolle="lesen"] .nur-bearbeiten,
