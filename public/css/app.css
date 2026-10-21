@@ -575,6 +575,10 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
 .fovor__nr { flex: none; }
 .fovor__zeile .pill { flex: none; }
 .fovor__text small { color: var(--ink-soft); }
+.dialog .fovor__zeile.is-belegt { background: var(--bg); }
+.dialog .fovor__zeile.is-belegt .fovor__text { color: var(--ink-soft); }
+.fovor__belegt { display: block; font-size: 11.5px; color: #9a6a00; margin-top: 1px; }
+.fovor__belegt::before { content: '↳ '; }
 .fo__tief { padding: 0 8px 10px 26px; display: flex; flex-direction: column; gap: 6px; }
 .fo__detail { margin: 0; color: var(--ink-soft); white-space: pre-line; }
 .fo__rest { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px; }

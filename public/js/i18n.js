@@ -141,6 +141,8 @@
     'davon Hoch': 'of which high',
     'Umgesetzt': 'Implemented',
     '⬇ Export ▾': '⬇ Export ▾',
+    'schon bei: {f}': 'already in: {f}',
+    'noch nicht zugeordnete zuerst': 'unassigned first',
     'Vorschläge aus der OPL – anhaken, um sie als Beispiel zu übernehmen': 'Suggestions from the OPL – tick to add as example',
     'Keine passenden Punkte gefunden – andere Begriffe probieren.': 'No matching points found – try other terms.',
     'Treffer: {w}': 'matches: {w}',
