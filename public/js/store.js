@@ -68,16 +68,16 @@
   function istThema(t) { return THEMEN.indexOf(t) >= 0; }
   // Unterthemen je Kategorie (zweite Ebene); muss zu worker/index.js passen
   var UNTERTHEMEN = {
-    'Kollision & Bauraum': ['Bewegungsbereich & Endanschläge', 'Kabel- & Steckerfreigang', 'Bauraum Aktuatoren & Gelenke', 'Gehäuse & Shells'],
+    'Kollision & Bauraum': ['Bewegungsbereich & Endanschläge', 'Kabel- & Steckerfreigang', 'Aussparungen & Ausschnitte', 'Bauraum Aktuatoren & Gelenke', 'Bauraum Elektronik & Komponenten', 'Gehäuse & Shells', 'Kollisionsprüfung & Review'],
     'Kabel & Steckverbinder': ['Glasfaser & Trennstellen', 'Vorkonfektionierte Kabel & Kabelbaum', 'Stecker- & Kabeltypen', 'Kabelplan & Routing', 'Zugentlastung & Fixierung'],
-    'Montage & Service': ['Montagereihenfolge', 'Zugänglichkeit & Werkzeug', 'Demontage & Service', 'Montageanleitung & Kennzeichnung'],
+    'Montage & Service': ['Montagereihenfolge', 'Zugänglichkeit & Werkzeug', 'Ausrichtung & Passstifte', 'Demontage & Service', 'Montageanleitung & Kennzeichnung', 'Funktionsprüfung im Aufbau'],
     'Verbindungstechnik & Toleranzen': ['Schrauben & Gewinde', 'Passungen & Toleranzen', 'Lager & Lagersitze', 'Schraubensicherung'],
     'Poka Yoke & Varianten': ['Verwechslungsschutz', 'Links/Rechts-Varianten', 'Gleichteile'],
-    'Auslegung & Simulation': ['Festigkeit & FEM', 'Lastfälle & Spezifikation', 'Aktuator-Auslegung'],
+    'Auslegung & Simulation': ['Festigkeit & FEM', 'Lastfälle & Spezifikation', 'Aktuator-Auslegung', 'Anschläge & Federn'],
     'Thermik': ['Kühlung & Lüftung', 'Wärmeabfuhr Aktuatoren & Elektronik'],
     'Elektronik & Software': ['Platinen & Sensorik', 'Stromversorgung & Batterie', 'Kommunikation & Bus', 'Software & Tests'],
     'BOM/CAD & Dokumentation': ['BOM', 'CAD-Daten & Modellpflege', 'Zeichnungen & Normteile', 'Prozesse & Freigabe'],
-    'Industrialisierung & Design': ['Fertigungsverfahren', 'Design & Optik', 'Verpackung & Logistik', 'Serienreife & Kosten']
+    'Industrialisierung & Design': ['Fertigungsverfahren', 'Montagekonzept & Vorrichtungen', 'Design & Optik', 'Verpackung & Logistik', 'Serienreife & Kosten']
   };
   function unterthemenVon(thema) { return UNTERTHEMEN[thema] || []; }
 
