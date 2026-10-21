@@ -673,6 +673,10 @@
           'und "Bereich" in Spalte B (Schema der OPL-Excel).');
       }
 
+      // Spalten ueber die Ueberschriften zuordnen: so stimmt der Import auch,
+      // wenn in der Datei eine Spalte geloescht oder verschoben wurde.
+      var sp = spaltenAusKopf(grid[headerRow]);
+
       var entries = [];
       var warnungen = [];
       var entryByRow = {}; // Zeilennummer (wie in Excel) -> Eintrag
@@ -681,46 +685,47 @@
 
       rowNums.forEach(function (rn) {
         var row = grid[rn];
-        var nrRaw = row[1];
-        var todo = (row[8] || '').trim();
-        var thema = (row[3] || '').trim();
+        var zelle = function (k) { return sp[k] ? row[sp[k]] : undefined; };
+        var nrRaw = zelle('nr');
+        var todo = (zelle('todo') || '').trim();
+        var thema = (zelle('thema') || '').trim();
         if (!nrRaw && !todo && !thema) return; // Leerzeile
 
         var nr = parseInt(String(nrRaw).replace(/\D/g, ''), 10);
         if (!nr) { warnungen.push('Zeile ' + rn + ': keine gueltige Nr – uebersprungen.'); return; }
 
-        var prio = normalize(row[4], ['Hoch', 'Mittel', 'Niedrig']);
+        var prio = normalize(zelle('prio'), ['Hoch', 'Mittel', 'Niedrig']);
         if (!prio) {
-          if (row[4]) warnungen.push('Zeile ' + rn + ': Prio "' + row[4] + '" unbekannt – auf "Mittel" gesetzt.');
+          if (zelle('prio')) warnungen.push('Zeile ' + rn + ': Prio "' + zelle('prio') + '" unbekannt – auf "Mittel" gesetzt.');
           prio = 'Mittel';
         }
-        var status = normalize(row[7], ['Offen', 'In Arbeit', 'Erledigt']);
+        var status = normalize(zelle('status'), ['Offen', 'In Arbeit', 'Erledigt']);
         if (!status) {
-          if (row[7]) warnungen.push('Zeile ' + rn + ': Status "' + row[7] + '" unbekannt – auf "Offen" gesetzt.');
+          if (zelle('status')) warnungen.push('Zeile ' + rn + ': Status "' + zelle('status') + '" unbekannt – auf "Offen" gesetzt.');
           status = 'Offen';
         }
-        var faellig = toIsoDate(row[6]);
-        if (row[6] && !faellig) warnungen.push('Zeile ' + rn + ': Datum "' + row[6] + '" nicht lesbar – leer gelassen.');
+        var faellig = toIsoDate(zelle('faellig'));
+        if (zelle('faellig') && !faellig) warnungen.push('Zeile ' + rn + ': Datum "' + zelle('faellig') + '" nicht lesbar – leer gelassen.');
 
-        var erstelltAm = toIsoDate(row[10]);
-        if (row[10] && !erstelltAm) warnungen.push('Zeile ' + rn + ': Erstellt-am-Datum "' + row[10] + '" nicht lesbar – leer gelassen.');
+        var erstelltAm = toIsoDate(zelle('erstelltAm'));
+        if (zelle('erstelltAm') && !erstelltAm) warnungen.push('Zeile ' + rn + ': Erstellt-am-Datum "' + zelle('erstelltAm') + '" nicht lesbar – leer gelassen.');
 
         var eintrag = {
           nr: nr,
-          bereich: (row[2] || '').trim() || 'Hardware/Mechanik',
+          bereich: (zelle('bereich') || '').trim() || 'Hardware/Mechanik',
           thema: thema,
           prio: prio,
-          verantwortlicher: (row[5] || '').trim(),
+          verantwortlicher: (zelle('verantwortlicher') || '').trim(),
           faellig: faellig,
           status: status,
           todo: todo,
           bilder: [],
-          notiz: (row[9] || '').trim(),
+          notiz: (zelle('notiz') || '').trim(),
           erstelltAm: erstelltAm,
-          verantwortlichkeit: normalize(row[12], ['Advanced Development', 'Pre Series']) || '',
-          baugruppe: normalize(row[13], ['Kopf', 'Torso', 'Arm', 'Pelvis/Hüfte', 'Bein', 'Fuß', 'Übergreifend']) || '',
-          nacharbeit: normalize(row[14], ['Re-Milling', 'Modification', 'Re-Milling + Modification']) || '',
-          zielRelease: normalize(row[15], ['4.1.1', '4.1.2', '4.1.3', '4.2.0']) || ''
+          verantwortlichkeit: normalize(zelle('verantwortlichkeit'), ['Advanced Development', 'Pre Series']) || '',
+          baugruppe: normalize(zelle('baugruppe'), ['Kopf', 'Torso', 'Arm', 'Pelvis/Hüfte', 'Bein', 'Fuß', 'Übergreifend']) || '',
+          nacharbeit: normalize(zelle('nacharbeit'), ['Re-Milling', 'Modification', 'Re-Milling + Modification']) || '',
+          zielRelease: normalize(zelle('zielRelease'), ['4.1.1', '4.1.2', '4.1.3', '4.2.0']) || ''
         };
         entries.push(eintrag);
         entryByRow[rn] = eintrag;
@@ -739,6 +744,137 @@
       warnungen = warnungen.concat(bildWarnungen);
 
       return { entries: entries, warnungen: warnungen };
+    });
+  }
+
+  // Ueberschrift -> Feld. Fehlt eine Ueberschrift ganz (aeltere Dateien), gilt
+  // die feste Position aus dem urspruenglichen Schema.
+  var KOPF_FELDER = [
+    ['nr', ['nr'], 1], ['bereich', ['bereich'], 2], ['thema', ['thema/aufgabe', 'thema'], 3],
+    ['prio', ['prio'], 4], ['verantwortlicher', ['verantwortlicher'], 5], ['faellig', ['bis wann'], 6],
+    ['status', ['status'], 7], ['todo', ['to do'], 8], ['notiz', ['bild'], 9], ['erstelltAm', ['erstellt am'], 10],
+    ['verantwortlichkeit', ['verantwortlichkeit'], 12], ['baugruppe', ['baugruppe'], 13],
+    ['nacharbeit', ['nacharbeit'], 14], ['zielRelease', ['ziel-release', 'ziel release'], 15]
+  ];
+
+  function spaltenAusKopf(kopfZeile) {
+    var nachName = {};
+    Object.keys(kopfZeile || {}).forEach(function (c) {
+      nachName[String(kopfZeile[c]).trim().toLowerCase()] = Number(c);
+    });
+    var sp = {};
+    var bekannt = KOPF_FELDER.filter(function (f) { return f[1].some(function (n) { return nachName[n]; }); }).length;
+    KOPF_FELDER.forEach(function (f) {
+      var treffer = f[1].map(function (n) { return nachName[n]; }).filter(Boolean)[0];
+      // Mit erkennbarer Kopfzeile nur die vorhandenen Ueberschriften, sonst feste Positionen
+      sp[f[0]] = treffer || (bekannt >= 5 ? undefined : f[2]);
+    });
+    return sp;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Einfache Tabelle (z. B. Lastenheft) und Anforderungstexte          */
+  /* ---------------------------------------------------------------- */
+
+  // opts: { blatt, titel, untertitel, kopf: [..], breiten: [..], zeilen: [[..]], umbruch: [Spaltenindex..] }
+  function exportTabelle(opts) {
+    var first = 4;
+    var rows = [];
+    rows.push('<row r="1"><c r="A1" t="inlineStr" s="' + S.TITLE + '"><is><t>' + esc(opts.titel) + '</t></is></c></row>');
+    rows.push('<row r="2"><c r="A2" t="inlineStr" s="' + S.SUBTITLE + '"><is><t>' + esc(opts.untertitel || '') + '</t></is></c></row>');
+    rows.push('<row r="' + first + '" ht="21.75" customHeight="1">' + opts.kopf.map(function (h, i) {
+      return cellStr(colName(i + 1) + first, S.HEADER, h);
+    }).join('') + '</row>');
+    opts.zeilen.forEach(function (z, idx) {
+      var r = first + 1 + idx;
+      rows.push('<row r="' + r + '">' + z.map(function (v, i) {
+        var ref = colName(i + 1) + r;
+        return typeof v === 'number' ? cellNum(ref, S.NR, v) : cellStr(ref, S.CELL, v == null ? '' : v);
+      }).join('') + '</row>');
+    });
+    var last = first + Math.max(opts.zeilen.length, 1);
+    var lastCol = colName(opts.kopf.length);
+    var sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<sheetViews><sheetView workbookViewId="0"><pane ySplit="' + first + '" topLeftCell="A' + (first + 1) +
+        '" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+      '<cols>' + opts.breiten.map(function (w, i) {
+        return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>';
+      }).join('') + '</cols>' +
+      '<sheetData>' + rows.join('') + '</sheetData>' +
+      '<autoFilter ref="A' + first + ':' + lastCol + last + '"/>' +
+      '<pageMargins left="0.4" right="0.4" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>' +
+      '<pageSetup orientation="landscape" paperSize="9" fitToHeight="0"/>' +
+      '</worksheet>';
+    var files = [
+      { name: '[Content_Types].xml', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+        '<Default Extension="xml" ContentType="application/xml"/>' +
+        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+        '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+        '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+        '</Types>') },
+      { name: '_rels/.rels', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+        '</Relationships>') },
+      { name: 'xl/workbook.xml', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+        '<sheets><sheet name="' + esc(opts.blatt || 'Tabelle') + '" sheetId="1" r:id="rId1"/></sheets>' +
+        '<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">\'' +
+          esc(opts.blatt || 'Tabelle') + '\'!$A$' + first + ':$' + lastCol + '$' + last + '</definedName></definedNames>' +
+        '</workbook>') },
+      { name: 'xl/_rels/workbook.xml.rels', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+        '</Relationships>') },
+      { name: 'xl/styles.xml', data: enc.encode(STYLES_XML) },
+      { name: 'xl/worksheets/sheet1.xml', data: enc.encode(sheet) }
+    ];
+    return new Blob([zipBuild(files)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+
+  // Liest eine Tabelle mit den Spalten "OPL-Nr", "Titel" und "Anforderung"
+  // (z. B. die Lastenheft-Excel) → [{ nr, titel, anforderung }]
+  function importAnforderungen(arrayBuffer) {
+    return zipRead(arrayBuffer).then(function (zip) {
+      var parser = new DOMParser();
+      var shared = [];
+      if (zip['xl/sharedStrings.xml']) {
+        var ss = parser.parseFromString(dec.decode(zip['xl/sharedStrings.xml']), 'application/xml').getElementsByTagName('si');
+        for (var i = 0; i < ss.length; i++) shared.push(textOf(ss[i]));
+      }
+      var blaetter = Object.keys(zip).filter(function (n) { return /^xl\/worksheets\/sheet\d+\.xml$/.test(n); }).sort();
+      for (var b = 0; b < blaetter.length; b++) {
+        var grid = {};
+        var cs = parser.parseFromString(dec.decode(zip[blaetter[b]]), 'application/xml').getElementsByTagName('c');
+        for (var c = 0; c < cs.length; c++) {
+          var ref = parseRef(cs[c].getAttribute('r'));
+          if (!ref) continue;
+          var t = cs[c].getAttribute('t'), val;
+          if (t === 'inlineStr') { var is = cs[c].getElementsByTagName('is')[0]; val = is ? textOf(is) : ''; }
+          else { var v = cs[c].getElementsByTagName('v')[0]; val = v ? v.textContent : ''; if (t === 's') val = shared[parseInt(val, 10)] || ''; }
+          if (val !== '') (grid[ref.row] = grid[ref.row] || {})[ref.col] = val;
+        }
+        var zeilen = Object.keys(grid).map(Number).sort(function (x, y) { return x - y; });
+        for (var z = 0; z < zeilen.length; z++) {
+          var kopf = grid[zeilen[z]], sp = {};
+          Object.keys(kopf).forEach(function (k) { sp[String(kopf[k]).trim().toLowerCase()] = Number(k); });
+          var cNr = sp['opl-nr'] || sp['opl'], cAnf = sp['anforderung'], cTit = sp['titel'];
+          if (!cNr || !cAnf) continue;
+          var out = [];
+          zeilen.slice(z + 1).forEach(function (rn) {
+            var r = grid[rn];
+            var nr = parseInt(String(r[cNr] || '').replace(/\D/g, ''), 10);
+            var anf = String(r[cAnf] || '').trim();
+            if (nr && anf) out.push({ nr: nr, titel: cTit ? String(r[cTit] || '').trim() : '', anforderung: anf });
+          });
+          return out;
+        }
+      }
+      throw new Error('Keine Tabelle mit den Spalten "OPL-Nr" und "Anforderung" gefunden.');
     });
   }
 
@@ -866,6 +1002,10 @@
   global.OPLXlsx = {
     exportWorkbook: exportWorkbook,
     importWorkbook: importWorkbook,
+    exportTabelle: exportTabelle,
+    importAnforderungen: importAnforderungen,
+    zipBuild: zipBuild,
+    escXml: esc,
     ddmmyyyy: ddmmyyyy,
     toIsoDate: toIsoDate
   };
