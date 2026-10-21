@@ -564,6 +564,17 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
 .fo__badge--hoch { color: #b02a2a; font-weight: 600; }
 .fo__fkopf .lh__stift { align-self: center; }
 .fo__word { white-space: nowrap; font-size: 12px; }
+.fovor { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; margin-top: 4px; }
+.fovor:empty { display: none; }
+.fovor__kopf { font-size: 12px; font-weight: 600; color: var(--ink-soft); margin-bottom: 4px; }
+.fovor__leer { margin: 0; font-size: 12.5px; color: var(--ink-soft); }
+.dialog .fovor__zeile { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 5px 6px; border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1.35; color: var(--ink); }
+.dialog .fovor__zeile:hover { background: var(--bg); }
+.dialog .fovor__zeile > input { flex: none; width: 16px; height: 16px; margin: 1px 0 0; padding: 0; }
+.dialog .fovor__zeile.is-erledigt { opacity: .65; }
+.fovor__nr { flex: none; }
+.fovor__zeile .pill { flex: none; }
+.fovor__text small { color: var(--ink-soft); }
 .fo__tief { padding: 0 8px 10px 26px; display: flex; flex-direction: column; gap: 6px; }
 .fo__detail { margin: 0; color: var(--ink-soft); white-space: pre-line; }
 .fo__rest { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px; }

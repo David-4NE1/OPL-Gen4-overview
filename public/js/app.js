@@ -1122,8 +1122,46 @@
     $('#btnFoLoeschen').hidden = !f;
     d.dataset.kategorie = kategorie;
     d.dataset.id = f ? f.id : '';
+    vorschlaegeZeigen();
     d.showModal();
     $('#foText').focus();
+  }
+
+  // Passende OPL-Punkte zum Text der Forderung (Stichwortsuche, ohne KI); anhaken = als Beispiel uebernehmen
+  function beispielNrsImFeld() {
+    return ($('#foBeispiele').value.match(/\d+/g) || []).map(Number);
+  }
+
+  function vorschlaegeZeigen() {
+    var box = $('#foVorschlaege');
+    box.textContent = '';
+    var text = $('#foText').value, detail = $('#foDetail').value;
+    var liste = window.OPLLastenheft.vorschlaege(Store.state.entries, $('#dlgForderung').dataset.kategorie, text, detail, 12);
+    if (!text.trim() && !detail.trim()) return;
+    box.appendChild(el('div', 'fovor__kopf', T('Vorschläge aus der OPL – anhaken, um sie als Beispiel zu übernehmen')));
+    if (!liste.length) { box.appendChild(el('p', 'fovor__leer', T('Keine passenden Punkte gefunden – andere Begriffe probieren.'))); return; }
+    var drin = beispielNrsImFeld();
+    liste.forEach(function (v) {
+      var e = v.e;
+      var zeile = el('label', 'fovor__zeile' + (e.status === 'Erledigt' ? ' is-erledigt' : ''));
+      var cb = el('input');
+      cb.type = 'checkbox';
+      cb.value = e.nr;
+      cb.checked = drin.indexOf(e.nr) >= 0;
+      cb.addEventListener('change', function () {
+        var nrs = beispielNrsImFeld().filter(function (n) { return n !== e.nr; });
+        if (cb.checked) nrs.push(e.nr);
+        $('#foBeispiele').value = nrs.join(', ');
+      });
+      zeile.appendChild(cb);
+      zeile.appendChild(el('b', 'fovor__nr', '#' + e.nr));
+      zeile.appendChild(el('span', 'pill pill--' + String(e.prio).toLowerCase(), T(e.prio)));
+      var txt = el('span', 'fovor__text', window.OPLLastenheft.kurztext(e, 120));
+      txt.appendChild(el('small', null, ' · ' + T(e.thema) + (e.status === 'Erledigt' ? ' · ' + T('erledigt') : '') +
+        ' · ' + T('Treffer: {w}', { w: v.treffer.join(', ') })));
+      zeile.appendChild(txt);
+      box.appendChild(zeile);
+    });
   }
 
   function forderungSpeichern() {
@@ -1823,6 +1861,14 @@
     });
     $('#formForderung').addEventListener('submit', function (ev) { ev.preventDefault(); forderungSpeichern(); });
     $('#btnFoLoeschen').addEventListener('click', forderungLoeschen);
+    var vorTimer = null;
+    ['#foText', '#foDetail'].forEach(function (sel) {
+      $(sel).addEventListener('input', function () { clearTimeout(vorTimer); vorTimer = setTimeout(vorschlaegeZeigen, 300); });
+    });
+    $('#foBeispiele').addEventListener('input', function () {
+      var drin = beispielNrsImFeld();
+      $$('#foVorschlaege input[type=checkbox]').forEach(function (cb) { cb.checked = drin.indexOf(+cb.value) >= 0; });
+    });
     $('#lhDatei').addEventListener('change', function (ev) {
       var f = ev.target.files[0];
       ev.target.value = '';
