@@ -316,9 +316,13 @@
     if (view === 'tabelle') { content.appendChild(renderTabelle(liste)); return; }
     if (view === 'lastenheft') {
       if (!lhZiele) lhZieleLaden();
+      if (!lhForderungen) lhForderungenLaden();
       content.appendChild(window.OPLLastenheft.render(liste, {
         gesamt: alle.length, filterAktiv: istAktiv, aktionen: lastenheftAktionen(),
         ziele: lhZiele || {}, offen: lhOffen, darfBearbeiten: Store.darf('bearbeiten'),
+        forderungen: lhForderungen || [], modus: lhModus,
+        setModus: function (m) { lhModus = m; try { localStorage.setItem('opl_lh_modus', m); } catch (e) { /* egal */ } render(); },
+        forderungBearbeiten: forderungBearbeiten,
         umschalten: function (key) { lhOffen[key] = !lhOffen[key]; render(); },
         bearbeiten: zielBearbeiten,
         oeffnen: function (nr) { oeffneEdit(nr, 'anforderung'); }
@@ -1078,6 +1082,85 @@
     });
   }
 
+  // Management-Forderungen je Kategorie (Tabelle forderungen)
+  var lhForderungen = null;    // [{ id, kategorie, text, detail, beispiele }], null = noch nicht geladen
+  var lhForderungenLaedt = false;
+  var lhModus = (function () { try { return localStorage.getItem('opl_lh_modus') || 'forderungen'; } catch (e) { return 'forderungen'; } })();
+
+  function lhForderungenLaden() {
+    if (lhForderungenLaedt) return Promise.resolve();
+    lhForderungenLaedt = true;
+    return fetch('/api/forderungen').then(function (r) { return r.ok ? r.json() : []; }).then(function (liste) {
+      lhForderungen = liste;
+    }).catch(function () { lhForderungen = lhForderungen || []; }).then(function () {
+      lhForderungenLaedt = false;
+      if (view === 'lastenheft') render();
+    });
+  }
+
+  function forderungAnfrage(method, pfad, body) {
+    return fetch('/api/forderungen' + (pfad || ''), {
+      method: method, headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        if (!r.ok) throw new Error(T(d.error || 'Fehler'));
+        return d;
+      });
+    });
+  }
+
+  function forderungBearbeiten(kategorie, f) {
+    var d = $('#dlgForderung');
+    $('#foTitel').textContent = T(kategorie);
+    $('#foFrage').textContent = window.OPLLastenheft.frage(kategorie);
+    $('#foText').value = f ? f.text : '';
+    $('#foDetail').value = f ? f.detail || '' : '';
+    $('#foBeispiele').value = f ? String(f.beispiele || '').split(',').filter(Boolean).join(', ') : '';
+    $('#btnFoLoeschen').hidden = !f;
+    d.dataset.kategorie = kategorie;
+    d.dataset.id = f ? f.id : '';
+    d.showModal();
+    $('#foText').focus();
+  }
+
+  function forderungSpeichern() {
+    var d = $('#dlgForderung');
+    var nrs = ($('#foBeispiele').value.match(/\d+/g) || []).map(Number);
+    var fremd = nrs.filter(function (n) { return !Store.byNr(n); });
+    if (fremd.length) { toast(T('Unbekannte OPL-Nummern: {l}', { l: fremd.join(', ') }), true); return; }
+    var body = { kategorie: d.dataset.kategorie, text: $('#foText').value.trim(), detail: $('#foDetail').value.trim(), beispiele: nrs };
+    (d.dataset.id ? forderungAnfrage('PUT', '/' + d.dataset.id, body) : forderungAnfrage('POST', '', body)).then(function () {
+      d.close();
+      toast(T('Gespeichert.'));
+      return lhForderungenLaden();
+    }).catch(function (err) { toast(err.message, true); });
+  }
+
+  function forderungLoeschen() {
+    var d = $('#dlgForderung');
+    if (!d.dataset.id || !confirm(T('Diese Forderung löschen?'))) return;
+    forderungAnfrage('DELETE', '/' + d.dataset.id).then(function () {
+      d.close();
+      toast(T('Forderung gelöscht.'));
+      return lhForderungenLaden();
+    }).catch(function (err) { toast(err.message, true); });
+  }
+
+  function forderungenUebernehmen(liste) {
+    var unbekannt = liste.filter(function (f) { return !Store.istThema(f.kategorie); }).length;
+    var gueltig = liste.filter(function (f) { return Store.istThema(f.kategorie); });
+    if (!gueltig.length) { toast(T('Forderungen: keine gültige Kategorie gefunden.'), true); return Promise.resolve(true); }
+    var kat = {};
+    gueltig.forEach(function (f) { kat[f.kategorie] = true; });
+    if (!confirm(T('{n} Forderungen für {k} Kategorien übernehmen?', { n: gueltig.length, k: Object.keys(kat).length }) + '\n' +
+      T('Die bisherigen Forderungen dieser Kategorien werden ersetzt.') +
+      (unbekannt ? '\n' + T('{n} Zeilen mit unbekannter Kategorie werden übersprungen.', { n: unbekannt }) : ''))) return Promise.resolve(true);
+    return forderungAnfrage('POST', '/import', { liste: gueltig }).then(function (r) {
+      toast(T('{n} Forderungen übernommen.', { n: r.anzahl }));
+      return lhForderungenLaden();
+    }).then(function () { return true; });
+  }
+
   function zielSpeichern(kategorie, unterthema, anforderung, ziel) {
     var key = window.OPLLastenheft.schluessel(kategorie, unterthema);
     return fetch('/api/ziele', {
@@ -1109,7 +1192,7 @@
     var stand = Xlsx.ddmmyyyy(Store.heute());
     var hinweis = filterAktiv() ? T('Gefilterter Auszug: {n} von {g} OPL-Punkten.', { n: auswahl.length, g: Store.state.entries.length }) : '';
     if (art === 'kurz') {
-      download(window.OPLLastenheft.exportKurzfassung(auswahl, stand, { ziele: lhZiele || {}, filterHinweis: hinweis, heute: Store.heute() }),
+      download(window.OPLLastenheft.exportKurzfassung(auswahl, stand, { ziele: lhZiele || {}, forderungen: lhForderungen || [], filterHinweis: hinweis, heute: Store.heute() }),
         '4NE1_Gen4_Management-Kurzfassung_' + dateiStempel() + (filterAktiv() ? '_gefiltert' : '') + '.docx');
       toast(T('Management-Kurzfassung exportiert.') + exportHinweis());
       return;
@@ -1117,7 +1200,7 @@
     var name = '4NE1_Gen4_Lastenheft_' + dateiStempel() + (filterAktiv() ? '_gefiltert' : '') + '.' + art;
     var blob = art === 'docx'
       ? window.OPLLastenheft.exportDocx(auswahl, stand, { ziele: lhZiele || {}, filterHinweis: hinweis })
-      : window.OPLLastenheft.exportXlsx(auswahl, stand, lhZiele || {});
+      : window.OPLLastenheft.exportXlsx(auswahl, stand, lhZiele || {}, lhForderungen || []);
     download(blob, name);
     toast(T('Lastenheft exportiert ({n} Anforderungen).', { n: auswahl.length }) + exportHinweis());
   }
@@ -1126,10 +1209,15 @@
   // und/oder Tabelle je OPL-Punkt (OPL-Nr + Anforderung/Titel/Unterthema)
   function lastenheftTexteUebernehmen(datei) {
     datei.arrayBuffer().then(function (buf) {
-      return Xlsx.importZiele(buf).then(function (ziele) {
+      return Xlsx.importForderungen(buf).then(function (fo) {
+        return fo.length ? forderungenUebernehmen(fo) : false;
+      }).then(function (hatteFo) {
+        return Xlsx.importZiele(buf).then(function (ziele) { return { ziele: ziele, hatteFo: hatteFo }; });
+      }).then(function (x) {
+        var ziele = x.ziele;
         return (ziele.length ? zieleUebernehmen(ziele) : Promise.resolve(false)).then(function (hatteZiele) {
           return Xlsx.importAnforderungen(buf).then(punkteUebernehmen, function (err) {
-            if (!hatteZiele) throw err; // weder Ziele noch Punkte in der Datei
+            if (!hatteZiele && !x.hatteFo) throw err; // weder Forderungen, Ziele noch Punkte in der Datei
           });
         });
       });
@@ -1659,6 +1747,8 @@
         .then(function () { d.close(); toast(T('Gespeichert.')); render(); })
         .catch(function (err) { toast(err.message, true); });
     });
+    $('#formForderung').addEventListener('submit', function (ev) { ev.preventDefault(); forderungSpeichern(); });
+    $('#btnFoLoeschen').addEventListener('click', forderungLoeschen);
     $('#lhDatei').addEventListener('change', function (ev) {
       var f = ev.target.files[0];
       ev.target.value = '';

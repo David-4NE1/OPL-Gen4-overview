@@ -537,6 +537,39 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
 .lh__utzahl { font-size: 12px; color: var(--ink-soft); }
 .lh__ut .lh__liste { padding: 0 12px 12px; }
 
+/* Lastenheft: Umschalter Forderungen / alle Punkte */
+.lh__modus { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 0 0 14px; }
+.lh__modus button { padding: 7px 14px; border: 0; background: var(--surface); color: var(--ink); cursor: pointer; font-size: 13px; font-weight: 600; }
+.lh__modus button.is-active { background: var(--navy); color: #fff; }
+
+/* Forderungen je Kategorie: Frage → Forderungen → Beispiele → Karte */
+.fo { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 14px; align-items: start; }
+.fo__kat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.fo__kopf { display: flex; gap: 10px; align-items: flex-start; }
+.fo__titel { flex: 1; min-width: 0; }
+.fo__titel h3 { margin: 0; font-size: 16px; }
+.fo__frage { margin: 2px 0 0; color: var(--accent); font-weight: 600; font-size: 13.5px; }
+.fo__zahlen { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.fo__zahl { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--bg); color: var(--ink-soft); white-space: nowrap; }
+.fo__zahl--hoch { background: #fdecec; color: #b02a2a; }
+.fo__liste { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.fo__f { border-radius: 8px; }
+.fo__f.is-offen { background: var(--bg); }
+.fo__f--leer { padding: 6px 8px; }
+.fo__fkopf { display: flex; gap: 8px; align-items: baseline; padding: 7px 8px; cursor: pointer; border-radius: 8px; }
+.fo__fkopf:hover, .fo__fkopf:focus { background: var(--bg); outline: none; }
+.fo__f.is-offen .lh__chev { transform: rotate(90deg); }
+.fo__text { flex: 1; font-weight: 600; line-height: 1.35; }
+.fo__badge { font-size: 11px; color: var(--ink-soft); white-space: nowrap; }
+.fo__badge--hoch { color: #b02a2a; font-weight: 600; }
+.fo__fkopf .lh__stift { align-self: center; }
+.fo__tief { padding: 0 8px 10px 26px; display: flex; flex-direction: column; gap: 6px; }
+.fo__detail { margin: 0; color: var(--ink-soft); white-space: pre-line; }
+.fo__rest { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px; }
+.fo__restkopf { border: 0; background: none; color: var(--ink-soft); cursor: pointer; padding: 4px 0; font-size: 12.5px; }
+.fo__restkopf:hover { color: var(--accent); }
+.fo__rest .lh__liste { padding-top: 6px; }
+
 @media (max-width: 640px) {
   .lh__kacheln { grid-template-columns: 1fr; }
   .lh__aussagen { grid-template-columns: 1fr; }
@@ -550,6 +583,11 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
   .lh__aktionen { width: 100%; }
   .lh__aktionen .btn { flex: 1 1 auto; }
   .lh__export { flex: 1 1 auto; display: flex; }
+  .fo { grid-template-columns: 1fr; }
+  .fo__kopf { flex-wrap: wrap; }
+  .fo__tief { padding-left: 8px; }
+  .lh__modus { display: flex; }
+  .lh__modus button { flex: 1; }
   .lh__exportpanel { min-width: 0; width: 100%; left: 0; }
   .lh__exportpanel button { white-space: normal; }
   .f-lhtitel { order: 12; }
@@ -558,7 +596,7 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
 
 /* Drucken / PDF: nur das Lastenheft, ohne Bedienelemente */
 @media print {
-  .topbar, .filterbar, .filter-banner, .fab, .toast, .lh__aktionen, .tr-banner { display: none !important; }
+  .topbar, .filterbar, .filter-banner, .fab, .toast, .lh__aktionen, .lh__modus, .lh__stift, .fo__restkopf, .tr-banner { display: none !important; }
   body { background: #fff; }
   main { padding: 0; max-width: none; }
   .lh__anf { box-shadow: none; break-inside: avoid; }

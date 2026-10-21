@@ -19,6 +19,30 @@
     'Thermik': 'TH', 'Elektronik & Software': 'ES', 'BOM/CAD & Dokumentation': 'BD',
     'Industrialisierung & Design': 'ID'
   };
+  // An wen richten sich die Forderungen einer Kategorie ("Was brauchen wir von …?")
+  var ADRESSAT = {
+    'Kollision & Bauraum': 'der Konstruktion', 'Kabel & Steckverbinder': 'den Kabelexperten',
+    'Montage & Service': 'Montageplanung und Service', 'Verbindungstechnik & Toleranzen': 'der Konstruktion',
+    'Poka Yoke & Varianten': 'der Konstruktion', 'Auslegung & Simulation': 'Berechnung und Simulation',
+    'Thermik': 'den Thermik-Experten', 'Elektronik & Software': 'Elektronik und Software',
+    'BOM/CAD & Dokumentation': 'CAD/PLM und Dokumentation', 'Industrialisierung & Design': 'Industrialisierung und Design'
+  };
+  function frage(kategorie) {
+    return ADRESSAT[kategorie] ? T('Was brauchen wir von {wem}?', { wem: T(ADRESSAT[kategorie]) }) : '';
+  }
+  function beispielNrs(f) {
+    return String(f.beispiele || '').split(',').map(Number).filter(function (n) { return n > 0; });
+  }
+  // Forderungen je Kategorie, in Reihenfolge
+  function forderungenVon(forderungen, kategorie) {
+    return (forderungen || []).filter(function (f) { return f.kategorie === kategorie; })
+      .sort(function (a, b) { return (a.pos - b.pos) || (a.id - b.id); });
+  }
+  function kurztext(e, max) {
+    var t = e.lhTitel || String(e.todo || '').trim().replace(/:?\s*\r?\n\s*/g, ' / ').replace(/\s+/g, ' ');
+    return t.length > max ? t.slice(0, max - 1) + '…' : t;
+  }
+
   var OHNE_BG = 'nicht zugeordnet';
   var OHNE_UT = 'Ohne Unterthema';
   var OHNE_THEMA = 'Ohne Kategorie';
@@ -124,6 +148,20 @@
 
     var kap = struktur(eintraege);
 
+    var modus = el('div', 'lh__modus');
+    [['forderungen', T('Forderungen')], ['unterthemen', T('Alle Punkte je Unterthema')]].forEach(function (m) {
+      var b = el('button', opts.modus === m[0] ? 'is-active' : null, m[1]);
+      b.type = 'button';
+      b.addEventListener('click', function () { opts.setModus(m[0]); });
+      modus.appendChild(b);
+    });
+    wrap.appendChild(modus);
+
+    if (opts.modus !== 'unterthemen') {
+      wrap.appendChild(forderungsAnsicht(kap, eintraege, opts));
+      return wrap;
+    }
+
     // Kacheln: je Kategorie Anforderung, Ziel, Fortschritt
     var kacheln = el('div', 'lh__kacheln');
     kap.forEach(function (k, i) {
@@ -193,6 +231,106 @@
     return wrap;
   }
 
+  // Ebene 1: je Kategorie die Frage an die Fachleute und ihre Forderungen.
+  // Ebene 2: Forderung aufklappen → Detail und aktuelle OPL-Beispiele.
+  // Ebene 3: Beispiel anklicken → Karte. Dazu je Kategorie die offenen Punkte ohne Forderung.
+  function forderungsAnsicht(kap, eintraege, opts) {
+    var offen = opts.offen || {};
+    var nachNr = {};
+    eintraege.forEach(function (e) { nachNr[e.nr] = e; });
+    var verknuepft = {};   // OPL-Nr, die irgendeine Forderung als Beispiel nennt
+    (opts.forderungen || []).forEach(function (f) { beispielNrs(f).forEach(function (n) { verknuepft[n] = true; }); });
+    var box = el('div', 'fo');
+    kap.forEach(function (k, ki) {
+      if (k.name === OHNE_THEMA) return;
+      var liste = forderungenVon(opts.forderungen, k.name);
+      var zk = zahlen(k.punkte);
+      var art = el('article', 'fo__kat');
+      var kopf = el('div', 'fo__kopf');
+      var titel = el('div', 'fo__titel');
+      titel.appendChild(el('h3', null, (ki + 1) + '  ' + T(k.name)));
+      titel.appendChild(el('p', 'fo__frage', frage(k.name)));
+      kopf.appendChild(titel);
+      var zahl = el('div', 'fo__zahlen');
+      zahl.appendChild(el('span', 'fo__zahl', T('{o} offen', { o: zk.offen })));
+      if (zk.hoch) zahl.appendChild(el('span', 'fo__zahl fo__zahl--hoch', T('{h} Prio Hoch', { h: zk.hoch })));
+      kopf.appendChild(zahl);
+      if (opts.darfBearbeiten) {
+        var neu = el('button', 'lh__stift fo__neu', '+');
+        neu.type = 'button';
+        neu.title = T('Forderung hinzufügen');
+        neu.addEventListener('click', function () { opts.forderungBearbeiten(k.name, null); });
+        kopf.appendChild(neu);
+      }
+      art.appendChild(kopf);
+
+      var ul = el('ol', 'fo__liste');
+      liste.forEach(function (f) {
+        var key = 'fo:' + f.id;
+        var nrs = beispielNrs(f);
+        var bsp = nrs.map(function (n) { return nachNr[n]; }).filter(Boolean);
+        var bOffen = bsp.filter(function (e) { return e.status !== 'Erledigt'; });
+        var li = el('li', 'fo__f' + (offen[key] ? ' is-offen' : ''));
+        var z = el('div', 'fo__fkopf');
+        z.tabIndex = 0;
+        z.setAttribute('role', 'button');
+        z.setAttribute('aria-expanded', String(!!offen[key]));
+        z.appendChild(el('span', 'lh__chev', '▸'));
+        z.appendChild(el('span', 'fo__text', f.text));
+        var badge = el('span', 'fo__badge' + (bOffen.some(function (e) { return e.prio === 'Hoch'; }) ? ' fo__badge--hoch' : ''),
+          bsp.length ? T('{o} offen / {n} Beispiele', { o: bOffen.length, n: bsp.length }) : T('keine Beispiele'));
+        z.appendChild(badge);
+        if (opts.darfBearbeiten) {
+          var st = el('button', 'lh__stift', '✎');
+          st.type = 'button';
+          st.title = T('Forderung bearbeiten');
+          st.addEventListener('click', function (ev) { ev.stopPropagation(); opts.forderungBearbeiten(k.name, f); });
+          z.appendChild(st);
+        }
+        var auf = function () { opts.umschalten(key); };
+        z.addEventListener('click', auf);
+        z.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') auf(); });
+        li.appendChild(z);
+        if (offen[key]) {
+          var tief = el('div', 'fo__tief');
+          if (f.detail) tief.appendChild(el('p', 'fo__detail', f.detail));
+          if (bsp.length) {
+            tief.appendChild(el('div', 'lh__label', T('Aktuelle Beispiele aus der OPL')));
+            var karten = el('div', 'lh__liste');
+            bsp.sort(function (a, b) { return (a.status === 'Erledigt') - (b.status === 'Erledigt') || PRIO_RANG[a.prio] - PRIO_RANG[b.prio] || a.nr - b.nr; })
+              .forEach(function (e) { karten.appendChild(kartenZeile(e, opts)); });
+            tief.appendChild(karten);
+          } else {
+            tief.appendChild(el('p', 'lh__leer', nrs.length ? T('Die Beispiele liegen außerhalb des Filters.') : T('Noch keine OPL-Punkte verknüpft.')));
+          }
+          li.appendChild(tief);
+        }
+        ul.appendChild(li);
+      });
+      if (!liste.length) ul.appendChild(el('li', 'fo__f fo__f--leer lh__leer', T('Noch keine Forderungen formuliert.')));
+      art.appendChild(ul);
+
+      // offene Punkte, die keiner Forderung zugeordnet sind
+      var rest = k.punkte.filter(function (e) { return e.status !== 'Erledigt' && !verknuepft[e.nr]; });
+      if (rest.length) {
+        var rkey = 'fo-rest:' + k.name;
+        var r = el('div', 'fo__rest' + (offen[rkey] ? ' is-offen' : ''));
+        var rk = el('button', 'fo__restkopf', (offen[rkey] ? '▾ ' : '▸ ') + (rest.length === 1 ? T('1 weiterer offener Punkt ohne Forderung') : T('{n} weitere offene Punkte ohne Forderung', { n: rest.length })));
+        rk.type = 'button';
+        rk.addEventListener('click', function () { opts.umschalten(rkey); });
+        r.appendChild(rk);
+        if (offen[rkey]) {
+          var rl = el('div', 'lh__liste');
+          rest.forEach(function (e) { rl.appendChild(kartenZeile(e, opts)); });
+          r.appendChild(rl);
+        }
+        art.appendChild(r);
+      }
+      box.appendChild(art);
+    });
+    return box;
+  }
+
   // Einzelner OPL-Punkt kompakt: ID, Titel/Anforderung, Baugruppe, Prio, Status
   function kartenZeile(e, opts) {
     var z = el('article', 'lh__anf' + (e.status === 'Erledigt' ? ' is-umgesetzt' : ''));
@@ -222,9 +360,21 @@
 
   /* --------------------------------------------------------- Excel-Export */
 
-  function exportXlsx(eintraege, stand, ziele) {
+  function exportXlsx(eintraege, stand, ziele, forderungen) {
     ziele = ziele || {};
     var kap = struktur(eintraege);
+    var nachNr = {};
+    eintraege.forEach(function (e) { nachNr[e.nr] = e; });
+    // Blatt 0: Forderungen (gleichzeitig Vorlage zum Einspielen)
+    var fo = [];
+    kap.forEach(function (k) {
+      forderungenVon(forderungen, k.name).forEach(function (f) {
+        var bsp = beispielNrs(f).map(function (n) { return nachNr[n]; }).filter(Boolean);
+        fo.push([k.name, frage(k.name), f.text, f.detail || '', beispielNrs(f).join(', '),
+          bsp.filter(function (e) { return e.status !== 'Erledigt'; }).length,
+          bsp.map(function (e) { return '#' + e.nr + ' ' + kurztext(e, 90); }).join('\n')]);
+      });
+    });
     // Blatt 1: auf einen Blick (gleichzeitig Vorlage zum Einspielen von Anforderung/Ziel)
     var blick = [];
     kap.forEach(function (k) {
@@ -246,7 +396,15 @@
         });
       });
     });
-    return Xlsx.exportTabelle({ blaetter: [{
+    var blaetter = [{
+      blatt: 'Forderungen',
+      titel: 'Forderungen an die Fachbereiche – 4NE1 Gen4',
+      untertitel: 'Je Kategorie: was wir brauchen, mit aktuellen OPL-Punkten als Beispiel · Stand ' + stand +
+        ' · Spalten Kategorie, Forderung, Detail und Beispiele lassen sich über „Aus Excel übernehmen“ wieder einspielen (ersetzt die Forderungen der enthaltenen Kategorien)',
+      kopf: ['Kategorie', 'Gefragt', 'Forderung', 'Detail', 'Beispiele (OPL-Nr)', 'davon offen', 'Beispiele (Kurztext)'],
+      breiten: [26, 34, 50, 60, 16, 10, 80],
+      zeilen: fo
+    }, {
       blatt: 'Auf einen Blick',
       titel: 'Lastenheft auf einen Blick – 4NE1 Gen4',
       untertitel: 'Anforderung und Ziel je Kategorie und Unterthema · Stand ' + stand + ' · lässt sich über „Aus Excel übernehmen“ wieder einspielen',
@@ -261,13 +419,14 @@
         'Nacharbeit', 'Verantwortlichkeit', 'Verantwortlicher', 'Noch nicht formuliert', 'OPL-Text (To Do)'],
       breiten: [12, 24, 26, 15, 30, 60, 8, 9, 11, 11, 16, 18, 18, 11, 60],
       zeilen: zeilen
-    }] });
+    }];
+    return Xlsx.exportTabelle({ blaetter: fo.length ? blaetter : blaetter.slice(1) });
   }
 
   /* ---------------------------------------------------------- Word-Export */
 
   var X = function (s) { return Xlsx.escXml(s); };
-  var NAVY = '2B3A4A', GRAU = '5A6674', LINIE = 'C8CDD3';
+  var NAVY = '2B3A4A', GRAU = '5A6674', LINIE = 'C8CDD3', BLAU = '2F6FB0';
   var PRIO_FARBE = { Hoch: 'F4C7C3', Mittel: 'FCE8B2', Niedrig: 'C6E5C3' };
   var BREITE = 9638; // A4 hoch, 2 cm Rand
 
@@ -281,12 +440,13 @@
         '<w:t xml:space="preserve">' + X(teil) + '</w:t></w:r>';
     }).join('');
   }
-  // Absatz; o = { style, jc, after, keepNext, pageBreakBefore }
+  // Absatz; o = { style, jc, before, after, ind: [links, haengend], keepNext, pageBreakBefore }
   function para(runs, o) {
     o = o || {};
     var ppr = (o.style ? '<w:pStyle w:val="' + o.style + '"/>' : '') + (o.keepNext ? '<w:keepNext/>' : '') +
       (o.pageBreakBefore ? '<w:pageBreakBefore/>' : '') +
-      '<w:spacing w:before="0" w:after="' + (o.after == null ? 80 : o.after) + '"/>' + (o.jc ? '<w:jc w:val="' + o.jc + '"/>' : '');
+      '<w:spacing w:before="' + (o.before || 0) + '" w:after="' + (o.after == null ? 80 : o.after) + '"/>' +
+      (o.ind ? '<w:ind w:left="' + o.ind[0] + '" w:hanging="' + (o.ind[1] || 0) + '"/>' : '') + (o.jc ? '<w:jc w:val="' + o.jc + '"/>' : '');
     return '<w:p><w:pPr>' + ppr + '</w:pPr>' + runs + '</w:p>';
   }
   function zelle(inhalt, breite, fill) {
@@ -441,13 +601,13 @@
     var ohneRelease = offen.filter(function (e) { return !e.zielRelease; }).length;
     var ueberfaellig = offen.filter(function (e) { return e.faellig && e.faellig < opts.heute; }).length;
     var nacharbeit = eintraege.filter(function (e) { return e.nacharbeit; }).length;
-    var ohneZiel = kap.filter(function (k) { var zz = ziele[k.name]; return !(zz && zz.anforderung && zz.ziel); }).length;
+    var ohneFo = kap.filter(function (k) { return !forderungenVon(opts.forderungen, k.name).length; }).length;
     var datum = function (d) { return d ? Xlsx.ddmmyyyy(d) : ''; };
     var klein = function (t, o) { return { xml: para(run(t, Object.assign({ sz: 17 }, o || {})), { after: 0, jc: o && o.jc }) }; };
 
     var body = '';
     body += para(run('4NE1 Gen4 · Management-Kurzfassung aus der Open Point List', { sz: 20, color: GRAU }), { after: 20 });
-    body += para(run('Anforderungen, Ziele und Steuerungsbedarf', { b: true, sz: 40, color: NAVY }), { after: 60 });
+    body += para(run('Was wir von den Fachbereichen brauchen', { b: true, sz: 40, color: NAVY }), { after: 60 });
     body += para(run('Stand ' + stand + (opts.filterHinweis ? ' · ' + opts.filterHinweis : ''), { sz: 20, color: GRAU }), { after: 140 });
 
     // Kennzahlen als Kachelzeile
@@ -459,19 +619,39 @@
         para(run(k[1], { sz: 15, color: GRAU }), { after: 0, jc: 'center' }), fill: 'F1F3F5' };
     })]);
 
-    body += para(run('Anforderung und Ziel je Kategorie', { b: true, sz: 26, color: NAVY }), { style: 'Heading2' });
-    var leer = function (zz, feld) {
-      return zz && zz[feld] ? run(zz[feld], { sz: 17 }) : run('– noch nicht formuliert –', { sz: 17, i: true, color: GRAU });
-    };
-    body += tabelle([2250, 3150, 2788, 1450], ['Kategorie', 'Anforderung', 'Ziel', 'Stand'], kap.map(function (k) {
-      var zk = zahlen(k.punkte), zz = ziele[k.name];
-      return [klein(k.name, { b: true, sz: 18 }),
-        { xml: para(leer(zz, 'anforderung'), { after: 0 }) },
-        { xml: para(leer(zz, 'ziel'), { after: 0 }) },
-        { xml: para(run(zk.offen + ' offen', { sz: 17, b: true }), { after: 0, jc: 'center' }) +
-          para(run((zk.hoch ? zk.hoch + ' × Prio Hoch' : 'kein Prio Hoch'), { sz: 15, color: zk.hoch ? 'B02A2A' : GRAU }), { after: 0, jc: 'center' }) +
-          para(run(zk.umgesetzt + '/' + zk.gesamt + ' umgesetzt', { sz: 15, color: GRAU }), { after: 0, jc: 'center' }) }];
-    }));
+    body += para(run('Je Kategorie: was wir von den Fachbereichen brauchen, mit den aktuellen OPL-Punkten als Beleg ' +
+      '(rot mit ! = offen mit Prio Hoch, ✓ = erledigt). Details zu jedem Punkt im Board, Reiter Lastenheft → Forderungen.', { sz: 17, color: GRAU }), { before: 120, after: 40 });
+    var nachNr = {};
+    eintraege.forEach(function (e) { nachNr[e.nr] = e; });
+    kap.forEach(function (k, ki) {
+      if (k.name === OHNE_THEMA) return;
+      var zk = zahlen(k.punkte), liste = forderungenVon(opts.forderungen, k.name), zz = ziele[k.name];
+      body += para(run((ki + 1) + '  ' + k.name, { b: true, sz: 24, color: NAVY }) +
+        (frage(k.name) ? run('  –  ' + frage(k.name), { sz: 21, color: NAVY }) : ''), { before: 180, after: 20, keepNext: true });
+      body += para(run(zk.offen + ' offen · ' + (zk.hoch ? zk.hoch + ' × Prio Hoch · ' : '') + zk.umgesetzt + '/' + zk.gesamt + ' umgesetzt' +
+        (zz && zz.ziel ? '   Ziel: ' : ''), { sz: 16, color: GRAU }) + (zz && zz.ziel ? run(zz.ziel, { sz: 16, color: GRAU, i: true }) : ''),
+        { after: 60, keepNext: true });
+      if (!liste.length) {
+        var hochK = k.punkte.filter(function (e) { return e.status !== 'Erledigt' && e.prio === 'Hoch'; });
+        body += para(run('Noch keine Forderungen formuliert.' + (hochK.length ? ' Offen mit Prio Hoch: ' : ''), { sz: 17, i: true, color: GRAU }) +
+          run(hochK.map(function (e) { return '#' + e.nr; }).join(', '), { sz: 17, color: GRAU }), { ind: [360, 0] });
+        return;
+      }
+      liste.forEach(function (f, fi) {
+        var bsp = beispielNrs(f).map(function (n) { return nachNr[n]; }).filter(Boolean)
+          .sort(function (a, b) { return (a.status === 'Erledigt') - (b.status === 'Erledigt') || PRIO_RANG[a.prio] - PRIO_RANG[b.prio] || a.nr - b.nr; });
+        var letzte = fi === liste.length - 1;
+        body += para(run('•', { b: true, color: BLAU }) + '<w:r><w:tab/></w:r>' + run(f.text, { b: true, sz: 19 }),
+          { ind: [360, 240], after: f.detail || bsp.length ? 0 : 50, keepNext: !letzte || !!(f.detail || bsp.length) });
+        if (f.detail) body += para(run(f.detail, { sz: 17 }), { ind: [360, 0], after: bsp.length ? 0 : 50 });
+        if (bsp.length) {
+          var marke = function (e) { return e.status === 'Erledigt' ? ' ✓' : e.prio === 'Hoch' ? ' !' : ''; };
+          body += para(run('OPL: ', { sz: 16, b: true, color: GRAU }) + bsp.map(function (e, i) {
+            return run((i ? ', ' : '') + '#' + e.nr + marke(e), { sz: 16, color: e.prio === 'Hoch' && e.status !== 'Erledigt' ? 'B02A2A' : GRAU, b: e.prio === 'Hoch' && e.status !== 'Erledigt' });
+          }).join(''), { ind: [360, 0], after: 60 });
+        }
+      });
+    });
 
     body += para(run('Steuerungsbedarf', { b: true, sz: 26, color: NAVY }), { style: 'Heading2' });
     var bedarf = [];
@@ -484,7 +664,7 @@
     if (schwer.length) bedarf.push(['Schwerpunkte: ', 'die meisten offenen Prio-Hoch-Punkte liegen in ' +
       schwer.map(function (x) { return x[0] + ' (' + x[1] + ')'; }).join(', ') + '.']);
     if (nacharbeit) bedarf.push(['Nacharbeit: ', nacharbeit + ' Punkte erforderten Nacharbeit am Teil (Fräsen, Schleifen o. Ä.) – Ursache im CAD/Freigabeprozess abstellen.']);
-    if (ohneZiel) bedarf.push(['Ziele festlegen: ', 'für ' + ohneZiel + ' von ' + kap.length + ' Kategorien sind Anforderung und Ziel noch nicht vollständig formuliert.']);
+    if (ohneFo) bedarf.push(['Forderungen formulieren: ', 'für ' + ohneFo + ' von ' + kap.length + ' Kategorien sind noch keine Forderungen hinterlegt.']);
     if (!bedarf.length) bedarf.push(['', 'Kein akuter Steuerungsbedarf erkannt.']);
     bedarf.forEach(function (b, i) {
       body += para(run((i + 1) + '.  ', { b: true, color: NAVY }) + run(b[0], { b: true }) + run(b[1]), { after: 50 });
@@ -504,9 +684,9 @@
           termin ? klein(termin, { jc: 'center' }) : { xml: para(run('fehlt', { sz: 17, b: true, color: 'B02A2A' }), { after: 0, jc: 'center' }), fill: 'FDECEC' }];
       }));
     }
-    body += para(run('Quelle: OPL 4NE1 Gen4, Stand ' + stand + '. Anforderung und Ziel aus dem Reiter Lastenheft; #-Nummern verweisen auf OPL-Punkte.', { sz: 15, color: GRAU }), { after: 0 });
+    body += para(run('Quelle: OPL 4NE1 Gen4, Stand ' + stand + '. Forderungen aus dem Reiter Lastenheft; #-Nummern verweisen auf OPL-Punkte.', { sz: 15, color: GRAU }), { after: 0 });
     return docxPaket(body, '4NE1 Gen4 · Management-Kurzfassung aus der OPL · Stand ' + stand, 850);
   }
 
-  global.OPLLastenheft = { id: id, struktur: struktur, schluessel: schluessel, TRENNER: TRENNER, render: render, exportXlsx: exportXlsx, exportDocx: exportDocx, exportKurzfassung: exportKurzfassung };
+  global.OPLLastenheft = { id: id, frage: frage, struktur: struktur, schluessel: schluessel, TRENNER: TRENNER, render: render, exportXlsx: exportXlsx, exportDocx: exportDocx, exportKurzfassung: exportKurzfassung };
 })(window);

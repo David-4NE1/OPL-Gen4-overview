@@ -226,6 +226,28 @@
   </form>
 </dialog>
 
+<dialog id="dlgForderung" class="dialog">
+  <form id="formForderung" method="dialog">
+    <h2 id="foTitel"></h2>
+    <p id="foFrage" class="hint"></p>
+    <label><span data-i18n>Forderung – kurz und konkret</span>
+      <input id="foText" type="text" maxlength="300" required placeholder="z. B. Alle Kabel vorkonfektioniert liefern (inkl. Mainboard-/Torso-Verkabelung)" data-i18n-ph>
+    </label>
+    <label><span data-i18n>Detail – was genau, woran erkennen wir, dass es erfüllt ist? (optional)</span>
+      <textarea id="foDetail" rows="3" maxlength="2000"></textarea>
+    </label>
+    <label><span data-i18n>Aktuelle Beispiele – OPL-Nummern</span>
+      <input id="foBeispiele" type="text" inputmode="numeric" placeholder="z. B. 195, 100, 75" data-i18n-ph>
+    </label>
+    <footer class="dialog__footer">
+      <button type="button" id="btnFoLoeschen" class="btn btn--danger" data-i18n>Löschen</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn btn--ghost" data-close data-i18n>Abbrechen</button>
+      <button type="submit" class="btn btn--primary" data-i18n>Speichern</button>
+    </footer>
+  </form>
+</dialog>
+
 <!-- Dialog: Excel-Import -->
 <dialog id="dlgImport" class="dialog">
   <h2 data-i18n>Excel-Import</h2>

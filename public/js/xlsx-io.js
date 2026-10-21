@@ -924,6 +924,23 @@
     });
   }
 
+  // Management-Forderungen: Kategorie | Forderung | Detail | Beispiele (OPL-Nr)
+  function importForderungen(arrayBuffer) {
+    return tabellenLesen(arrayBuffer).then(function (grids) {
+      var tab = tabelleMitKopf(grids, function (sp) { return sp['kategorie'] && sp['forderung']; });
+      if (!tab) return [];
+      var sp = tab.spalten;
+      var wert = function (r, c) { return c ? String(r[c] == null ? '' : r[c]).trim() : ''; };
+      var beispielSpalte = Object.keys(sp).filter(function (k) { return /^beispiel/.test(k); })[0];
+      return tab.zeilen.map(function (r) {
+        return {
+          kategorie: wert(r, sp['kategorie']), text: wert(r, sp['forderung']), detail: wert(r, sp['detail']),
+          beispiele: (wert(r, sp[beispielSpalte]).match(/\d+/g) || []).map(Number)
+        };
+      }).filter(function (x) { return x.kategorie && x.text; });
+    });
+  }
+
   function resolveRelPath(baseDir, target) {
     if (/^\//.test(target)) return target.slice(1);
     var parts = baseDir.split('/').filter(Boolean);
@@ -1051,6 +1068,7 @@
     exportTabelle: exportTabelle,
     importAnforderungen: importAnforderungen,
     importZiele: importZiele,
+    importForderungen: importForderungen,
     zipBuild: zipBuild,
     escXml: esc,
     ddmmyyyy: ddmmyyyy,
