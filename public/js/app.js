@@ -1204,11 +1204,55 @@
     $('#dlgKatExport').showModal();
   }
 
+  // Bild (URL oder data-URL) laden und als JPEG (max. 1000 px) mit Groesse liefern
+  function bildAlsJpeg(src) {
+    return new Promise(function (resolve) {
+      var img = new Image();
+      img.onload = function () {
+        var f = Math.min(1, 1000 / Math.max(img.naturalWidth, img.naturalHeight));
+        var w = Math.max(1, Math.round(img.naturalWidth * f)), h = Math.max(1, Math.round(img.naturalHeight * f));
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        var g = c.getContext('2d');
+        g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+        g.drawImage(img, 0, 0, w, h);
+        c.toBlob(function (blob) {
+          if (!blob) { resolve(null); return; }
+          blob.arrayBuffer().then(function (buf) { resolve({ data: new Uint8Array(buf), w: w, h: h }); }, function () { resolve(null); });
+        }, 'image/jpeg', 0.85);
+      };
+      img.onerror = function () { resolve(null); };
+      img.src = src;
+    });
+  }
+
+  // { nr: [{ data, w, h }] } fuer die angegebenen Punkte, je Punkt hoechstens 2 Bilder
+  function bilderFuerWord(nrs) {
+    var map = {}, jobs = [];
+    nrs.forEach(function (nr) {
+      var e = Store.byNr(nr);
+      ((e && e.bilder) || []).filter(function (b) { return b && b.src; }).slice(0, 2).forEach(function (b, i) {
+        jobs.push(bildAlsJpeg(b.src).then(function (r) {
+          if (r) (map[nr] = map[nr] || [])[i] = r;
+        }));
+      });
+    });
+    return Promise.all(jobs).then(function () {
+      Object.keys(map).forEach(function (nr) { map[nr] = map[nr].filter(Boolean); });
+      return map;
+    });
+  }
+
   function lastenheftExportKategorie(kategorie) {
     var stand = Xlsx.ddmmyyyy(Store.heute());
     var name = '4NE1_Gen4_Forderungen_' + kategorie.replace(/[^A-Za-z0-9ÄÖÜäöüß]+/g, '-').replace(/^-|-$/g, '') + '_' + dateiStempel() + '.docx';
-    download(window.OPLLastenheft.exportKategorie(Store.state.entries, kategorie, stand, { ziele: lhZiele || {}, forderungen: lhForderungen || [] }), name);
-    toast(T('Word für „{k}“ exportiert.', { k: T(kategorie) }));
+    toast(T('Word wird erstellt, Bilder werden geladen …'));
+    var nrs = window.OPLLastenheft.kategorieNrs(Store.state.entries, kategorie, lhForderungen || []);
+    bilderFuerWord(nrs).then(function (bilder) {
+      download(window.OPLLastenheft.exportKategorie(Store.state.entries, kategorie, stand,
+        { ziele: lhZiele || {}, forderungen: lhForderungen || [], bilder: bilder }), name);
+      toast(T('Word für „{k}“ exportiert.', { k: T(kategorie) }));
+    }).catch(function (err) { toast(T('Export fehlgeschlagen: {msg}', { msg: err.message }), true); });
   }
 
   function lastenheftExport(art) {

@@ -141,6 +141,8 @@
     'davon Hoch': 'of which high',
     'Umgesetzt': 'Implemented',
     '⬇ Export ▾': '⬇ Export ▾',
+    'Export fehlgeschlagen: {msg}': 'Export failed: {msg}',
+    'Word wird erstellt, Bilder werden geladen …': 'Creating Word, loading images …',
     '🎯 Word – eine Kategorie …': '🎯 Word – one category …',
     'Forderungen einer Kategorie, darunter Beispiele aus der OPL': 'Demands of one category, followed by examples from the OPL',
     '{n} Forderungen': '{n} demands',

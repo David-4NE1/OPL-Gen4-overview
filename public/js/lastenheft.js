@@ -477,12 +477,29 @@
     return xml + '</w:tbl>';
   }
 
+  // Eingebettetes Bild (inline); b = { w, h } in Pixeln, maxB/maxH in EMU
+  function bildXml(rid, nr, b, maxB, maxH) {
+    var f = Math.min(maxB / b.w, maxH / b.h);
+    var cx = Math.round(b.w * f), cy = Math.round(b.h * f);
+    return '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="' + cx + '" cy="' + cy + '"/>' +
+      '<wp:docPr id="' + nr + '" name="Bild ' + nr + '"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+      '<pic:pic><pic:nvPicPr><pic:cNvPr id="' + nr + '" name="Bild ' + nr + '"/><pic:cNvPicPr/></pic:nvPicPr>' +
+      '<pic:blipFill><a:blip r:embed="' + rid + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+      '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>' +
+      '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+  }
+
   // Word-Paket (document, styles, footer) um einen fertigen Body bauen
-  function docxPaket(body, fussText, rand) {
+  // medien: [{ id, name, data }] (JPEG), im Body per bildXml() eingebunden
+  function docxPaket(body, fussText, rand, medien) {
+    medien = medien || [];
     var sect = '<w:sectPr><w:footerReference w:type="default" r:id="rId2"/><w:pgSz w:w="11906" w:h="16838"/>' +
       '<w:pgMar w:top="' + rand + '" w:right="1134" w:bottom="' + rand + '" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr>';
     var NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' +
-      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+      'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" ' +
+      'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+      'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
     var dokument = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ' + NS + '><w:body>' + body + sect + '</w:body></w:document>';
     var fuss = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' + NS + '><w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="' + BREITE + '"/></w:tabs></w:pPr>' +
       run(fussText, { sz: 16, color: GRAU }) +
@@ -508,6 +525,7 @@
         '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
         '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
         '<Default Extension="xml" ContentType="application/xml"/>' +
+        (medien.length ? '<Default Extension="jpeg" ContentType="image/jpeg"/>' : '') +
         '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
         '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
         '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' +
@@ -520,11 +538,14 @@
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
         '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>' +
+        medien.map(function (m) {
+          return '<Relationship Id="' + m.id + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + m.name + '"/>';
+        }).join('') +
         '</Relationships>') },
       { name: 'word/document.xml', data: enc.encode(dokument) },
       { name: 'word/styles.xml', data: enc.encode(stile) },
       { name: 'word/footer1.xml', data: enc.encode(fuss) }
-    ];
+    ].concat(medien.map(function (m) { return { name: 'word/media/' + m.name, data: m.data }; }));
     return new Blob([Xlsx.zipBuild(dateien)], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   }
 
@@ -592,6 +613,14 @@
 
   /* ------------------------------------------ Word: Forderungen einer Kategorie */
 
+  // OPL-Nummern, die im Export einer Kategorie vorkommen (Beispiele + Punkte der Kategorie)
+  function kategorieNrs(eintraege, kategorie, forderungen) {
+    var nrs = {};
+    eintraege.forEach(function (e) { if (e.thema === kategorie && e.status !== 'Erledigt') nrs[e.nr] = true; });
+    forderungenVon(forderungen, kategorie).forEach(function (f) { beispielNrs(f).forEach(function (n) { nrs[n] = true; }); });
+    return Object.keys(nrs).map(Number);
+  }
+
   // Oben die Forderungen als knappe Liste, darunter je Forderung einige OPL-Beispiele
   function exportKategorie(eintraege, kategorie, stand, opts) {
     opts = opts || {};
@@ -609,9 +638,22 @@
       return l.slice().sort(function (a, b) { return (a.status === 'Erledigt') - (b.status === 'Erledigt') || PRIO_RANG[a.prio] - PRIO_RANG[b.prio] || a.nr - b.nr; });
     };
     var zelleText = function (t, o) { return { xml: para(run(t, Object.assign({ sz: 17 }, o || {})), { after: 0, jc: o && o.jc }) }; };
+    // Bilder je OPL-Nr (vom Aufrufer als JPEG vorbereitet): { nr: [{ data, w, h }] }
+    var medien = [], bildZaehler = 0;
+    var EMU_CM = 360000;
+    var bilderXml = function (e) {
+      var l = (opts.bilder || {})[e.nr] || [];
+      if (!l.length) return '';
+      return para(l.map(function (b) {
+        bildZaehler++;
+        var rid = 'rIdBild' + bildZaehler;
+        medien.push({ id: rid, name: 'bild' + bildZaehler + '.jpeg', data: b.data });
+        return bildXml(rid, bildZaehler, b, 4.4 * EMU_CM, 3.3 * EMU_CM) + run(' ');
+      }).join(''), { before: 60, after: 0 });
+    };
     var beispielTabelle = function (l) {
       return tabelle([700, 5338, 900, 1100, 1600], ['OPL', 'Punkt', 'Prio', 'Status', 'Verantwortlich'], l.map(function (e) {
-        return [zelleText('#' + e.nr, { b: true }), zelleText(langtext(e)),
+        return [zelleText('#' + e.nr, { b: true }), { xml: para(run(langtext(e), { sz: 17 }), { after: 0 }) + bilderXml(e) },
           { xml: para(run(e.prio, { sz: 16 }), { after: 0, jc: 'center' }), fill: PRIO_FARBE[e.prio] },
           zelleText(e.status === 'Erledigt' ? 'erledigt' : e.status, { sz: 16, jc: 'center' }),
           zelleText(e.verantwortlicher || e.verantwortlichkeit || '–', { sz: 15 })];
@@ -628,7 +670,9 @@
     if (liste.length) {
       body += para(run('Was wir brauchen', { b: true, sz: 26, color: NAVY }), { style: 'Heading2' });
       liste.forEach(function (f) {
-        body += para(run('•', { b: true, color: BLAU, sz: 24 }) + '<w:r><w:tab/></w:r>' + run(f.text, { b: true, sz: 23 }), { ind: [400, 300], after: 70 });
+        body += para(run('•', { b: true, color: BLAU, sz: 24 }) + '<w:r><w:tab/></w:r>' + run(f.text, { b: true, sz: 23 }),
+          { ind: [400, 300], after: f.detail ? 10 : 80, keepNext: !!f.detail });
+        if (f.detail) body += para(run(f.detail, { sz: 18, color: GRAU }), { ind: [400, 0], after: 80 });
       });
     } else {
       body += para(run('Für diese Kategorie sind noch keine Forderungen formuliert.', { i: true, color: GRAU }));
@@ -641,8 +685,7 @@
       body += para(run('Beispiele aus der OPL', { b: true, sz: 26, color: NAVY }), { style: 'Heading2', before: 240 });
       mitBeispiel.forEach(function (f, i) {
         var bsp = sortiert(beispielNrs(f).map(function (n) { return nachNr[n]; }).filter(Boolean));
-        body += para(run((i + 1) + '.  ' + f.text, { b: true, sz: 20, color: NAVY }), { before: 140, after: 30, keepNext: true });
-        if (f.detail) body += para(run(f.detail, { sz: 17, i: true, color: GRAU }), { after: 50, keepNext: true });
+        body += para(run((i + 1) + '.  ' + f.text, { b: true, sz: 20, color: NAVY }), { before: 140, after: 50, keepNext: true });
         body += beispielTabelle(bsp.slice(0, MAX));
         if (bsp.length > MAX) {
           body += para(run('Weitere: ' + bsp.slice(MAX).map(function (e) { return '#' + e.nr; }).join(', '), { sz: 16, color: GRAU }), { before: 30, after: 0 });
@@ -655,7 +698,7 @@
       body += beispielTabelle(rest);
     }
     body += para(run('Quelle: OPL 4NE1 Gen4, Stand ' + stand + '. Alle Punkte und Details im Board, Reiter Lastenheft → Forderungen.', { sz: 15, color: GRAU }), { before: 160, after: 0 });
-    return docxPaket(body, '4NE1 Gen4 · ' + kategorie + ' · Forderungen aus der OPL · Stand ' + stand, 1000);
+    return docxPaket(body, '4NE1 Gen4 · ' + kategorie + ' · Forderungen aus der OPL · Stand ' + stand, 1000, medien);
   }
 
   /* ------------------------------------------- Word-Kurzfassung (Management) */
@@ -761,5 +804,5 @@
     return docxPaket(body, '4NE1 Gen4 · Management-Kurzfassung aus der OPL · Stand ' + stand, 850);
   }
 
-  global.OPLLastenheft = { id: id, frage: frage, struktur: struktur, schluessel: schluessel, TRENNER: TRENNER, render: render, exportXlsx: exportXlsx, exportDocx: exportDocx, exportKurzfassung: exportKurzfassung, exportKategorie: exportKategorie };
+  global.OPLLastenheft = { id: id, frage: frage, struktur: struktur, schluessel: schluessel, TRENNER: TRENNER, render: render, exportXlsx: exportXlsx, exportDocx: exportDocx, exportKurzfassung: exportKurzfassung, exportKategorie: exportKategorie, kategorieNrs: kategorieNrs };
 })(window);
