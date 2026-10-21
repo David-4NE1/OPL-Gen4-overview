@@ -231,60 +231,137 @@
     return wrap;
   }
 
+  // Fortschrittsbalken: Anteil erledigt
+  function balken(fertig, gesamt, cls) {
+    var b = el('span', 'fo__balken' + (cls ? ' ' + cls : ''));
+    var f = el('span');
+    f.style.width = (gesamt ? Math.round(fertig / gesamt * 100) : 0) + '%';
+    b.appendChild(f);
+    return b;
+  }
+  // Roter Punkt mit Anzahl offener Prio-Hoch-Punkte
+  function hochPunkt(n, titel) {
+    var p = el('span', 'fo__hoch', String(n));
+    p.title = titel;
+    return p;
+  }
+
+  // Oben: Uebersichtsleiste aller Kategorien (Fokus zuerst) zum Hinspringen.
   // Ebene 1: je Kategorie die Frage an die Fachleute und ihre Forderungen.
-  // Ebene 2: Forderung aufklappen → Detail und aktuelle OPL-Beispiele.
+  // Ebene 2: Forderung aufklappen → Detail und aktuelle OPL-Beispiele (in Fokus-Kategorien schon offen).
   // Ebene 3: Beispiel anklicken → Karte. Dazu je Kategorie die offenen Punkte ohne Forderung.
   function forderungsAnsicht(kap, eintraege, opts) {
     var offen = opts.offen || {};
+    var fokus = opts.fokus || [];
     var nachNr = {};
     eintraege.forEach(function (e) { nachNr[e.nr] = e; });
     var verknuepft = {};   // OPL-Nr, die irgendeine Forderung als Beispiel nennt
     (opts.forderungen || []).forEach(function (f) { beispielNrs(f).forEach(function (n) { verknuepft[n] = true; }); });
+    var kats = kap.map(function (k, ki) { return { k: k, nr: ki + 1, fokus: fokus.indexOf(k.name) >= 0 }; })
+      .filter(function (x) { return x.k.name !== OHNE_THEMA; });
+    kats.sort(function (a, b) { return (b.fokus - a.fokus) || (a.nr - b.nr); });
+
+    var wrap = el('div', 'fo-wrap');
+
+    // Uebersichtsleiste
+    var nav = el('nav', 'fo-nav');
+    kats.forEach(function (x) {
+      var zk = zahlen(x.k.punkte);
+      var b = el('button', 'fo-nav__k' + (x.fokus ? ' is-fokus' : ''));
+      b.type = 'button';
+      b.title = T('{o} offen', { o: zk.offen }) + ' · ' + T('{u} von {n} umgesetzt', { u: zk.umgesetzt, n: zk.gesamt }) +
+        (zk.hoch ? ' · ' + T('{h} Prio Hoch', { h: zk.hoch }) : '');
+      var oben = el('span', 'fo-nav__oben');
+      oben.appendChild(el('span', 'fo-nav__name', (x.fokus ? '★ ' : x.nr + '  ') + T(x.k.name)));
+      if (zk.hoch) oben.appendChild(hochPunkt(zk.hoch, T('{h} Prio Hoch', { h: zk.hoch })));
+      b.appendChild(oben);
+      var unten = el('span', 'fo-nav__unten');
+      unten.appendChild(balken(zk.umgesetzt, zk.gesamt));
+      unten.appendChild(el('span', 'fo-nav__zahl', T('{o} offen', { o: zk.offen })));
+      b.appendChild(unten);
+      b.addEventListener('click', function () {
+        var ziel = document.getElementById('fo-kat-' + x.nr);
+        if (ziel) ziel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      nav.appendChild(b);
+    });
+    wrap.appendChild(nav);
+
     var box = el('div', 'fo');
-    kap.forEach(function (k, ki) {
-      if (k.name === OHNE_THEMA) return;
+    kats.forEach(function (x) {
+      var k = x.k;
       var liste = forderungenVon(opts.forderungen, k.name);
       var zk = zahlen(k.punkte);
-      var art = el('article', 'fo__kat');
+      var art = el('article', 'fo__kat' + (x.fokus ? ' fo__kat--fokus' : ''));
+      art.id = 'fo-kat-' + x.nr;
       var kopf = el('div', 'fo__kopf');
+      if (opts.darfBearbeiten || x.fokus) {
+        var stern = el(opts.darfBearbeiten ? 'button' : 'span', 'fo__stern' + (x.fokus ? ' is-an' : ''), x.fokus ? '★' : '☆');
+        if (opts.darfBearbeiten) {
+          stern.type = 'button';
+          stern.title = x.fokus ? T('Fokus entfernen') : T('Als Fokus markieren – steht dann für alle oben');
+          stern.addEventListener('click', function () { opts.fokusUmschalten(k.name); });
+        } else {
+          stern.title = T('Fokus-Kategorie');
+        }
+        kopf.appendChild(stern);
+      }
       var titel = el('div', 'fo__titel');
-      titel.appendChild(el('h3', null, (ki + 1) + '  ' + T(k.name)));
+      titel.appendChild(el('h3', null, (x.fokus ? '' : x.nr + '  ') + T(k.name)));
       titel.appendChild(el('p', 'fo__frage', frage(k.name)));
       kopf.appendChild(titel);
-      var zahl = el('div', 'fo__zahlen');
-      zahl.appendChild(el('span', 'fo__zahl', T('{o} offen', { o: zk.offen })));
-      if (zk.hoch) zahl.appendChild(el('span', 'fo__zahl fo__zahl--hoch', T('{h} Prio Hoch', { h: zk.hoch })));
-      kopf.appendChild(zahl);
+      var stand = el('div', 'fo__stand');
+      var sz = el('div', 'fo__standzeile');
+      sz.appendChild(balken(zk.umgesetzt, zk.gesamt, 'fo__balken--gross'));
+      sz.appendChild(el('span', 'fo__standtext', T('{u} von {n} umgesetzt', { u: zk.umgesetzt, n: zk.gesamt })));
+      stand.appendChild(sz);
+      var sz2 = el('div', 'fo__standzeile');
+      sz2.appendChild(el('span', 'fo__zahl', T('{o} offen', { o: zk.offen })));
+      if (zk.hoch) sz2.appendChild(el('span', 'fo__zahl fo__zahl--hoch', T('{h} Prio Hoch', { h: zk.hoch })));
+      stand.appendChild(sz2);
+      kopf.appendChild(stand);
+      var knoepfe = el('div', 'fo__knoepfe');
       var wd = el('button', 'lh__stift fo__word', '⬇ Word');
       wd.type = 'button';
       wd.title = T('Forderungen und Beispiele dieser Kategorie als Word');
       wd.addEventListener('click', function () { opts.exportKategorie(k.name); });
-      kopf.appendChild(wd);
+      knoepfe.appendChild(wd);
       if (opts.darfBearbeiten) {
         var neu = el('button', 'lh__stift fo__neu', '+');
         neu.type = 'button';
         neu.title = T('Forderung hinzufügen');
         neu.addEventListener('click', function () { opts.forderungBearbeiten(k.name, null); });
-        kopf.appendChild(neu);
+        knoepfe.appendChild(neu);
       }
+      kopf.appendChild(knoepfe);
       art.appendChild(kopf);
 
       var ul = el('ol', 'fo__liste');
       liste.forEach(function (f) {
         var key = 'fo:' + f.id;
+        var istOffen = offen[key] === undefined ? x.fokus : !!offen[key];
         var nrs = beispielNrs(f);
         var bsp = nrs.map(function (n) { return nachNr[n]; }).filter(Boolean);
-        var bOffen = bsp.filter(function (e) { return e.status !== 'Erledigt'; });
-        var li = el('li', 'fo__f' + (offen[key] ? ' is-offen' : ''));
+        var bFertig = bsp.filter(function (e) { return e.status === 'Erledigt'; }).length;
+        var bHoch = bsp.filter(function (e) { return e.status !== 'Erledigt' && e.prio === 'Hoch'; }).length;
+        var li = el('li', 'fo__f' + (istOffen ? ' is-offen' : ''));
         var z = el('div', 'fo__fkopf');
         z.tabIndex = 0;
         z.setAttribute('role', 'button');
-        z.setAttribute('aria-expanded', String(!!offen[key]));
+        z.setAttribute('aria-expanded', String(istOffen));
         z.appendChild(el('span', 'lh__chev', '▸'));
         z.appendChild(el('span', 'fo__text', f.text));
-        var badge = el('span', 'fo__badge' + (bOffen.some(function (e) { return e.prio === 'Hoch'; }) ? ' fo__badge--hoch' : ''),
-          bsp.length ? T('{o} offen / {n} Beispiele', { o: bOffen.length, n: bsp.length }) : T('keine Beispiele'));
-        z.appendChild(badge);
+        var st8 = el('span', 'fo__fstand');
+        if (bsp.length) {
+          if (bHoch) st8.appendChild(hochPunkt(bHoch, T('{h} offen mit Prio Hoch', { h: bHoch })));
+          st8.appendChild(balken(bFertig, bsp.length));
+          var zt = el('span', 'fo__fzahl', bFertig + '/' + bsp.length);
+          zt.title = T('{u} von {n} Beispielen erledigt', { u: bFertig, n: bsp.length });
+          st8.appendChild(zt);
+        } else {
+          st8.appendChild(el('span', 'fo__fzahl fo__fzahl--leer', T('keine Beispiele')));
+        }
+        z.appendChild(st8);
         if (opts.darfBearbeiten) {
           var st = el('button', 'lh__stift', '✎');
           st.type = 'button';
@@ -292,11 +369,11 @@
           st.addEventListener('click', function (ev) { ev.stopPropagation(); opts.forderungBearbeiten(k.name, f); });
           z.appendChild(st);
         }
-        var auf = function () { opts.umschalten(key); };
+        var auf = function () { opts.umschalten(key, !istOffen); };
         z.addEventListener('click', auf);
         z.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') auf(); });
         li.appendChild(z);
-        if (offen[key]) {
+        if (istOffen) {
           var tief = el('div', 'fo__tief');
           if (f.detail) tief.appendChild(el('p', 'fo__detail', f.detail));
           if (bsp.length) {
@@ -333,7 +410,8 @@
       }
       box.appendChild(art);
     });
-    return box;
+    wrap.appendChild(box);
+    return wrap;
   }
 
   // Einzelner OPL-Punkt kompakt: ID, Titel/Anforderung, Baugruppe, Prio, Status
