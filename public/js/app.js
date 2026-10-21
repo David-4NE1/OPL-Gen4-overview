@@ -1136,14 +1136,32 @@
     var box = $('#foVorschlaege');
     box.textContent = '';
     var text = $('#foText').value, detail = $('#foDetail').value;
-    var liste = window.OPLLastenheft.vorschlaege(Store.state.entries, $('#dlgForderung').dataset.kategorie, text, detail, 12);
+    var dlg = $('#dlgForderung');
+    var kategorie = dlg.dataset.kategorie;
+    // Punkte, die schon bei einer anderen Forderung als Beispiel haengen (eigene Kategorie zuerst nennen)
+    var belegt = {};
+    (lhForderungen || []).filter(function (f) { return String(f.id) !== dlg.dataset.id; })
+      .sort(function (a, b) { return (b.kategorie === kategorie) - (a.kategorie === kategorie); })
+      .forEach(function (f) {
+        String(f.beispiele || '').split(',').map(Number).filter(Boolean).forEach(function (n) {
+          (belegt[n] = belegt[n] || []).push(f.kategorie === kategorie ? f.text : T(f.kategorie) + ': ' + f.text);
+        });
+      });
+    var liste = window.OPLLastenheft.vorschlaege(Store.state.entries, kategorie, text, detail, 25);
     if (!text.trim() && !detail.trim()) return;
-    box.appendChild(el('div', 'fovor__kopf', T('Vorschläge aus der OPL – anhaken, um sie als Beispiel zu übernehmen')));
+    // Reihenfolge: offen und noch nicht zugeordnet, dann schon zugeordnet, zuletzt erledigt
+    var offen = function (v) { return v.e.status !== 'Erledigt'; };
+    var frei = liste.filter(function (v) { return offen(v) && !belegt[v.e.nr]; });
+    var schon = liste.filter(function (v) { return offen(v) && belegt[v.e.nr]; });
+    var erledigt = liste.filter(function (v) { return !offen(v); });
+    liste = frei.slice(0, 10).concat(schon.slice(0, 8), erledigt.slice(0, 4));
+    box.appendChild(el('div', 'fovor__kopf', T('Vorschläge aus der OPL – anhaken, um sie als Beispiel zu übernehmen') +
+      (schon.length ? ' · ' + T('noch nicht zugeordnete zuerst') : '')));
     if (!liste.length) { box.appendChild(el('p', 'fovor__leer', T('Keine passenden Punkte gefunden – andere Begriffe probieren.'))); return; }
     var drin = beispielNrsImFeld();
     liste.forEach(function (v) {
       var e = v.e;
-      var zeile = el('label', 'fovor__zeile' + (e.status === 'Erledigt' ? ' is-erledigt' : ''));
+      var zeile = el('label', 'fovor__zeile' + (e.status === 'Erledigt' ? ' is-erledigt' : '') + (belegt[e.nr] ? ' is-belegt' : ''));
       var cb = el('input');
       cb.type = 'checkbox';
       cb.value = e.nr;
@@ -1159,6 +1177,10 @@
       var txt = el('span', 'fovor__text', window.OPLLastenheft.kurztext(e, 120));
       txt.appendChild(el('small', null, ' · ' + T(e.thema) + (e.status === 'Erledigt' ? ' · ' + T('erledigt') : '') +
         ' · ' + T('Treffer: {w}', { w: v.treffer.join(', ') })));
+      if (belegt[e.nr]) {
+        var hinweis = belegt[e.nr];
+        txt.appendChild(el('span', 'fovor__belegt', T('schon bei: {f}', { f: '„' + hinweis.slice(0, 2).join('“, „') + '“' + (hinweis.length > 2 ? ' +' + (hinweis.length - 2) : '') })));
+      }
       zeile.appendChild(txt);
       box.appendChild(zeile);
     });
