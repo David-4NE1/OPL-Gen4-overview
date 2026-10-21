@@ -566,23 +566,46 @@ async function handleForderungen(path, method, request, db, sitzung) {
   const jetzt = new Date().toISOString();
 
   // POST /api/forderungen/import { liste: [{kategorie, text, detail, beispiele}] }
-  // ersetzt die Forderungen der Kategorien, die in der Liste vorkommen
+  // ergaenzt: neue Forderungen werden angehaengt; gibt es in der Kategorie schon eine
+  // mit gleichem Text, kommen neue Beispiele dazu und ein Detail aus der Datei ersetzt
+  // das bisherige. Es wird nichts geloescht.
   if (path === '/api/forderungen/import' && method === 'POST') {
     const d = await request.json();
     const liste = (Array.isArray(d.liste) ? d.liste : []).map(forderungNormalisieren).filter(f => f.text);
     if (!liste.length) return json({ error: 'Keine Forderungen in der Datei' }, 400);
     const falsch = liste.find(f => !UNTERTHEMEN[f.kategorie]);
     if (falsch) return json({ error: `Unbekannte Kategorie „${falsch.kategorie}“` }, 400);
-    const kategorien = [...new Set(liste.map(f => f.kategorie))];
+    const { results: alt } = await db.prepare('SELECT id, kategorie, text, detail, beispiele, pos FROM forderungen').all();
+    const schluessel = (k, t) => k + '\u0000' + t.toLowerCase().replace(/\s+/g, ' ');
+    const vorhanden = new Map(alt.map(f => [schluessel(f.kategorie, f.text), f]));
     const pos = {};
-    await db.batch([
-      ...kategorien.map(k => db.prepare('DELETE FROM forderungen WHERE kategorie = ?').bind(k)),
-      ...liste.map(f => db.prepare(
-        'INSERT INTO forderungen (kategorie, text, detail, beispiele, pos, geaendert_am, geaendert_von) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).bind(f.kategorie, f.text, f.detail, f.beispiele, pos[f.kategorie] = (pos[f.kategorie] || 0) + 1, jetzt, sitzung.name))
-    ]);
-    await logChange(db, 0, `Forderungen aus Excel übernommen: ${liste.length} in ${kategorien.length} Kategorien`, sitzung.name);
-    return json({ ok: true, anzahl: liste.length, kategorien: kategorien.length });
+    alt.forEach(f => { pos[f.kategorie] = Math.max(pos[f.kategorie] || 0, f.pos); });
+    const stmts = [], neue = [];
+    let aktualisiert = 0, gleich = 0;
+    for (const f of liste) {
+      const key = schluessel(f.kategorie, f.text);
+      const v = vorhanden.get(key);
+      if (!v) {
+        const eintrag = { ...f, id: null, pos: pos[f.kategorie] = (pos[f.kategorie] || 0) + 1 };
+        vorhanden.set(key, eintrag);
+        neue.push(eintrag);
+        continue;
+      }
+      const nrs = [...new Set([...String(v.beispiele || '').split(','), ...f.beispiele.split(',')].filter(Boolean))].slice(0, 50).join(',');
+      const detail = f.detail || v.detail || '';
+      if (nrs === (v.beispiele || '') && detail === (v.detail || '')) { gleich++; continue; }
+      v.beispiele = nrs; v.detail = detail;
+      if (v.id == null) continue; // doppelt in der Datei: wird unten mit angelegt
+      stmts.push(db.prepare('UPDATE forderungen SET detail = ?, beispiele = ?, geaendert_am = ?, geaendert_von = ? WHERE id = ?')
+        .bind(detail, nrs, jetzt, sitzung.name, v.id));
+      aktualisiert++;
+    }
+    neue.forEach(f => stmts.push(db.prepare(
+      'INSERT INTO forderungen (kategorie, text, detail, beispiele, pos, geaendert_am, geaendert_von) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(f.kategorie, f.text, f.detail, f.beispiele, f.pos, jetzt, sitzung.name)));
+    if (stmts.length) await db.batch(stmts);
+    await logChange(db, 0, `Forderungen aus Excel ergänzt: ${neue.length} neu, ${aktualisiert} aktualisiert`, sitzung.name);
+    return json({ ok: true, neu: neue.length, aktualisiert, gleich });
   }
 
   if (path === '/api/forderungen' && method === 'POST') {

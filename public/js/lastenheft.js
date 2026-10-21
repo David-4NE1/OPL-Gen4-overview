@@ -405,7 +405,7 @@
       blatt: 'Forderungen',
       titel: 'Forderungen an die Fachbereiche – 4NE1 Gen4',
       untertitel: 'Je Kategorie: was wir brauchen, mit aktuellen OPL-Punkten als Beispiel · Stand ' + stand +
-        ' · Spalten Kategorie, Forderung, Detail und Beispiele lassen sich über „Aus Excel übernehmen“ wieder einspielen (ersetzt die Forderungen der enthaltenen Kategorien)',
+        ' · Spalten Kategorie, Forderung, Detail und Beispiele lassen sich über „Aus Excel übernehmen“ wieder einspielen (ergänzt, löscht nichts)',
       kopf: ['Kategorie', 'Gefragt', 'Forderung', 'Detail', 'Beispiele (OPL-Nr)', 'davon offen', 'Beispiele (Kurztext)'],
       breiten: [26, 34, 50, 60, 16, 10, 80],
       zeilen: fo
