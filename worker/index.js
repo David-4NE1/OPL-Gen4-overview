@@ -316,6 +316,10 @@ async function handleAPI(url, method, request, env) {
     return handleZiele(method, request, db, sitzung);
   }
 
+  if (path === '/api/forderungen' || path.startsWith('/api/forderungen/')) {
+    return handleForderungen(path, method, request, db, sitzung);
+  }
+
   // GET /api/bild/:nr/:i
   const matchBild = path.match(/^\/api\/bild\/(\d+)\/(\d+)$/);
   if (matchBild && method === 'GET') {
@@ -530,6 +534,86 @@ async function handleZiele(method, request, db, sitzung) {
       ).bind(d.schluessel, anforderung, ziel, new Date().toISOString(), sitzung.name).run();
     }
     await logChange(db, 0, `Lastenheft: Anforderung/Ziel „${d.schluessel}“ geändert`, sitzung.name);
+    return json({ ok: true });
+  }
+  return json({ error: 'Route nicht gefunden' }, 404);
+}
+
+/* ---------------------------------------------- Management-Forderungen */
+
+// Je Kategorie wenige konkrete Forderungen an die Fachleute ("Was brauchen wir
+// von den Kabelexperten?"), jeweils mit aktuellen OPL-Punkten als Beispiel.
+// beispiele: OPL-Nummern, kommagetrennt gespeichert.
+function forderungNormalisieren(d) {
+  const nrs = (Array.isArray(d.beispiele) ? d.beispiele : String(d.beispiele || '').split(/[^\d]+/))
+    .map(Number).filter(n => Number.isInteger(n) && n > 0);
+  return {
+    kategorie: String(d.kategorie || '').trim(),
+    text: String(d.text || '').trim().slice(0, 300),
+    detail: String(d.detail || '').trim().slice(0, 2000),
+    beispiele: [...new Set(nrs)].slice(0, 50).join(',')
+  };
+}
+
+const FORDERUNG_SPALTEN = 'id, kategorie, text, detail, beispiele, pos, geaendert_am AS geaendertAm, geaendert_von AS geaendertVon';
+
+async function handleForderungen(path, method, request, db, sitzung) {
+  if (path === '/api/forderungen' && method === 'GET') {
+    const { results } = await db.prepare(`SELECT ${FORDERUNG_SPALTEN} FROM forderungen ORDER BY kategorie, pos, id`).all();
+    return json(results);
+  }
+  if (!darf(sitzung, 'bearbeiten')) return keinRecht('bearbeiten');
+  const jetzt = new Date().toISOString();
+
+  // POST /api/forderungen/import { liste: [{kategorie, text, detail, beispiele}] }
+  // ersetzt die Forderungen der Kategorien, die in der Liste vorkommen
+  if (path === '/api/forderungen/import' && method === 'POST') {
+    const d = await request.json();
+    const liste = (Array.isArray(d.liste) ? d.liste : []).map(forderungNormalisieren).filter(f => f.text);
+    if (!liste.length) return json({ error: 'Keine Forderungen in der Datei' }, 400);
+    const falsch = liste.find(f => !UNTERTHEMEN[f.kategorie]);
+    if (falsch) return json({ error: `Unbekannte Kategorie „${falsch.kategorie}“` }, 400);
+    const kategorien = [...new Set(liste.map(f => f.kategorie))];
+    const pos = {};
+    await db.batch([
+      ...kategorien.map(k => db.prepare('DELETE FROM forderungen WHERE kategorie = ?').bind(k)),
+      ...liste.map(f => db.prepare(
+        'INSERT INTO forderungen (kategorie, text, detail, beispiele, pos, geaendert_am, geaendert_von) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).bind(f.kategorie, f.text, f.detail, f.beispiele, pos[f.kategorie] = (pos[f.kategorie] || 0) + 1, jetzt, sitzung.name))
+    ]);
+    await logChange(db, 0, `Forderungen aus Excel übernommen: ${liste.length} in ${kategorien.length} Kategorien`, sitzung.name);
+    return json({ ok: true, anzahl: liste.length, kategorien: kategorien.length });
+  }
+
+  if (path === '/api/forderungen' && method === 'POST') {
+    const f = forderungNormalisieren(await request.json());
+    if (!UNTERTHEMEN[f.kategorie]) return json({ error: 'Unbekannte Kategorie' }, 400);
+    if (!f.text) return json({ error: 'Forderung fehlt' }, 400);
+    const max = await db.prepare('SELECT COALESCE(MAX(pos), 0) AS p FROM forderungen WHERE kategorie = ?').bind(f.kategorie).first();
+    const r = await db.prepare(
+      'INSERT INTO forderungen (kategorie, text, detail, beispiele, pos, geaendert_am, geaendert_von) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(f.kategorie, f.text, f.detail, f.beispiele, max.p + 1, jetzt, sitzung.name).run();
+    await logChange(db, 0, `Forderung „${f.text}“ (${f.kategorie}) angelegt`, sitzung.name);
+    return json({ ok: true, id: r.meta.last_row_id }, 201);
+  }
+
+  const m = path.match(/^\/api\/forderungen\/(\d+)$/);
+  if (!m) return json({ error: 'Route nicht gefunden' }, 404);
+  const alt = await db.prepare('SELECT kategorie, text FROM forderungen WHERE id = ?').bind(+m[1]).first();
+  if (!alt) return json({ error: 'Forderung nicht gefunden' }, 404);
+  if (method === 'PUT') {
+    const f = forderungNormalisieren({ kategorie: alt.kategorie, ...(await request.json()) });
+    if (!UNTERTHEMEN[f.kategorie]) return json({ error: 'Unbekannte Kategorie' }, 400);
+    if (!f.text) return json({ error: 'Forderung fehlt' }, 400);
+    await db.prepare(
+      'UPDATE forderungen SET kategorie = ?, text = ?, detail = ?, beispiele = ?, geaendert_am = ?, geaendert_von = ? WHERE id = ?'
+    ).bind(f.kategorie, f.text, f.detail, f.beispiele, jetzt, sitzung.name, +m[1]).run();
+    await logChange(db, 0, `Forderung „${f.text}“ (${f.kategorie}) geändert`, sitzung.name);
+    return json({ ok: true });
+  }
+  if (method === 'DELETE') {
+    await db.prepare('DELETE FROM forderungen WHERE id = ?').bind(+m[1]).run();
+    await logChange(db, 0, `Forderung „${alt.text}“ (${alt.kategorie}) gelöscht`, sitzung.name);
     return json({ ok: true });
   }
   return json({ error: 'Route nicht gefunden' }, 404);
@@ -858,6 +942,10 @@ async function schemaSicherstellen(db) {
   }
   await db.prepare(`CREATE TABLE IF NOT EXISTS lastenheft_ziele (
     schluessel TEXT PRIMARY KEY, anforderung TEXT NOT NULL DEFAULT '', ziel TEXT NOT NULL DEFAULT '',
+    geaendert_am TEXT NOT NULL DEFAULT '', geaendert_von TEXT NOT NULL DEFAULT '')`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS forderungen (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, kategorie TEXT NOT NULL, text TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '', beispiele TEXT NOT NULL DEFAULT '', pos INTEGER NOT NULL DEFAULT 0,
     geaendert_am TEXT NOT NULL DEFAULT '', geaendert_von TEXT NOT NULL DEFAULT '')`).run();
   // Releases-Tabelle beim ersten Mal mit den Gen4-Releases vorbelegen;
   // spaeter geloeschte Releases kommen dadurch nicht wieder.
