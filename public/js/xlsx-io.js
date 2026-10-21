@@ -275,7 +275,7 @@
   /* ------------------------------------------------------------------ */
 
   var HEADERS = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Bilder', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit', 'Ziel-Release'];
+                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Bilder', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit', 'Ziel-Release', 'Unterthema'];
 
   // Feste Anzeigegroesse je eingebettetem Bild in Pixel (96 dpi).
   var IMG_W_PX = 110, IMG_H_PX = 80, IMG_GAP_PX = 6;
@@ -390,7 +390,8 @@
         cellStr('L' + r, e.verantwortlichkeit ? S.CELL : S.PFLEGE, e.verantwortlichkeit),
         cellStr('M' + r, e.baugruppe ? S.CELL : S.PFLEGE, e.baugruppe || ''),
         cellStr('N' + r, S.CELL, e.nacharbeit || ''),
-        cellStr('O' + r, S.TEXT, e.zielRelease || '')
+        cellStr('O' + r, S.TEXT, e.zielRelease || ''),
+        cellStr('P' + r, S.CELL, e.unterthema || '')
       ];
 
       var bilder = (e.bilder || []).map(function (b) { return dataUrlToBytes(b.src); })
@@ -463,17 +464,19 @@
         '<col min="13" max="13" width="16" customWidth="1"/>' +
         '<col min="14" max="14" width="24" customWidth="1"/>' +
         '<col min="15" max="15" width="13" style="' + S.TEXT + '" customWidth="1"/>' +
+        '<col min="16" max="16" width="30" customWidth="1"/>' +
       '</cols>' +
       '<sheetData>' + rows.join('') + '</sheetData>' +
-      '<autoFilter ref="A7:O' + last + '"/>' +
+      '<autoFilter ref="A7:P' + last + '"/>' +
       '<mergeCells count="3">' +
-        '<mergeCell ref="A1:O1"/><mergeCell ref="A2:O2"/><mergeCell ref="H5:I5"/>' +
+        '<mergeCell ref="A1:P1"/><mergeCell ref="A2:P2"/><mergeCell ref="H5:I5"/>' +
       '</mergeCells>' +
       '<dataValidations count="' + (4 + (opts.themen ? 1 : 0) + (opts.baugruppen ? 1 : 0) + (opts.nacharbeit ? 1 : 0) + (opts.zielReleases ? 1 : 0)) + '">' +
         (opts.themen ? validation('list', 'C' + first + ':C' + last, '"' + opts.themen.join(',') + '"') : '') +
         (opts.baugruppen ? validation('list', 'M' + first + ':M' + last, '"' + opts.baugruppen.join(',') + '"') : '') +
         (opts.nacharbeit ? validation('list', 'N' + first + ':N' + last, '"' + opts.nacharbeit.join(',') + '"') : '') +
         (opts.zielReleases ? validation('list', 'O' + first + ':O' + last, '"' + opts.zielReleases.join(',') + '"') : '') +
+        // Unterthema (P) ohne Auswahlliste: Excel erlaubt dort hoechstens 255 Zeichen
         validation('list', 'D' + first + ':D' + last, '"Hoch,Mittel,Niedrig"') +
         validation('list', 'G' + first + ':G' + last, '"Offen,In Arbeit,Erledigt"') +
         validation('list', 'L' + first + ':L' + last, '"Advanced Development,Pre Series"') +
@@ -725,7 +728,8 @@
           verantwortlichkeit: normalize(zelle('verantwortlichkeit'), ['Advanced Development', 'Pre Series']) || '',
           baugruppe: normalize(zelle('baugruppe'), ['Kopf', 'Torso', 'Arm', 'Pelvis/Hüfte', 'Bein', 'Fuß', 'Übergreifend']) || '',
           nacharbeit: normalize(zelle('nacharbeit'), ['Re-Milling', 'Modification', 'Re-Milling + Modification']) || '',
-          zielRelease: normalize(zelle('zielRelease'), ['4.1.1', '4.1.2', '4.1.3', '4.2.0']) || ''
+          zielRelease: normalize(zelle('zielRelease'), ['4.1.1', '4.1.2', '4.1.3', '4.2.0']) || '',
+          unterthema: (zelle('unterthema') || '').trim()
         };
         entries.push(eintrag);
         entryByRow[rn] = eintrag;
@@ -754,7 +758,8 @@
     ['prio', ['prio'], 4], ['verantwortlicher', ['verantwortlicher'], 5], ['faellig', ['bis wann'], 6],
     ['status', ['status'], 7], ['todo', ['to do'], 8], ['notiz', ['bild'], 9], ['erstelltAm', ['erstellt am'], 10],
     ['verantwortlichkeit', ['verantwortlichkeit'], 12], ['baugruppe', ['baugruppe'], 13],
-    ['nacharbeit', ['nacharbeit'], 14], ['zielRelease', ['ziel-release', 'ziel release'], 15]
+    ['nacharbeit', ['nacharbeit'], 14], ['zielRelease', ['ziel-release', 'ziel release'], 15],
+    ['unterthema', ['unterthema'], 16]
   ];
 
   function spaltenAusKopf(kopfZeile) {
@@ -836,8 +841,9 @@
     return new Blob([zipBuild(files)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
 
-  // Liest eine Tabelle mit den Spalten "OPL-Nr", "Titel" und "Anforderung"
-  // (z. B. die Lastenheft-Excel) → [{ nr, titel, anforderung }]
+  // Liest eine Tabelle mit "OPL-Nr" und mindestens einer der Spalten "Anforderung"
+  // oder "Unterthema" (optional "Titel"), z. B. die Lastenheft-Excel
+  // → [{ nr, titel, anforderung, unterthema }] (fehlende Spalten = '')
   function importAnforderungen(arrayBuffer) {
     return zipRead(arrayBuffer).then(function (zip) {
       var parser = new DOMParser();
@@ -862,19 +868,20 @@
         for (var z = 0; z < zeilen.length; z++) {
           var kopf = grid[zeilen[z]], sp = {};
           Object.keys(kopf).forEach(function (k) { sp[String(kopf[k]).trim().toLowerCase()] = Number(k); });
-          var cNr = sp['opl-nr'] || sp['opl'], cAnf = sp['anforderung'], cTit = sp['titel'];
-          if (!cNr || !cAnf) continue;
+          var cNr = sp['opl-nr'] || sp['opl'], cAnf = sp['anforderung'], cTit = sp['titel'], cUt = sp['unterthema'];
+          if (!cNr || (!cAnf && !cUt)) continue;
+          var wert = function (r, c) { return c ? String(r[c] || '').trim() : ''; };
           var out = [];
           zeilen.slice(z + 1).forEach(function (rn) {
             var r = grid[rn];
             var nr = parseInt(String(r[cNr] || '').replace(/\D/g, ''), 10);
-            var anf = String(r[cAnf] || '').trim();
-            if (nr && anf) out.push({ nr: nr, titel: cTit ? String(r[cTit] || '').trim() : '', anforderung: anf });
+            var x = { nr: nr, titel: wert(r, cTit), anforderung: wert(r, cAnf), unterthema: wert(r, cUt) };
+            if (nr && (x.anforderung || x.unterthema)) out.push(x);
           });
           return out;
         }
       }
-      throw new Error('Keine Tabelle mit den Spalten "OPL-Nr" und "Anforderung" gefunden.');
+      throw new Error('Keine Tabelle mit den Spalten "OPL-Nr" und "Anforderung" bzw. "Unterthema" gefunden.');
     });
   }
 

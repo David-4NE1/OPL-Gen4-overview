@@ -66,6 +66,20 @@
     'Kollision', 'Elektrik', 'Thermik', 'Lagerung', 'Simulation', 'Material', 'Design-Regel'];
 
   function istThema(t) { return THEMEN.indexOf(t) >= 0; }
+  // Unterthemen je Kategorie (zweite Ebene); muss zu worker/index.js passen
+  var UNTERTHEMEN = {
+    'Kollision & Bauraum': ['Bewegungsbereich & Endanschläge', 'Kabel- & Steckerfreigang', 'Bauraum Aktuatoren & Gelenke', 'Gehäuse & Shells'],
+    'Kabel & Steckverbinder': ['Glasfaser & Trennstellen', 'Vorkonfektionierte Kabel & Kabelbaum', 'Stecker- & Kabeltypen', 'Kabelplan & Routing', 'Zugentlastung & Fixierung'],
+    'Montage & Service': ['Montagereihenfolge', 'Zugänglichkeit & Werkzeug', 'Demontage & Service', 'Montageanleitung & Kennzeichnung'],
+    'Verbindungstechnik & Toleranzen': ['Schrauben & Gewinde', 'Passungen & Toleranzen', 'Lager & Lagersitze', 'Schraubensicherung'],
+    'Poka Yoke & Varianten': ['Verwechslungsschutz', 'Links/Rechts-Varianten', 'Gleichteile'],
+    'Auslegung & Simulation': ['Festigkeit & FEM', 'Lastfälle & Spezifikation', 'Aktuator-Auslegung'],
+    'Thermik': ['Kühlung & Lüftung', 'Wärmeabfuhr Aktuatoren & Elektronik'],
+    'Elektronik & Software': ['Platinen & Sensorik', 'Stromversorgung & Batterie', 'Kommunikation & Bus', 'Software & Tests'],
+    'BOM/CAD & Dokumentation': ['BOM', 'CAD-Daten & Modellpflege', 'Zeichnungen & Normteile', 'Prozesse & Freigabe'],
+    'Industrialisierung & Design': ['Fertigungsverfahren', 'Design & Optik', 'Verpackung & Logistik', 'Serienreife & Kosten']
+  };
+  function unterthemenVon(thema) { return UNTERTHEMEN[thema] || []; }
 
   // Standard-Verantwortlichkeit je Person; greift nur, wenn das Feld leer ist
   var TEAM_STANDARD = {
@@ -128,6 +142,7 @@
       nacharbeit: NACHARBEIT.indexOf(e.nacharbeit) >= 0 ? e.nacharbeit : '',
       zielRelease: ZIEL_RELEASES.indexOf(e.zielRelease) >= 0 ? e.zielRelease
         : (e.status === 'Erledigt' ? ZIEL_RELEASE_ERLEDIGT : ''),
+      unterthema: unterthemenVon(e.thema).indexOf(e.unterthema) >= 0 ? e.unterthema : '',
       // Lastenheft: Kurztitel und Anforderung (Zielzustand) zum OPL-Punkt
       lhTitel: String(e.lhTitel || '').trim(),
       anforderung: String(e.anforderung || '').trim(),
@@ -351,7 +366,7 @@
   }
 
   var FELDER = ['bereich', 'thema', 'prio', 'verantwortlicher', 'verantwortlichkeit', 'baugruppe', 'seite',
-    'nacharbeit', 'zielRelease', 'release', 'faellig', 'status', 'todo', 'notiz', 'lhTitel', 'anforderung'];
+    'nacharbeit', 'zielRelease', 'unterthema', 'release', 'faellig', 'status', 'todo', 'notiz', 'lhTitel', 'anforderung'];
 
   // Gleicher Fingerabdruck wie bildSignatur() im Worker (Anzahl und Namen)
   function bildSignatur(bilder) {
@@ -418,7 +433,7 @@
     bereich: 'Bereich', thema: 'Thema', prio: 'Prio', verantwortlicher: 'Verantwortlicher',
     verantwortlichkeit: 'Verantwortlichkeit', baugruppe: 'Baugruppe', seite: 'Seite', nacharbeit: 'Nacharbeit', zielRelease: 'Ziel-Release',
     release: 'Release', faellig: 'Bis wann', status: 'Status', todo: 'To Do', notiz: 'Notiz', bilder: 'Bilder',
-    lhTitel: 'Lastenheft-Titel', anforderung: 'Anforderung'
+    unterthema: 'Unterthema', lhTitel: 'Lastenheft-Titel', anforderung: 'Anforderung'
   };
 
   function lokalErsetzen(nr, eintrag) {
@@ -509,6 +524,7 @@
           n.release = n.release || vorhanden.release;
           n.seite = n.seite || vorhanden.seite;
           n.nacharbeit = n.nacharbeit || vorhanden.nacharbeit;
+          if (!n.unterthema && n.thema === vorhanden.thema) n.unterthema = vorhanden.unterthema;
           n.lhTitel = n.lhTitel || vorhanden.lhTitel;
           n.anforderung = n.anforderung || vorhanden.anforderung;
           if (vorhanden.zielRelease && (!n.zielRelease || (n.zielRelease === ZIEL_RELEASE_ERLEDIGT && !raw.zielRelease))) n.zielRelease = vorhanden.zielRelease;
@@ -561,7 +577,7 @@
 
   global.OPLStore = {
     BEREICHE: BEREICHE, PRIOS: PRIOS, STATI: STATI, VERANTWORTLICHKEITEN: VERANTWORTLICHKEITEN,
-    THEMEN: THEMEN, BAUGRUPPEN: BAUGRUPPEN, SEITEN: SEITEN, NACHARBEIT: NACHARBEIT, ZIEL_RELEASES: ZIEL_RELEASES, istThema: istThema, teamStandard: teamStandard, altesThemaInsTodo: altesThemaInsTodo,
+    THEMEN: THEMEN, BAUGRUPPEN: BAUGRUPPEN, SEITEN: SEITEN, NACHARBEIT: NACHARBEIT, ZIEL_RELEASES: ZIEL_RELEASES, UNTERTHEMEN: UNTERTHEMEN, unterthemenVon: unterthemenVon, istThema: istThema, teamStandard: teamStandard, altesThemaInsTodo: altesThemaInsTodo,
     state: state,
     load: load, subscribe: subscribe, onError: onError, onStatus: onStatus, isOnline: isOnline,
     add: add, update: update, updateNacheinander: updateNacheinander, remove: remove, cycle: cycle, byNr: byNr,

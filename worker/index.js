@@ -370,7 +370,7 @@ async function handleAPI(url, method, request, env) {
     const now = new Date().toISOString();
 
     const changes = [];
-    for (const k of ['bereich','thema','prio','verantwortlicher','verantwortlichkeit','baugruppe','seite','nacharbeit','zielRelease','release','faellig','status','todo','notiz','lhTitel','anforderung']) {
+    for (const k of ['bereich','thema','prio','verantwortlicher','verantwortlichkeit','baugruppe','seite','nacharbeit','zielRelease','unterthema','release','faellig','status','todo','notiz','lhTitel','anforderung']) {
       if (patch[k] !== undefined && patch[k] !== old[k]) {
         // Lastenheft-Text kann lang sein: im Protokoll nur vermerken, nicht wiederholen
         if (k === 'anforderung') changes.push(old[k] ? 'anforderung: geändert' : 'anforderung: neu formuliert');
@@ -419,11 +419,11 @@ async function handleAPI(url, method, request, env) {
       // Die Excel kennt weder Release noch Seite: bisherige Werte je Nr behalten
       // (Nacharbeit und Ziel-Release ebenso, wenn die Spalte in der Datei leer ist)
       // Lastenheft-Titel und -Anforderung stehen nicht in der OPL-Excel: ebenfalls behalten
-      const { results: alt } = await db.prepare("SELECT nr, release, seite, nacharbeit, ziel_release, lh_titel, anforderung FROM entries WHERE release <> '' OR seite <> '' OR nacharbeit <> '' OR ziel_release <> '' OR lh_titel <> '' OR anforderung <> ''").all();
+      const { results: alt } = await db.prepare("SELECT nr, release, seite, nacharbeit, ziel_release, unterthema, lh_titel, anforderung FROM entries WHERE release <> '' OR seite <> '' OR nacharbeit <> '' OR ziel_release <> '' OR unterthema <> '' OR lh_titel <> '' OR anforderung <> ''").all();
       const altJeNr = new Map(alt.map(r => [r.nr, r]));
       await db.prepare('DELETE FROM entries').run();
       const stmts = entries.map(raw => {
-        const e = normalize({ ...raw, release: raw.release || altJeNr.get(raw.nr)?.release, seite: raw.seite || altJeNr.get(raw.nr)?.seite, nacharbeit: raw.nacharbeit || altJeNr.get(raw.nr)?.nacharbeit, zielRelease: raw.zielRelease || altJeNr.get(raw.nr)?.ziel_release, lhTitel: raw.lhTitel || altJeNr.get(raw.nr)?.lh_titel, anforderung: raw.anforderung || altJeNr.get(raw.nr)?.anforderung, geaendertAm: now, geaendertVon: user || 'Excel-Import' });
+        const e = normalize({ ...raw, release: raw.release || altJeNr.get(raw.nr)?.release, seite: raw.seite || altJeNr.get(raw.nr)?.seite, nacharbeit: raw.nacharbeit || altJeNr.get(raw.nr)?.nacharbeit, zielRelease: raw.zielRelease || altJeNr.get(raw.nr)?.ziel_release, unterthema: raw.unterthema || altJeNr.get(raw.nr)?.unterthema, lhTitel: raw.lhTitel || altJeNr.get(raw.nr)?.lh_titel, anforderung: raw.anforderung || altJeNr.get(raw.nr)?.anforderung, geaendertAm: now, geaendertVon: user || 'Excel-Import' });
         return insertStmt(db, e);
       });
       await db.batch(stmts);
@@ -434,9 +434,9 @@ async function handleAPI(url, method, request, env) {
     let neu = 0, aktualisiert = 0;
     const stmts = [];
     for (const raw of entries) {
-      const existing = await db.prepare('SELECT nr, release, seite, nacharbeit, ziel_release, lh_titel, anforderung FROM entries WHERE nr = ?').bind(raw.nr).first();
+      const existing = await db.prepare('SELECT nr, release, seite, nacharbeit, ziel_release, unterthema, lh_titel, anforderung FROM entries WHERE nr = ?').bind(raw.nr).first();
       // Die Excel kennt weder Release noch Seite: bestehende Werte behalten
-      const e = normalize({ ...raw, release: raw.release || existing?.release, seite: raw.seite || existing?.seite, nacharbeit: raw.nacharbeit || existing?.nacharbeit, zielRelease: raw.zielRelease || existing?.ziel_release, lhTitel: raw.lhTitel || existing?.lh_titel, anforderung: raw.anforderung || existing?.anforderung, geaendertAm: now, geaendertVon: user || 'Excel-Import' });
+      const e = normalize({ ...raw, release: raw.release || existing?.release, seite: raw.seite || existing?.seite, nacharbeit: raw.nacharbeit || existing?.nacharbeit, zielRelease: raw.zielRelease || existing?.ziel_release, unterthema: raw.unterthema || existing?.unterthema, lhTitel: raw.lhTitel || existing?.lh_titel, anforderung: raw.anforderung || existing?.anforderung, geaendertAm: now, geaendertVon: user || 'Excel-Import' });
       if (existing) {
         stmts.push(updateStmt(db, e));
         aktualisiert++;
@@ -706,7 +706,7 @@ function mitBildVerweisen(e) {
 // D1 per JSON-Funktionen, damit der Worker die grossen Daten nie parsen muss.
 async function listeEintraege(db) {
   const { results } = await db.prepare(
-    `SELECT nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, seite, nacharbeit, ziel_release, lh_titel, anforderung, release, faellig, status, todo, notiz,
+    `SELECT nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, seite, nacharbeit, ziel_release, unterthema, lh_titel, anforderung, release, faellig, status, todo, notiz,
             erstellt_am, geaendert_am, geaendert_von,
             (SELECT json_group_array(json_object(
                        'i', CAST(j.key AS INTEGER),
@@ -783,7 +783,7 @@ async function schemaSicherstellen(db) {
   } catch (err) {
     if (!/duplicate column/i.test(String(err && err.message))) throw err;
   }
-  for (const spalte of ['release', 'seite', 'nacharbeit', 'lh_titel', 'anforderung']) {
+  for (const spalte of ['release', 'seite', 'nacharbeit', 'unterthema', 'lh_titel', 'anforderung']) {
     try {
       await db.prepare(`ALTER TABLE entries ADD COLUMN ${spalte} TEXT DEFAULT ''`).run();
     } catch (err) {
@@ -830,6 +830,20 @@ async function schemaSicherstellen(db) {
 const ZIEL_RELEASES = ['4.1.1', '4.1.2', '4.1.3', '4.2.0'];
 const ZIEL_RELEASE_ERLEDIGT = '4.1.1';
 
+// Unterthemen je fester Kategorie (zweite Ebene); muss zu store.js passen
+const UNTERTHEMEN = {
+  'Kollision & Bauraum': ['Bewegungsbereich & Endanschläge', 'Kabel- & Steckerfreigang', 'Bauraum Aktuatoren & Gelenke', 'Gehäuse & Shells'],
+  'Kabel & Steckverbinder': ['Glasfaser & Trennstellen', 'Vorkonfektionierte Kabel & Kabelbaum', 'Stecker- & Kabeltypen', 'Kabelplan & Routing', 'Zugentlastung & Fixierung'],
+  'Montage & Service': ['Montagereihenfolge', 'Zugänglichkeit & Werkzeug', 'Demontage & Service', 'Montageanleitung & Kennzeichnung'],
+  'Verbindungstechnik & Toleranzen': ['Schrauben & Gewinde', 'Passungen & Toleranzen', 'Lager & Lagersitze', 'Schraubensicherung'],
+  'Poka Yoke & Varianten': ['Verwechslungsschutz', 'Links/Rechts-Varianten', 'Gleichteile'],
+  'Auslegung & Simulation': ['Festigkeit & FEM', 'Lastfälle & Spezifikation', 'Aktuator-Auslegung'],
+  'Thermik': ['Kühlung & Lüftung', 'Wärmeabfuhr Aktuatoren & Elektronik'],
+  'Elektronik & Software': ['Platinen & Sensorik', 'Stromversorgung & Batterie', 'Kommunikation & Bus', 'Software & Tests'],
+  'BOM/CAD & Dokumentation': ['BOM', 'CAD-Daten & Modellpflege', 'Zeichnungen & Normteile', 'Prozesse & Freigabe'],
+  'Industrialisierung & Design': ['Fertigungsverfahren', 'Design & Optik', 'Verpackung & Logistik', 'Serienreife & Kosten']
+};
+
 function normalize(e) {
   const BEREICHE = [
     'Hardware/Mechanik','Elektrik/Elektronik','Simulation/Berechnung',
@@ -858,6 +872,8 @@ function normalize(e) {
     seite: SEITEN.includes(e.seite) ? e.seite : '',
     nacharbeit: NACHARBEIT.includes(e.nacharbeit) ? e.nacharbeit : '',
     zielRelease,
+    // nur gueltig, wenn es zum gewaehlten Thema gehoert (Themenwechsel leert es)
+    unterthema: (UNTERTHEMEN[e.thema] || []).includes(e.unterthema) ? e.unterthema : '',
     // Lastenheft: Kurztitel und Anforderung (Zielzustand) zum OPL-Punkt
     lhTitel: String(e.lhTitel || '').trim().slice(0, 200),
     anforderung: String(e.anforderung || '').trim().slice(0, 4000),
@@ -887,6 +903,7 @@ function dbToEntry(row) {
     seite: row.seite || '',
     nacharbeit: row.nacharbeit || '',
     zielRelease: row.ziel_release || '',
+    unterthema: row.unterthema || '',
     lhTitel: row.lh_titel || '',
     anforderung: row.anforderung || '',
     release: row.release || '',
@@ -903,9 +920,9 @@ function dbToEntry(row) {
 
 function insertStmt(db, e) {
   return db.prepare(
-    `INSERT INTO entries (nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, seite, nacharbeit, ziel_release, lh_titel, anforderung, release, faellig, status, todo, bilder, notiz, erstellt_am, geaendert_am, geaendert_von)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.seite, e.nacharbeit, e.zielRelease, e.lhTitel, e.anforderung, e.release, e.faellig, e.status, e.todo,
+    `INSERT INTO entries (nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, seite, nacharbeit, ziel_release, unterthema, lh_titel, anforderung, release, faellig, status, todo, bilder, notiz, erstellt_am, geaendert_am, geaendert_von)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.seite, e.nacharbeit, e.zielRelease, e.unterthema, e.lhTitel, e.anforderung, e.release, e.faellig, e.status, e.todo,
          JSON.stringify(e.bilder), e.notiz, e.erstelltAm, e.geaendertAm, e.geaendertVon);
 }
 
@@ -915,11 +932,11 @@ function updateStmt(db, e) {
   // erstellt_am ist unveraenderlich, sobald gesetzt – ein leerer/fehlender
   // Wert in der DB wird aber mit dem mitgeschickten Wert aufgefuellt (Backfill).
   return db.prepare(
-    `UPDATE entries SET bereich=?, thema=?, prio=?, verantwortlicher=?, verantwortlichkeit=?, baugruppe=?, seite=?, nacharbeit=?, ziel_release=?, lh_titel=?, anforderung=?, release=?, faellig=?, status=?, todo=?, bilder=?, notiz=?,
+    `UPDATE entries SET bereich=?, thema=?, prio=?, verantwortlicher=?, verantwortlichkeit=?, baugruppe=?, seite=?, nacharbeit=?, ziel_release=?, unterthema=?, lh_titel=?, anforderung=?, release=?, faellig=?, status=?, todo=?, bilder=?, notiz=?,
        erstellt_am = CASE WHEN erstellt_am IS NULL OR erstellt_am = '' THEN ? ELSE erstellt_am END,
        geaendert_am=?, geaendert_von=?
      WHERE nr=?`
-  ).bind(e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.seite, e.nacharbeit, e.zielRelease, e.lhTitel, e.anforderung, e.release, e.faellig, e.status, e.todo,
+  ).bind(e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.seite, e.nacharbeit, e.zielRelease, e.unterthema, e.lhTitel, e.anforderung, e.release, e.faellig, e.status, e.todo,
          JSON.stringify(e.bilder), e.notiz, e.erstelltAm, e.geaendertAm, e.geaendertVon, e.nr);
 }
 
