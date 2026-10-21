@@ -501,6 +501,47 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
 .lh__bgchip { color: var(--ink-soft); }
 .lh__status.is-umgesetzt { background: var(--erledigt-bg); }
 
+/* Auf einen Blick: Kacheln je Kategorie, Anforderung/Ziel, Fortschritt */
+.lh__kacheln { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; margin-bottom: 8px; }
+.lh__kachel { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); cursor: pointer; }
+.lh__kachel:hover, .lh__kachel:focus { border-color: var(--accent); outline: none; }
+.lh__kachelkopf, .lh__kapkopf { display: flex; align-items: center; gap: 8px; }
+.lh__kachelkopf h3 { margin: 0; font-size: 15px; flex: 1; }
+.lh__kapkopf .lh__kap { flex: 1; margin: 0; }
+.lh__stift { border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); border-radius: 6px;
+  padding: 2px 8px; cursor: pointer; }
+.lh__stift:hover { color: var(--accent); border-color: var(--accent); }
+.lh__aussagen { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.lh__aussagen--kompakt { grid-template-columns: 1fr; gap: 4px; }
+.lh__aussage { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+.lh__aussagen--kompakt .lh__aussage { background: none; padding: 0; }
+.lh__label { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--accent); }
+.lh__aussage p { margin: 2px 0 0; font-size: 13.5px; }
+.lh__aussagen--kompakt .lh__aussage p { font-size: 13px; }
+.lh__leer { color: var(--ink-soft); font-style: italic; margin: 0; font-size: 13px; }
+.lh__fortschritt { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-soft); }
+.lh__balken { flex: 0 0 120px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.lh__balken span { display: block; height: 100%; background: var(--niedrig); }
+.lh__kapitel { margin-top: 24px; padding-top: 4px; scroll-margin-top: 120px; }
+.lh__kapitel > .lh__aussagen { margin: 8px 0; }
+.lh__unterthemen { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.lh__ut { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.lh__utkopf { display: grid; grid-template-columns: 260px 1fr auto; gap: 12px; align-items: start; padding: 10px 12px; cursor: pointer; }
+.lh__utkopf:hover, .lh__utkopf:focus { background: var(--bg); outline: none; border-radius: var(--radius); }
+.lh__utname { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.lh__chev { color: var(--ink-soft); transition: transform .15s; display: inline-block; }
+.lh__ut.is-offen .lh__chev { transform: rotate(90deg); }
+.lh__utzahl { font-size: 12px; color: var(--ink-soft); }
+.lh__ut .lh__liste { padding: 0 12px 12px; }
+
+@media (max-width: 640px) {
+  .lh__kacheln { grid-template-columns: 1fr; }
+  .lh__aussagen { grid-template-columns: 1fr; }
+  .lh__utkopf { grid-template-columns: 1fr auto; }
+  .lh__utkopf .lh__aussagen, .lh__utkopf > .lh__leer { grid-column: 1 / -1; grid-row: 2; }
+}
+
 @media (max-width: 640px) {
   .lh__anf { grid-template-columns: 1fr; gap: 6px; }
   .lh__meta { justify-content: flex-start; }

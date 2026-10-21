@@ -208,6 +208,24 @@
   </form>
 </dialog>
 
+<!-- Dialog: Lastenheft – Anforderung und Ziel je Kategorie/Unterthema -->
+<dialog id="dlgZiel" class="dialog">
+  <form id="formZiel" method="dialog">
+    <h2 id="zielTitel"></h2>
+    <label><span data-i18n>Anforderung – was muss erfüllt sein?</span>
+      <textarea id="zielAnforderung" rows="4" maxlength="2000" placeholder="z. B. Alle Kabel müssen an Baugruppengrenzen trennbar sein …" data-i18n-ph></textarea>
+    </label>
+    <label><span data-i18n>Ziel – woran erkennen wir, dass es erreicht ist?</span>
+      <textarea id="zielZiel" rows="3" maxlength="2000" placeholder="z. B. Im nächsten Aufbau ist keine Nacharbeit nötig …" data-i18n-ph></textarea>
+    </label>
+    <footer class="dialog__footer">
+      <span class="spacer"></span>
+      <button type="button" class="btn btn--ghost" data-close data-i18n>Abbrechen</button>
+      <button type="submit" class="btn btn--primary" data-i18n>Speichern</button>
+    </footer>
+  </form>
+</dialog>
+
 <!-- Dialog: Excel-Import -->
 <dialog id="dlgImport" class="dialog">
   <h2 data-i18n>Excel-Import</h2>

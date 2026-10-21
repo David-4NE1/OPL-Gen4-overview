@@ -781,43 +781,49 @@
   /* Einfache Tabelle (z. B. Lastenheft) und Anforderungstexte          */
   /* ---------------------------------------------------------------- */
 
-  // opts: { blatt, titel, untertitel, kopf: [..], breiten: [..], zeilen: [[..]], umbruch: [Spaltenindex..] }
+  // Ein oder mehrere Tabellenblaetter: opts = { blatt, titel, untertitel, kopf, breiten, zeilen }
+  // oder opts = { blaetter: [ {...}, {...} ] }
   function exportTabelle(opts) {
+    var blaetter = opts.blaetter || [opts];
     var first = 4;
-    var rows = [];
-    rows.push('<row r="1"><c r="A1" t="inlineStr" s="' + S.TITLE + '"><is><t>' + esc(opts.titel) + '</t></is></c></row>');
-    rows.push('<row r="2"><c r="A2" t="inlineStr" s="' + S.SUBTITLE + '"><is><t>' + esc(opts.untertitel || '') + '</t></is></c></row>');
-    rows.push('<row r="' + first + '" ht="21.75" customHeight="1">' + opts.kopf.map(function (h, i) {
-      return cellStr(colName(i + 1) + first, S.HEADER, h);
-    }).join('') + '</row>');
-    opts.zeilen.forEach(function (z, idx) {
-      var r = first + 1 + idx;
-      rows.push('<row r="' + r + '">' + z.map(function (v, i) {
-        var ref = colName(i + 1) + r;
-        return typeof v === 'number' ? cellNum(ref, S.NR, v) : cellStr(ref, S.CELL, v == null ? '' : v);
+    function blattXml(o) {
+      var rows = [];
+      rows.push('<row r="1"><c r="A1" t="inlineStr" s="' + S.TITLE + '"><is><t>' + esc(o.titel) + '</t></is></c></row>');
+      rows.push('<row r="2"><c r="A2" t="inlineStr" s="' + S.SUBTITLE + '"><is><t>' + esc(o.untertitel || '') + '</t></is></c></row>');
+      rows.push('<row r="' + first + '" ht="21.75" customHeight="1">' + o.kopf.map(function (h, i) {
+        return cellStr(colName(i + 1) + first, S.HEADER, h);
       }).join('') + '</row>');
-    });
-    var last = first + Math.max(opts.zeilen.length, 1);
-    var lastCol = colName(opts.kopf.length);
-    var sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-      '<sheetViews><sheetView workbookViewId="0"><pane ySplit="' + first + '" topLeftCell="A' + (first + 1) +
-        '" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
-      '<cols>' + opts.breiten.map(function (w, i) {
-        return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>';
-      }).join('') + '</cols>' +
-      '<sheetData>' + rows.join('') + '</sheetData>' +
-      '<autoFilter ref="A' + first + ':' + lastCol + last + '"/>' +
-      '<pageMargins left="0.4" right="0.4" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>' +
-      '<pageSetup orientation="landscape" paperSize="9" fitToHeight="0"/>' +
-      '</worksheet>';
+      o.zeilen.forEach(function (z, idx) {
+        var r = first + 1 + idx;
+        rows.push('<row r="' + r + '">' + z.map(function (v, i) {
+          var ref = colName(i + 1) + r;
+          return typeof v === 'number' ? cellNum(ref, S.NR, v) : cellStr(ref, S.CELL, v == null ? '' : v);
+        }).join('') + '</row>');
+      });
+      var last = first + Math.max(o.zeilen.length, 1);
+      return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+        '<sheetViews><sheetView workbookViewId="0"><pane ySplit="' + first + '" topLeftCell="A' + (first + 1) +
+          '" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+        '<cols>' + o.breiten.map(function (w, i) {
+          return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>';
+        }).join('') + '</cols>' +
+        '<sheetData>' + rows.join('') + '</sheetData>' +
+        '<autoFilter ref="A' + first + ':' + colName(o.kopf.length) + last + '"/>' +
+        '<pageMargins left="0.4" right="0.4" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>' +
+        '<pageSetup orientation="landscape" paperSize="9" fitToHeight="0"/>' +
+        '</worksheet>';
+    }
+    var name = function (o, i) { return esc((o.blatt || 'Tabelle' + (i + 1)).slice(0, 31)); };
     var files = [
       { name: '[Content_Types].xml', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
         '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
         '<Default Extension="xml" ContentType="application/xml"/>' +
         '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
-        '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+        blaetter.map(function (o, i) {
+          return '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+        }).join('') +
         '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
         '</Types>') },
       { name: '_rels/.rels', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -826,25 +832,30 @@
         '</Relationships>') },
       { name: 'xl/workbook.xml', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-        '<sheets><sheet name="' + esc(opts.blatt || 'Tabelle') + '" sheetId="1" r:id="rId1"/></sheets>' +
-        '<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">\'' +
-          esc(opts.blatt || 'Tabelle') + '\'!$A$' + first + ':$' + lastCol + '$' + last + '</definedName></definedNames>' +
+        '<sheets>' + blaetter.map(function (o, i) {
+          return '<sheet name="' + name(o, i) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>';
+        }).join('') + '</sheets>' +
+        '<definedNames>' + blaetter.map(function (o, i) {
+          return '<definedName name="_xlnm._FilterDatabase" localSheetId="' + i + '" hidden="1">\'' + name(o, i) + '\'!$A$' + first +
+            ':$' + colName(o.kopf.length) + '$' + (first + Math.max(o.zeilen.length, 1)) + '</definedName>';
+        }).join('') + '</definedNames>' +
         '</workbook>') },
       { name: 'xl/_rels/workbook.xml.rels', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
-        '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+        blaetter.map(function (o, i) {
+          return '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>';
+        }).join('') +
+        '<Relationship Id="rId' + (blaetter.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
         '</Relationships>') },
-      { name: 'xl/styles.xml', data: enc.encode(STYLES_XML) },
-      { name: 'xl/worksheets/sheet1.xml', data: enc.encode(sheet) }
-    ];
+      { name: 'xl/styles.xml', data: enc.encode(STYLES_XML) }
+    ].concat(blaetter.map(function (o, i) {
+      return { name: 'xl/worksheets/sheet' + (i + 1) + '.xml', data: enc.encode(blattXml(o)) };
+    }));
     return new Blob([zipBuild(files)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
 
-  // Liest eine Tabelle mit "OPL-Nr" und mindestens einer der Spalten "Anforderung"
-  // oder "Unterthema" (optional "Titel"), z. B. die Lastenheft-Excel
-  // → [{ nr, titel, anforderung, unterthema }] (fehlende Spalten = '')
-  function importAnforderungen(arrayBuffer) {
+  // Alle Tabellenblaetter einer xlsx als { Zeile: { Spalte: Text } } (fuer die einfachen Importe)
+  function tabellenLesen(arrayBuffer) {
     return zipRead(arrayBuffer).then(function (zip) {
       var parser = new DOMParser();
       var shared = [];
@@ -852,10 +863,9 @@
         var ss = parser.parseFromString(dec.decode(zip['xl/sharedStrings.xml']), 'application/xml').getElementsByTagName('si');
         for (var i = 0; i < ss.length; i++) shared.push(textOf(ss[i]));
       }
-      var blaetter = Object.keys(zip).filter(function (n) { return /^xl\/worksheets\/sheet\d+\.xml$/.test(n); }).sort();
-      for (var b = 0; b < blaetter.length; b++) {
+      return Object.keys(zip).filter(function (n) { return /^xl\/worksheets\/sheet\d+\.xml$/.test(n); }).sort().map(function (n) {
         var grid = {};
-        var cs = parser.parseFromString(dec.decode(zip[blaetter[b]]), 'application/xml').getElementsByTagName('c');
+        var cs = parser.parseFromString(dec.decode(zip[n]), 'application/xml').getElementsByTagName('c');
         for (var c = 0; c < cs.length; c++) {
           var ref = parseRef(cs[c].getAttribute('r'));
           if (!ref) continue;
@@ -864,24 +874,53 @@
           else { var v = cs[c].getElementsByTagName('v')[0]; val = v ? v.textContent : ''; if (t === 's') val = shared[parseInt(val, 10)] || ''; }
           if (val !== '') (grid[ref.row] = grid[ref.row] || {})[ref.col] = val;
         }
-        var zeilen = Object.keys(grid).map(Number).sort(function (x, y) { return x - y; });
-        for (var z = 0; z < zeilen.length; z++) {
-          var kopf = grid[zeilen[z]], sp = {};
-          Object.keys(kopf).forEach(function (k) { sp[String(kopf[k]).trim().toLowerCase()] = Number(k); });
-          var cNr = sp['opl-nr'] || sp['opl'], cAnf = sp['anforderung'], cTit = sp['titel'], cUt = sp['unterthema'];
-          if (!cNr || (!cAnf && !cUt)) continue;
-          var wert = function (r, c) { return c ? String(r[c] || '').trim() : ''; };
-          var out = [];
-          zeilen.slice(z + 1).forEach(function (rn) {
-            var r = grid[rn];
-            var nr = parseInt(String(r[cNr] || '').replace(/\D/g, ''), 10);
-            var x = { nr: nr, titel: wert(r, cTit), anforderung: wert(r, cAnf), unterthema: wert(r, cUt) };
-            if (nr && (x.anforderung || x.unterthema)) out.push(x);
-          });
-          return out;
-        }
+        return grid;
+      });
+    });
+  }
+
+  // Sucht in allen Blaettern die erste Kopfzeile, fuer die pruefe(spalten) true liefert,
+  // und gibt { spalten, zeilen } zurueck (spalten: Ueberschrift klein -> Spaltennummer)
+  function tabelleMitKopf(grids, pruefe) {
+    for (var g = 0; g < grids.length; g++) {
+      var grid = grids[g];
+      var nummern = Object.keys(grid).map(Number).sort(function (x, y) { return x - y; });
+      for (var z = 0; z < nummern.length; z++) {
+        var sp = {};
+        Object.keys(grid[nummern[z]]).forEach(function (k) { sp[String(grid[nummern[z]][k]).trim().toLowerCase()] = Number(k); });
+        if (pruefe(sp)) return { spalten: sp, zeilen: nummern.slice(z + 1).map(function (n) { return grid[n]; }) };
       }
-      throw new Error('Keine Tabelle mit den Spalten "OPL-Nr" und "Anforderung" bzw. "Unterthema" gefunden.');
+    }
+    return null;
+  }
+
+  // Tabelle mit "OPL-Nr" und mindestens einer der Spalten "Anforderung" oder
+  // "Unterthema" (optional "Titel"), z. B. die Lastenheft-Excel
+  // → [{ nr, titel, anforderung, unterthema }] (fehlende Spalten = '')
+  function importAnforderungen(arrayBuffer) {
+    return tabellenLesen(arrayBuffer).then(function (grids) {
+      var tab = tabelleMitKopf(grids, function (sp) { return (sp['opl-nr'] || sp['opl']) && (sp['anforderung'] || sp['unterthema']); });
+      if (!tab) throw new Error('Keine Tabelle mit den Spalten "OPL-Nr" und "Anforderung" bzw. "Unterthema" gefunden.');
+      var sp = tab.spalten;
+      var wert = function (r, c) { return c ? String(r[c] || '').trim() : ''; };
+      return tab.zeilen.map(function (r) {
+        return { nr: parseInt(String(r[sp['opl-nr'] || sp['opl']] || '').replace(/\D/g, ''), 10),
+          titel: wert(r, sp['titel']), anforderung: wert(r, sp['anforderung']), unterthema: wert(r, sp['unterthema']) };
+      }).filter(function (x) { return x.nr && (x.anforderung || x.unterthema); });
+    });
+  }
+
+  // Tabelle mit "Kategorie", "Ziel" und "Anforderung" (optional "Unterthema"),
+  // ohne OPL-Nr: Lastenheft auf einen Blick → [{ kategorie, unterthema, anforderung, ziel }]
+  function importZiele(arrayBuffer) {
+    return tabellenLesen(arrayBuffer).then(function (grids) {
+      var tab = tabelleMitKopf(grids, function (sp) { return sp['kategorie'] && sp['ziel'] && sp['anforderung'] && !sp['opl-nr']; });
+      if (!tab) return [];
+      var sp = tab.spalten;
+      var wert = function (r, c) { return c ? String(r[c] || '').trim() : ''; };
+      return tab.zeilen.map(function (r) {
+        return { kategorie: wert(r, sp['kategorie']), unterthema: wert(r, sp['unterthema']), anforderung: wert(r, sp['anforderung']), ziel: wert(r, sp['ziel']) };
+      }).filter(function (x) { return x.kategorie && (x.anforderung || x.ziel); });
     });
   }
 
@@ -1011,6 +1050,7 @@
     importWorkbook: importWorkbook,
     exportTabelle: exportTabelle,
     importAnforderungen: importAnforderungen,
+    importZiele: importZiele,
     zipBuild: zipBuild,
     escXml: esc,
     ddmmyyyy: ddmmyyyy,

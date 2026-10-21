@@ -315,8 +315,12 @@
 
     if (view === 'tabelle') { content.appendChild(renderTabelle(liste)); return; }
     if (view === 'lastenheft') {
+      if (!lhZiele) lhZieleLaden();
       content.appendChild(window.OPLLastenheft.render(liste, {
         gesamt: alle.length, filterAktiv: istAktiv, aktionen: lastenheftAktionen(),
+        ziele: lhZiele || {}, offen: lhOffen, darfBearbeiten: Store.darf('bearbeiten'),
+        umschalten: function (key) { lhOffen[key] = !lhOffen[key]; render(); },
+        bearbeiten: zielBearbeiten,
         oeffnen: function (nr) { oeffneEdit(nr, 'anforderung'); }
       }));
       return;
@@ -1024,21 +1028,102 @@
     return box;
   }
 
+  // Anforderung/Ziel je Kategorie bzw. Unterthema (Tabelle lastenheft_ziele)
+  var lhZiele = null;          // { schluessel: { anforderung, ziel } }, null = noch nicht geladen
+  var lhZieleLaedt = false;
+  var lhOffen = {};            // aufgeklappte Unterthemen
+
+  function lhZieleLaden() {
+    if (lhZieleLaedt) return Promise.resolve();
+    lhZieleLaedt = true;
+    return fetch('/api/ziele').then(function (r) { return r.ok ? r.json() : []; }).then(function (liste) {
+      lhZiele = {};
+      liste.forEach(function (z) { lhZiele[z.schluessel] = z; });
+    }).catch(function () { lhZiele = lhZiele || {}; }).then(function () {
+      lhZieleLaedt = false;
+      if (view === 'lastenheft') render();
+    });
+  }
+
+  function zielSpeichern(kategorie, unterthema, anforderung, ziel) {
+    var key = window.OPLLastenheft.schluessel(kategorie, unterthema);
+    return fetch('/api/ziele', {
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ schluessel: key, anforderung: anforderung, ziel: ziel })
+    }).then(function (r) {
+      if (!r.ok) return r.json().catch(function () { return {}; }).then(function (e) { throw new Error(T(e.error || 'Fehler')); });
+      lhZiele = lhZiele || {};
+      lhZiele[key] = { schluessel: key, anforderung: anforderung, ziel: ziel };
+    });
+  }
+
+  function zielBearbeiten(kategorie, unterthema) {
+    var key = window.OPLLastenheft.schluessel(kategorie, unterthema);
+    var z = (lhZiele || {})[key] || {};
+    $('#zielTitel').textContent = unterthema ? T(kategorie) + ' › ' + T(unterthema) : T(kategorie);
+    $('#zielAnforderung').value = z.anforderung || '';
+    $('#zielZiel').value = z.ziel || '';
+    var d = $('#dlgZiel');
+    d.dataset.kategorie = kategorie;
+    d.dataset.unterthema = unterthema || '';
+    d.showModal();
+    $('#zielAnforderung').focus();
+  }
+
   function lastenheftExport(art) {
     var auswahl = exportEintraege();
     if (!auswahl.length) { toast(T('Keine Punkte im aktuellen Filter – nichts zu exportieren.'), true); return; }
     var stand = Xlsx.ddmmyyyy(Store.heute());
     var name = '4NE1_Gen4_Lastenheft_' + dateiStempel() + (filterAktiv() ? '_gefiltert' : '') + '.' + art;
     var blob = art === 'docx'
-      ? window.OPLLastenheft.exportDocx(auswahl, stand, { filterHinweis: filterAktiv() ? T('Gefilterter Auszug: {n} von {g} OPL-Punkten.', { n: auswahl.length, g: Store.state.entries.length }) : '' })
-      : window.OPLLastenheft.exportXlsx(auswahl, stand);
+      ? window.OPLLastenheft.exportDocx(auswahl, stand, { ziele: lhZiele || {}, filterHinweis: filterAktiv() ? T('Gefilterter Auszug: {n} von {g} OPL-Punkten.', { n: auswahl.length, g: Store.state.entries.length }) : '' })
+      : window.OPLLastenheft.exportXlsx(auswahl, stand, lhZiele || {});
     download(blob, name);
     toast(T('Lastenheft exportiert ({n} Anforderungen).', { n: auswahl.length }) + exportHinweis());
   }
 
-  // Formulierte Anforderungen per Excel uebernehmen (Spalten OPL-Nr, Titel, Anforderung)
+  // Aus Excel uebernehmen: Tabelle "Auf einen Blick" (Kategorie/Unterthema/Anforderung/Ziel)
+  // und/oder Tabelle je OPL-Punkt (OPL-Nr + Anforderung/Titel/Unterthema)
   function lastenheftTexteUebernehmen(datei) {
-    datei.arrayBuffer().then(Xlsx.importAnforderungen).then(function (zeilen) {
+    datei.arrayBuffer().then(function (buf) {
+      return Xlsx.importZiele(buf).then(function (ziele) {
+        return (ziele.length ? zieleUebernehmen(ziele) : Promise.resolve(false)).then(function (hatteZiele) {
+          return Xlsx.importAnforderungen(buf).then(punkteUebernehmen, function (err) {
+            if (!hatteZiele) throw err; // weder Ziele noch Punkte in der Datei
+          });
+        });
+      });
+    }).catch(function (err) {
+      toast(T('Datei konnte nicht gelesen werden: {msg}', { msg: err.message }), true);
+    });
+  }
+
+  function zieleUebernehmen(ziele) {
+    var ungueltig = 0, gleich = 0;
+    var neu = ziele.filter(function (z) {
+      var ok = Store.istThema(z.kategorie) && (!z.unterthema || Store.unterthemenVon(z.kategorie).indexOf(z.unterthema) >= 0);
+      if (!ok) { ungueltig++; return false; }
+      var alt = (lhZiele || {})[window.OPLLastenheft.schluessel(z.kategorie, z.unterthema)] || {};
+      if ((alt.anforderung || '') === z.anforderung && (alt.ziel || '') === z.ziel) { gleich++; return false; }
+      return true;
+    });
+    if (!neu.length) {
+      toast(T('Anforderung/Ziel: nichts Neues ({g} unverändert, {u} unbekannte Kategorien/Unterthemen).', { g: gleich, u: ungueltig }));
+      return Promise.resolve(true);
+    }
+    if (!confirm(T('Anforderung und Ziel für {n} Kategorien/Unterthemen übernehmen?', { n: neu.length }) +
+      (ungueltig ? '\n' + T('{n} Zeilen mit unbekannter Kategorie bzw. Unterthema werden übersprungen.', { n: ungueltig }) : ''))) return Promise.resolve(true);
+    return neu.reduce(function (kette, z) {
+      return kette.then(function () { return zielSpeichern(z.kategorie, z.unterthema, z.anforderung, z.ziel); });
+    }, Promise.resolve()).then(function () {
+      toast(T('Anforderung und Ziel für {n} Kategorien/Unterthemen übernommen.', { n: neu.length }));
+      render();
+      return true;
+    });
+  }
+
+  function punkteUebernehmen(zeilen) {
+    return Promise.resolve(zeilen).then(function (zeilen) {
       var unbekannt = 0, gleich = 0, ueberschreibt = 0, unpassend = 0;
       var patches = [];
       zeilen.forEach(function (z) {
@@ -1074,8 +1159,6 @@
         toast(T('{n} Karten aktualisiert.', { n: n }));
         render();
       });
-    }).catch(function (err) {
-      toast(T('Datei konnte nicht gelesen werden: {msg}', { msg: err.message }), true);
     });
   }
 
@@ -1354,6 +1437,7 @@
     $$('.viewswitch button').forEach(function (b) {
       b.addEventListener('click', function () {
         view = b.dataset.view;
+        if (view === 'lastenheft') lhZieleLaden(); // Aenderungen anderer mitnehmen
         $$('.viewswitch button').forEach(function (x) { x.classList.toggle('is-active', x === b); });
         render();
       });
@@ -1528,6 +1612,13 @@
     });
 
     // Import-Dialog
+    $('#formZiel').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var d = $('#dlgZiel');
+      zielSpeichern(d.dataset.kategorie, d.dataset.unterthema, $('#zielAnforderung').value.trim(), $('#zielZiel').value.trim())
+        .then(function () { d.close(); toast(T('Gespeichert.')); render(); })
+        .catch(function (err) { toast(err.message, true); });
+    });
     $('#lhDatei').addEventListener('change', function (ev) {
       var f = ev.target.files[0];
       ev.target.value = '';
