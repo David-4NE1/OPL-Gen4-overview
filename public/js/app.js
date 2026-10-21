@@ -323,6 +323,7 @@
         forderungen: lhForderungen || [], modus: lhModus,
         setModus: function (m) { lhModus = m; try { localStorage.setItem('opl_lh_modus', m); } catch (e) { /* egal */ } render(); },
         forderungBearbeiten: forderungBearbeiten,
+        exportKategorie: lastenheftExportKategorie,
         umschalten: function (key) { lhOffen[key] = !lhOffen[key]; render(); },
         bearbeiten: zielBearbeiten,
         oeffnen: function (nr) { oeffneEdit(nr, 'anforderung'); }
@@ -1032,7 +1033,8 @@
     auf.setAttribute('aria-expanded', 'false');
     var panel = el('div', 'menu__panel lh__exportpanel');
     panel.hidden = true;
-    [['kurz', T('📄 Word – Management-Kurzfassung'), T('2–3 Seiten: Kennzahlen, Anforderung/Ziel je Kategorie, Steuerungsbedarf, offene Prio-Hoch-Punkte')],
+    [['kategorie', T('🎯 Word – eine Kategorie …'), T('Forderungen einer Kategorie, darunter Beispiele aus der OPL')],
+      ['kurz', T('📄 Word – Management-Kurzfassung'), T('2–3 Seiten: Kennzahlen, Anforderung/Ziel je Kategorie, Steuerungsbedarf, offene Prio-Hoch-Punkte')],
       ['docx', T('📘 Word – Lastenheft vollständig'), T('Alle Anforderungen je Kategorie und Unterthema (.docx)')],
       ['xlsx', T('📊 Excel – Lastenheft'), T('Lastenheft als Excel-Tabelle')],
       ['druck', T('🖨 Drucken / PDF'), T('Über den Druckdialog auch als PDF speichern')]].forEach(function (a) {
@@ -1055,6 +1057,7 @@
       if (!art) return;
       zu();
       if (art === 'druck') window.print();
+      else if (art === 'kategorie') kategorieWaehlen();
       else lastenheftExport(art);
     });
     menu.appendChild(auf);
@@ -1184,6 +1187,28 @@
     d.dataset.unterthema = unterthema || '';
     d.showModal();
     $('#zielAnforderung').focus();
+  }
+
+  function kategorieWaehlen() {
+    var sel = $('#katExportWahl');
+    var vorher = sel.value;
+    sel.textContent = '';
+    Store.THEMEN.forEach(function (t) {
+      var n = Store.state.entries.filter(function (e) { return e.thema === t && e.status !== 'Erledigt'; }).length;
+      var fo = (lhForderungen || []).filter(function (f) { return f.kategorie === t; }).length;
+      var o = el('option', null, T(t) + ' – ' + T('{o} offen', { o: n }) + ', ' + T('{n} Forderungen', { n: fo }));
+      o.value = t;
+      sel.appendChild(o);
+    });
+    if (vorher) sel.value = vorher;
+    $('#dlgKatExport').showModal();
+  }
+
+  function lastenheftExportKategorie(kategorie) {
+    var stand = Xlsx.ddmmyyyy(Store.heute());
+    var name = '4NE1_Gen4_Forderungen_' + kategorie.replace(/[^A-Za-z0-9ÄÖÜäöüß]+/g, '-').replace(/^-|-$/g, '') + '_' + dateiStempel() + '.docx';
+    download(window.OPLLastenheft.exportKategorie(Store.state.entries, kategorie, stand, { ziele: lhZiele || {}, forderungen: lhForderungen || [] }), name);
+    toast(T('Word für „{k}“ exportiert.', { k: T(kategorie) }));
   }
 
   function lastenheftExport(art) {
@@ -1746,6 +1771,11 @@
       zielSpeichern(d.dataset.kategorie, d.dataset.unterthema, $('#zielAnforderung').value.trim(), $('#zielZiel').value.trim())
         .then(function () { d.close(); toast(T('Gespeichert.')); render(); })
         .catch(function (err) { toast(err.message, true); });
+    });
+    $('#formKatExport').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      $('#dlgKatExport').close();
+      lastenheftExportKategorie($('#katExportWahl').value);
     });
     $('#formForderung').addEventListener('submit', function (ev) { ev.preventDefault(); forderungSpeichern(); });
     $('#btnFoLoeschen').addEventListener('click', forderungLoeschen);
