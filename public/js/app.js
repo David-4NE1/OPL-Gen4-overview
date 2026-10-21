@@ -1215,11 +1215,11 @@
     if (!gueltig.length) { toast(T('Forderungen: keine gültige Kategorie gefunden.'), true); return Promise.resolve(true); }
     var kat = {};
     gueltig.forEach(function (f) { kat[f.kategorie] = true; });
-    if (!confirm(T('{n} Forderungen für {k} Kategorien übernehmen?', { n: gueltig.length, k: Object.keys(kat).length }) + '\n' +
-      T('Die bisherigen Forderungen dieser Kategorien werden ersetzt.') +
+    if (!confirm(T('{n} Forderungen für {k} Kategorien ergänzen?', { n: gueltig.length, k: Object.keys(kat).length }) + '\n' +
+      T('Neue Forderungen kommen dazu; bei gleichem Text werden Beispiele ergänzt und das Detail übernommen. Es wird nichts gelöscht.') +
       (unbekannt ? '\n' + T('{n} Zeilen mit unbekannter Kategorie werden übersprungen.', { n: unbekannt }) : ''))) return Promise.resolve(true);
     return forderungAnfrage('POST', '/import', { liste: gueltig }).then(function (r) {
-      toast(T('{n} Forderungen übernommen.', { n: r.anzahl }));
+      toast(T('Forderungen ergänzt: {n} neu, {a} aktualisiert, {g} unverändert.', { n: r.neu, a: r.aktualisiert, g: r.gleich }));
       return lhForderungenLaden();
     }).then(function () { return true; });
   }
