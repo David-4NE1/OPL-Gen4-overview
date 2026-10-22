@@ -5,8 +5,7 @@ import { Buffer } from 'node:buffer';
  *
  * D1 database binding: DB
  * Routes:
- *   POST   /api/login            → Anmeldung mit eigenem Passwort bzw. Einmalpasswort (setzt Cookie)
- *   POST   /api/passwort         → eigenes Passwort festlegen/aendern (Sitzung erforderlich)
+ *   POST   /api/login            → Anmeldung (setzt Cookie)
  *   GET    /api/auth              → Auth-Status prüfen
  *   GET    /api/logout            → Abmelden (löscht Cookie)
  *   GET    /api/health            → Erreichbarkeit (kein Auth, keine Daten)
@@ -28,7 +27,6 @@ import { Buffer } from 'node:buffer';
  *   GET    /api/admin/emails      → Freigabeliste mit Rollen lesen (nur Admin)
  *   POST   /api/admin/emails      → E-Mail(s) freischalten bzw. Rolle setzen { email | emails, rolle } (nur Admin)
  *   DELETE /api/admin/emails/:e   → E-Mail von der Freigabeliste entfernen (nur Admin)
- *   POST   /api/admin/einmalpasswort → Einmalpasswort erzeugen { email } | { ohnePasswort: true } (nur Admin)
  *   POST   /api/translate         → Texte DE→EN maschinell uebersetzen (Workers AI, Cache in D1)
  *   GET    /api/releases          → Releases fuer die Roadmap (Name, Zieltermin, Status, Beschreibung)
  *   POST   /api/releases          → Release anlegen/aendern { name, ziel, status, beschreibung }
@@ -65,88 +63,9 @@ const ROLLEN = ['lesen', 'bearbeiten', 'admin'];
 const LOGIN_MAX_FEHLVERSUCHE = 10;
 const LOGIN_SPERRE_MIN = 15;
 
-// Persoenliche Passwoerter: jede Adresse hat ein eigenes Passwort (PBKDF2-Hash in
-// allowed_emails.pw_hash). Neue Zugaenge bekommen vom Admin ein Einmalpasswort
-// (pw_einmal = 1), mit dem sie sich genau einmal anmelden und dabei ein eigenes
-// Passwort festlegen. Ein gemeinsames Passwort gibt es nicht mehr.
-const EINMAL_TAGE = 14;
-const PW_MIN_LAENGE = 10;
-// PBKDF2-Runden fuer eigene Passwoerter. 10.000 Runden kosten ca. 6 ms CPU und
-// passen damit auch ins 10-ms-Limit des kostenlosen Workers-Plans. Mit bezahltem
-// Plan per Variable PBKDF2_ITER erhoehen (max. 100.000); die Rundenzahl steht im
-// Hash, bestehende Passwoerter bleiben gueltig.
-let pbkdf2Iter = 10000;
-const EINMAL_ZEICHEN = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';  // ohne 0/O, 1/I/L
-
-// Nur fuer den Uebergang: Admins ohne eigenes Passwort duerfen das alte
-// gemeinsame Secret OPL_PASSWORD genau einmal wie ein Einmalpasswort nutzen,
-// um ihr eigenes Passwort festzulegen. Fuer alle anderen gilt es nicht mehr.
-function altesGemeinsamesPasswort(env) {
+function getPassword(env) {
+  // Kein Standardwert: ohne Secret OPL_PASSWORD ist kein Login moeglich
   return env.OPL_PASSWORD || '';
-}
-
-async function pwHash(pw, saltB64, iter) {
-  const salt = saltB64 ? b64urlBytes(saltB64) : crypto.getRandomValues(new Uint8Array(16));
-  const n = iter || pbkdf2Iter;
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: n }, key, 256);
-  return `pbkdf2$${n}$${b64url(salt)}$${b64url(new Uint8Array(bits))}`;
-}
-
-// Einmalpasswoerter sind zufaellig (12 Zeichen, ca. 59 Bit) – dafuer reicht ein
-// gesalzener SHA-256-Hash; das spart beim Erzeugen vieler Codes Rechenzeit.
-async function einmalHash(pw, saltB64) {
-  const salt = saltB64 || b64url(crypto.getRandomValues(new Uint8Array(16)));
-  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(salt + ':' + pw));
-  return `sha256$${salt}$${b64url(new Uint8Array(h))}`;
-}
-
-async function pwPruefen(pw, gespeichert) {
-  const t = String(gespeichert || '').split('$');
-  if (t.length === 3 && t[0] === 'sha256') {
-    const a = b64urlBytes((await einmalHash(pw, t[1])).split('$')[2]);
-    const b = b64urlBytes(t[2]);
-    return a.length === b.length && crypto.subtle.timingSafeEqual(a, b);
-  }
-  if (t.length !== 4 || t[0] !== 'pbkdf2') {
-    await pwHash(pw);   // gleiche Rechenzeit wie ein echter Vergleich
-    return false;
-  }
-  const a = b64urlBytes((await pwHash(pw, t[2], +t[1])).split('$')[3]);
-  const b = b64urlBytes(t[3]);
-  return a.length === b.length && crypto.subtle.timingSafeEqual(a, b);
-}
-
-async function textGleich(a, b) {
-  const [x, y] = await Promise.all([a, b].map(t => crypto.subtle.digest('SHA-256', new TextEncoder().encode(t))));
-  return crypto.subtle.timingSafeEqual(x, y);
-}
-
-// Einmalpasswoerter: 12 Zeichen in 3er-Bloecken ("ABCD-EFGH-JKLM"), Gross-/Klein-
-// schreibung, Leerzeichen und Bindestriche sind bei der Eingabe egal.
-function einmalNormal(pw) {
-  return String(pw || '').toUpperCase().replace(/[\s-]/g, '');
-}
-
-function einmalErzeugen() {
-  const out = [];
-  while (out.length < 12) {
-    for (const b of crypto.getRandomValues(new Uint8Array(24))) {
-      // Werte oberhalb des groessten Vielfachen verwerfen, damit jedes Zeichen gleich wahrscheinlich ist
-      if (b < 248 && out.length < 12) out.push(EINMAL_ZEICHEN[b % EINMAL_ZEICHEN.length]);
-    }
-  }
-  return out.join('').replace(/(.{4})(?=.)/g, '$1-');
-}
-
-function einmalAbgelaufen(seit) {
-  return !seit || Date.parse(seit) < Date.now() - EINMAL_TAGE * 864e5;
-}
-
-function pwRegelFehler(pw, email) {
-  if (pw.length < PW_MIN_LAENGE) return `Das Passwort muss mindestens ${PW_MIN_LAENGE} Zeichen lang sein`;
-  if (pw.toLowerCase() === email || pw.toLowerCase() === email.split('@')[0]) return 'Das Passwort darf nicht die E-Mail-Adresse sein';
-  return '';
 }
 
 function nameFromEmail(email) {
@@ -181,7 +100,7 @@ async function sitzungsSchluessel(env) {
 }
 
 async function sitzungErstellen(env, email) {
-  const daten = new TextEncoder().encode(JSON.stringify({ e: email, i: Date.now(), x: Date.now() + SESSION_TAGE * 864e5 }));
+  const daten = new TextEncoder().encode(JSON.stringify({ e: email, x: Date.now() + SESSION_TAGE * 864e5 }));
   const sig = await crypto.subtle.sign('HMAC', await sitzungsSchluessel(env), daten);
   return b64url(daten) + '.' + b64url(new Uint8Array(sig));
 }
@@ -210,18 +129,14 @@ async function sitzungPruefen(request, env) {
   if (!ok) return null;
   try { inhalt = JSON.parse(new TextDecoder().decode(daten)); } catch { return null; }
   if (!inhalt || typeof inhalt.e !== 'string' || !(inhalt.x > Date.now())) return null;
-  if (!istIntern(inhalt.e)) return null;
-  const row = await env.DB.prepare('SELECT rolle, pw_hash, pw_einmal, sitzung_ab FROM allowed_emails WHERE email = ?')
-    .bind(inhalt.e).first();
-  if (!row) return null;
-  // Nach "Einmalpasswort erzeugen" gelten aeltere Sitzungen dieser Person nicht mehr
-  const ausgestellt = inhalt.i || inhalt.x - SESSION_TAGE * 864e5;
-  if (row.sitzung_ab && ausgestellt < row.sitzung_ab) return null;
-  return { email: inhalt.e, name: nameFromEmail(inhalt.e), rolle: rolleAus(row, inhalt.e),
-    eigenesPasswort: !!row.pw_hash && !row.pw_einmal };
+  const rolle = await rolleVon(env.DB, inhalt.e);
+  if (!rolle) return null;
+  return { email: inhalt.e, name: nameFromEmail(inhalt.e), rolle };
 }
 
-function rolleAus(row, email) {
+async function rolleVon(db, email) {
+  const row = await db.prepare('SELECT rolle FROM allowed_emails WHERE email = ?').bind(email).first();
+  if (!row) return null;
   if (email === ADMIN_EMAIL) return 'admin';
   return ROLLEN.includes(row.rolle) ? row.rolle : 'bearbeiten';
 }
@@ -248,13 +163,10 @@ function cookiesLoeschen(headers) {
 let authSchemaOk = false;
 async function authSchemaSicherstellen(db) {
   if (authSchemaOk) return;
-  for (const spalte of ["rolle TEXT DEFAULT 'bearbeiten'", 'pw_hash TEXT', 'pw_einmal INTEGER DEFAULT 0',
-                        'pw_seit TEXT', 'sitzung_ab INTEGER DEFAULT 0']) {
-    try {
-      await db.prepare('ALTER TABLE allowed_emails ADD COLUMN ' + spalte).run();
-    } catch (err) {
-      if (!/duplicate column/i.test(String(err && err.message))) throw err;
-    }
+  try {
+    await db.prepare("ALTER TABLE allowed_emails ADD COLUMN rolle TEXT DEFAULT 'bearbeiten'").run();
+  } catch (err) {
+    if (!/duplicate column/i.test(String(err && err.message))) throw err;
   }
   await db.prepare('CREATE TABLE IF NOT EXISTS login_fehler (email TEXT NOT NULL, wann TEXT NOT NULL)').run();
   authSchemaOk = true;
@@ -290,7 +202,6 @@ export default {
       return new Response('Not found', { status: 404 });
     }
 
-    if (env.PBKDF2_ITER) pbkdf2Iter = Math.min(100000, Math.max(10000, +env.PBKDF2_ITER || 10000));
     try {
       const res = await handleAPI(url, method, request, env);
       return corsResponse(res);
@@ -306,35 +217,23 @@ async function handleAPI(url, method, request, env) {
   const path = url.pathname.replace(/\/+$/, '');
 
   // POST /api/login (kein Auth noetig)
-  // { email, password [, neuesPasswort] }. Bei einem Einmalpasswort antwortet der
-  // Worker ohne neuesPasswort mit { mussWechseln: true } und setzt noch keine
-  // Sitzung; erst mit gueltigem neuesPasswort wird es ersetzt und angemeldet.
   if (path === '/api/login' && method === 'POST') {
     await authSchemaSicherstellen(env.DB);
     const data = await request.json();
     const email = (data.email || '').trim().toLowerCase();
-    const eingabe = String(data.password || '');
     const seit = new Date(Date.now() - LOGIN_SPERRE_MIN * 60e3).toISOString();
     const fehler = await env.DB.prepare('SELECT COUNT(*) AS n FROM login_fehler WHERE email = ? AND wann > ?')
       .bind(email, seit).first();
     if (fehler.n >= LOGIN_MAX_FEHLVERSUCHE) {
       return json({ error: `Zu viele Fehlversuche – bitte in ${LOGIN_SPERRE_MIN} Minuten erneut versuchen` }, 429);
     }
-    const row = istIntern(email)
-      ? await env.DB.prepare('SELECT rolle, pw_hash, pw_einmal, pw_seit FROM allowed_emails WHERE email = ?').bind(email).first()
-      : null;
-    const rolle = row ? rolleAus(row, email) : null;
-    let ok = false, einmal = false;
-    if (row && row.pw_hash) {
-      einmal = row.pw_einmal === 1;
-      ok = await pwPruefen(einmal ? einmalNormal(eingabe) : eingabe, row.pw_hash);
-    } else if (row && rolle === 'admin' && altesGemeinsamesPasswort(env)) {
-      ok = await textGleich(eingabe, altesGemeinsamesPasswort(env));
-      einmal = true;
-    } else {
-      await pwHash(eingabe);   // gleiche Rechenzeit, verraet nicht, ob die Adresse freigeschaltet ist
-    }
-    if (!rolle || !ok) {
+    const rolle = await rolleVon(env.DB, email);
+    const passwort = getPassword(env);
+    // Passwort in konstanter Zeit vergleichen (ueber die Hashes, damit auch die Laenge nichts verraet)
+    const [ist, soll] = await Promise.all([String(data.password || ''), passwort].map(t =>
+      crypto.subtle.digest('SHA-256', new TextEncoder().encode(t))));
+    const passwortOk = !!passwort && crypto.subtle.timingSafeEqual(ist, soll);
+    if (!rolle || !passwortOk) {
       await env.DB.batch([
         env.DB.prepare('INSERT INTO login_fehler (email, wann) VALUES (?, ?)').bind(email, new Date().toISOString()),
         env.DB.prepare('DELETE FROM login_fehler WHERE wann < ?').bind(new Date(Date.now() - 864e5).toISOString())
@@ -343,22 +242,10 @@ async function handleAPI(url, method, request, env) {
       return json({ error: 'E-Mail-Adresse oder Passwort falsch' }, 401);
     }
     await env.DB.prepare('DELETE FROM login_fehler WHERE email = ?').bind(email).run();
-    if (einmal) {
-      if (row.pw_hash && einmalAbgelaufen(row.pw_seit)) {
-        return json({ error: `Das Einmalpasswort ist abgelaufen (gültig ${EINMAL_TAGE} Tage) – bitte beim Admin ein neues anfordern` }, 401);
-      }
-      const neu = String(data.neuesPasswort || '');
-      if (!neu) return json({ mussWechseln: true });
-      const regel = pwRegelFehler(neu, email) || (einmalNormal(neu) === einmalNormal(eingabe) ? 'Bitte ein neues, eigenes Passwort wählen' : '');
-      if (regel) return json({ error: regel, mussWechseln: true }, 400);
-      await env.DB.prepare('UPDATE allowed_emails SET pw_hash = ?, pw_einmal = 0, pw_seit = ? WHERE email = ?')
-        .bind(await pwHash(neu), new Date().toISOString(), email).run();
-      await logChange(env.DB, 0, 'Eigenes Passwort festgelegt', nameFromEmail(email)).catch(() => {});   // Protokoll darf den Login nie verhindern
-    }
     const headers = new Headers({ 'content-type': 'application/json' });
     cookiesLoeschen(headers);
     headers.append('set-cookie', `${SESSION_COOKIE}=${await sitzungErstellen(env, email)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_TAGE * 86400}`);
-    return new Response(JSON.stringify({ ok: true, user: nameFromEmail(email), rolle, isAdmin: rolle === 'admin', eigenesPasswort: true }), { status: 200, headers });
+    return new Response(JSON.stringify({ ok: true, user: nameFromEmail(email), rolle, isAdmin: rolle === 'admin' }), { status: 200, headers });
   }
 
   // GET /api/logout
@@ -388,29 +275,11 @@ async function handleAPI(url, method, request, env) {
   // GET /api/auth – Status der eigenen Sitzung
   if (path === '/api/auth' && method === 'GET') {
     if (!sitzung) return json({ authenticated: false }, 401);
-    return json({ authenticated: true, user: sitzung.name, rolle: sitzung.rolle, isAdmin: sitzung.rolle === 'admin',
-      eigenesPasswort: sitzung.eigenesPasswort });
+    return json({ authenticated: true, user: sitzung.name, rolle: sitzung.rolle, isAdmin: sitzung.rolle === 'admin' });
   }
 
   if (!sitzung) {
     return json({ error: 'Nicht angemeldet' }, 401);
-  }
-
-  // POST /api/passwort { neu, alt } – eigenes Passwort festlegen oder aendern.
-  // Wer noch keins hat (Uebergang vom gemeinsamen Passwort), braucht nur die Sitzung.
-  if (path === '/api/passwort' && method === 'POST') {
-    const data = await request.json();
-    const neu = String(data.neu || '');
-    const row = await env.DB.prepare('SELECT pw_hash, pw_einmal FROM allowed_emails WHERE email = ?').bind(sitzung.email).first();
-    if (row && row.pw_hash && !row.pw_einmal && !(await pwPruefen(String(data.alt || ''), row.pw_hash))) {
-      return json({ error: 'Das bisherige Passwort stimmt nicht' }, 403);
-    }
-    const regel = pwRegelFehler(neu, sitzung.email);
-    if (regel) return json({ error: regel }, 400);
-    await env.DB.prepare('UPDATE allowed_emails SET pw_hash = ?, pw_einmal = 0, pw_seit = ? WHERE email = ?')
-      .bind(await pwHash(neu), new Date().toISOString(), sitzung.email).run();
-    await logChange(env.DB, 0, 'Eigenes Passwort geändert', sitzung.name).catch(() => {});
-    return json({ ok: true });
   }
 
   // --- Admin-Routen: Freigabeliste und Rollen verwalten ---
@@ -855,15 +724,11 @@ async function handleReleases(path, method, request, db, sitzung) {
 /* -------------------------------------------------------------- Admin */
 
 async function listeEmails(db) {
-  const { results } = await db.prepare('SELECT email, rolle, pw_hash, pw_einmal, pw_seit FROM allowed_emails ORDER BY email').all();
+  const { results } = await db.prepare('SELECT email, rolle FROM allowed_emails ORDER BY email').all();
   return results.map(r => ({
     email: r.email,
-    rolle: rolleAus(r, r.email),
-    extern: !istIntern(r.email),
-    // eigen | einmal | abgelaufen | keins
-    passwort: !r.pw_hash ? 'keins' : !r.pw_einmal ? 'eigen' : einmalAbgelaufen(r.pw_seit) ? 'abgelaufen' : 'einmal',
-    einmalBis: r.pw_hash && r.pw_einmal && r.pw_seit
-      ? new Date(Date.parse(r.pw_seit) + EINMAL_TAGE * 864e5).toISOString() : null
+    rolle: r.email === ADMIN_EMAIL ? 'admin' : (ROLLEN.includes(r.rolle) ? r.rolle : 'bearbeiten'),
+    extern: !istIntern(r.email)
   }));
 }
 
@@ -893,46 +758,16 @@ async function handleAdmin(path, method, request, env, sitzung) {
     }
     if (emails.length > 200) return json({ error: 'Höchstens 200 Adressen auf einmal' }, 400);
     const extern = emails.filter(e => !istIntern(e));
-    if (extern.length) {
-      return json({ error: 'Nur @neura-robotics.com-Adressen können freigeschaltet werden', extern }, 400);
+    if (extern.length && data.extern !== true) {
+      return json({ error: 'Externe Adresse – bitte ausdrücklich bestätigen', extern }, 409);
     }
     const stmts = emails.filter(e => e !== ADMIN_EMAIL).map(e => db.prepare(
       'INSERT INTO allowed_emails (email, rolle) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET rolle = excluded.rolle'
     ).bind(e, rolle));
     if (stmts.length) await db.batch(stmts);
-    await logChange(db, 0, `Zugriff: ${stmts.length} Adresse(n) mit Rolle "${rolle}"`, sitzung.name);
+    await logChange(db, 0, `Zugriff: ${stmts.length} Adresse(n) mit Rolle "${rolle}"` +
+      (extern.length ? ` (davon ${extern.length} extern)` : ''), sitzung.name);
     return json(await listeEmails(db));
-  }
-
-  // POST /api/admin/einmalpasswort { email } | { ohnePasswort: true }
-  // Erzeugt Einmalpasswoerter (nur einmal sichtbar, gespeichert wird nur der Hash).
-  // Ein vorhandenes Passwort wird ersetzt und alle Sitzungen der Person enden.
-  if (path === '/api/admin/einmalpasswort' && method === 'POST') {
-    const data = await request.json();
-    let ziele;
-    if (data.ohnePasswort === true) {
-      const { results } = await db.prepare('SELECT email FROM allowed_emails WHERE pw_hash IS NULL ORDER BY email').all();
-      ziele = results.map(r => r.email);
-    } else {
-      const email = String(data.email || '').trim().toLowerCase();
-      const row = await db.prepare('SELECT email FROM allowed_emails WHERE email = ?').bind(email).first();
-      if (!row) return json({ error: 'Adresse steht nicht auf der Freigabeliste' }, 404);
-      ziele = [email];
-    }
-    ziele = ziele.filter(e => istIntern(e) && e !== sitzung.email);
-    const jetzt = new Date();
-    const ergebnis = [];
-    const stmts = [];
-    for (const email of ziele) {
-      const passwort = einmalErzeugen();
-      ergebnis.push({ email, passwort });
-      stmts.push(db.prepare('UPDATE allowed_emails SET pw_hash = ?, pw_einmal = 1, pw_seit = ?, sitzung_ab = ? WHERE email = ?')
-        .bind(await einmalHash(einmalNormal(passwort)), jetzt.toISOString(), jetzt.getTime(), email));
-    }
-    if (stmts.length) await db.batch(stmts);
-    if (ergebnis.length) await logChange(db, 0, `Einmalpasswort erzeugt: ${ergebnis.length} Adresse(n)`, sitzung.name);
-    return json({ ergebnis, gueltigBis: new Date(jetzt.getTime() + EINMAL_TAGE * 864e5).toISOString(),
-      liste: await listeEmails(db) });
   }
 
   // DELETE /api/admin/emails/:email

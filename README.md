@@ -161,25 +161,9 @@ funktioniert auch in älteren Browsern.
 
 ## Zugriff und Rollen
 
-- Anmeldung nur mit einer freigeschalteten **@neura-robotics.com**-Adresse und dem
-  **eigenen Passwort** dieser Person. Ein gemeinsames Passwort gibt es nicht mehr;
-  externe Adressen können weder freigeschaltet werden noch sich anmelden.
-  Nach 10 Fehlversuchen ist die Adresse 15 Minuten gesperrt.
-- **Neue Zugänge / Passwort vergessen:** Admin öffnet „⋯ → Zugriff verwalten“ und
-  klickt bei der Adresse auf **🔑 Einmalpasswort** (oder einmal auf „Einmalpasswörter
-  für alle ohne Passwort“). Das Passwort ist nur in diesem Moment sichtbar und wird
-  der Person einzeln gegeben. Sie meldet sich damit an und legt dabei sofort ihr
-  eigenes Passwort fest (mind. 10 Zeichen). Einmalpasswörter gelten 14 Tage; ein
-  neues Einmalpasswort beendet alle Sitzungen der Person.
-- Die Liste zeigt je Adresse den Stand: eigenes Passwort · Einmalpasswort offen ·
-  abgelaufen · kein Passwort.
-- „⋯ → Passwort ändern“ für alle angemeldeten Personen.
-- **Übergang:** Wer beim Umstieg noch angemeldet war, wird beim nächsten Öffnen
-  gebeten, ein eigenes Passwort festzulegen (ohne Einmalpasswort). Admins ohne
-  eigenes Passwort können das alte Secret `OPL_PASSWORD` genau einmal wie ein
-  Einmalpasswort nutzen; danach kann das Secret gelöscht werden.
-- Passwörter werden nur als Hash gespeichert (eigene: PBKDF2-SHA256, Rundenzahl per
-  Variable `PBKDF2_ITER` erhöhbar; Einmalpasswörter: gesalzenes SHA-256).
+- Anmeldung mit freigeschalteter E-Mail-Adresse (@neura-robotics.com) und dem
+  gemeinsamen Passwort aus dem Worker-Secret `OPL_PASSWORD` (ohne Secret ist kein
+  Login möglich). Nach 10 Fehlversuchen ist die Adresse 15 Minuten gesperrt.
 - Jede Person bekommt eine eigene, signierte Sitzung (30 Tage). Der Schlüssel
   kommt aus dem Secret `SESSION_SECRET` oder wird beim ersten Login zufällig
   erzeugt und nur in D1 (Tabelle `settings`) gespeichert. Wird diese Zeile
