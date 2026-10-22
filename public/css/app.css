@@ -81,23 +81,17 @@
 .login-sub { font-size: .85rem; color: var(--ink-soft); margin: 0 0 1.5rem; }
 .login-err { color: var(--hoch); font-size: .85rem; margin: 0 0 1rem; }
 .login-box label { display: block; font-size: .85rem; color: var(--ink-soft); margin-bottom: .4rem; }
-.login-box input[type="password"], .login-box input[type="email"] {
+.login-box input[type="password"] {
   width: 100%; padding: .65rem .8rem;
   border: 1px solid var(--line); border-radius: 6px;
   background: var(--bg); color: var(--ink); font-size: 1rem; outline: none;
 }
-.login-box input[type="password"]:focus, .login-box input[type="email"]:focus { border-color: var(--accent); }
-.login-box input[type="email"] { margin-bottom: .9rem; }
-.login-box input[readonly] { opacity: .7; }
+.login-box input[type="password"]:focus { border-color: var(--accent); }
 .login-btn {
   width: 100%; margin-top: 1rem; padding: .7rem;
   font-size: 1rem; font-weight: 600;
 }
 .login-gate[hidden] { display: none; }
-.login-neu { margin-top: 1rem; display: grid; gap: .4rem; }
-.login-neu input { margin-bottom: .4rem; }
-.login-hinweis { font-size: .82rem; color: var(--ink); background: var(--bg); border-radius: 6px; padding: .6rem .7rem; margin: 0 0 .4rem; }
-.login-fuss { font-size: .78rem; color: var(--ink-soft); margin: .9rem 0 0; text-align: center; }
 
 * { box-sizing: border-box; }
 /* hidden gilt immer – sonst hebeln Regeln wie display:flex es aus (z. B. Pfeile im Dialog) */
@@ -704,19 +698,6 @@ body:not([data-rolle="admin"]) .nur-admin { display: none !important; }
 .adminzeile__mail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .adminzeile select { padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
 .adminzeile__platz { width: 98px; }
-.pwchip { flex: 0 0 auto; padding: 1px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); color: var(--ink-soft); white-space: nowrap; }
-.pwchip--eigen { border-color: var(--niedrig, #2e9d5b); color: var(--niedrig, #2e9d5b); }
-.pwchip--einmal { border-color: var(--mittel); color: var(--mittel); }
-.pwchip--abgelaufen, .pwchip--keins { border-color: var(--hoch); color: var(--hoch); }
-.admin-kopf { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
-.admin-kopf .hint { flex: 1; margin: 0; }
-.pw-ergebnis { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--bg); }
-.pw-ergebnis__kopf { font-size: 13px; }
-.pw-ergebnis__kopf span { color: var(--ink-soft); margin-left: 6px; }
-.pw-ergebnis__hinweis { font-size: 12px; color: var(--ink-soft); margin: 4px 0 8px; }
-.pw-ergebnis textarea { width: 100%; font-family: ui-monospace, Consolas, monospace; font-size: 13px; padding: 6px 8px;
-  border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); resize: vertical; }
-.pw-ergebnis__aktionen { display: flex; gap: 8px; margin-top: 8px; }
 .adminzeile__extern { margin-left: 6px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--mittel); color: var(--mittel); font-size: 11px; }
 #formAdminAdd textarea { width: 100%; }
 .user-input[readonly] { cursor: default; }
