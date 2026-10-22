@@ -22,8 +22,16 @@
       <input id="loginEmail" type="email" required placeholder="vorname.nachname@neura-robotics.com" autocomplete="email" autofocus
              data-i18n-ph>
       <label for="loginPw" data-i18n>Passwort</label>
-      <input id="loginPw" type="password" required>
-      <button type="submit" class="btn btn--primary login-btn" data-i18n>Anmelden</button>
+      <input id="loginPw" type="password" required autocomplete="current-password">
+      <div id="loginNeu" class="login-neu" hidden>
+        <p class="login-hinweis" data-i18n>Erste Anmeldung: Lege jetzt dein eigenes Passwort fest (mind. 10 Zeichen). Das Einmalpasswort gilt danach nicht mehr.</p>
+        <label for="loginNeuPw" data-i18n>Neues Passwort</label>
+        <input id="loginNeuPw" type="password" autocomplete="new-password" minlength="10">
+        <label for="loginNeuPw2" data-i18n>Neues Passwort wiederholen</label>
+        <input id="loginNeuPw2" type="password" autocomplete="new-password" minlength="10">
+      </div>
+      <button type="submit" id="loginBtn" class="btn btn--primary login-btn" data-i18n>Anmelden</button>
+      <p class="login-fuss" data-i18n>Noch kein Passwort? Einmalpasswort beim Admin anfordern.</p>
     </form>
   </div>
 </div>
@@ -79,6 +87,7 @@
         <hr id="adminMenuDivider" class="nur-admin" hidden>
         <button type="button" data-act="admin" id="btnAdminMenu" class="nur-admin" hidden data-i18n>🔐 Zugriff verwalten</button>
         <hr>
+        <button type="button" data-act="passwort" data-i18n>🔑 Passwort ändern</button>
         <button type="button" data-act="logout" data-i18n>🚪 Abmelden</button>
       </div>
     </div>
@@ -301,11 +310,25 @@
 <!-- Dialog: Admin – Zugriff verwalten -->
 <dialog id="dlgAdmin" class="dialog">
   <h2 data-i18n>Zugriff verwalten</h2>
-  <p class="hint" data-i18n-html>Nur diese E-Mail-Adressen dürfen sich anmelden. Externe Adressen (nicht
-    @neura-robotics.com) nur nach Bestätigung. <b>Lesen</b>: ansehen und exportieren · <b>Bearbeiten</b>: Punkte anlegen und ändern ·
+  <p class="hint" data-i18n-html>Nur diese @neura-robotics.com-Adressen dürfen sich anmelden, jede mit eigenem Passwort.
+    Neue Zugänge: <b>🔑 Einmalpasswort</b> erzeugen und der Person geben – sie legt damit bei der ersten Anmeldung ihr
+    eigenes Passwort fest (gültig 14 Tage). Passwort vergessen: einfach ein neues Einmalpasswort erzeugen.
+    <b>Lesen</b>: ansehen und exportieren · <b>Bearbeiten</b>: Punkte anlegen und ändern ·
     <b>Admin</b>: zusätzlich löschen, Import „Ersetzen“, Zurücksetzen und Zugriff verwalten.
     Entfernen wirkt sofort.</p>
-  <div id="adminZaehler" class="hint"></div>
+  <div id="adminPwErgebnis" class="pw-ergebnis" hidden>
+    <div class="pw-ergebnis__kopf"><b data-i18n>Einmalpasswörter</b> <span id="adminPwBis"></span></div>
+    <p class="pw-ergebnis__hinweis" data-i18n>Nur jetzt sichtbar – bitte kopieren und den Personen einzeln geben (z. B. per Teams).</p>
+    <textarea id="adminPwText" rows="3" readonly></textarea>
+    <div class="pw-ergebnis__aktionen">
+      <button type="button" id="btnPwKopieren" class="btn btn--primary" data-i18n>Kopieren</button>
+      <button type="button" id="btnPwZu" class="btn btn--ghost" data-i18n>Ausblenden</button>
+    </div>
+  </div>
+  <div class="admin-kopf">
+    <div id="adminZaehler" class="hint"></div>
+    <button type="button" id="btnPwAlle" class="btn btn--ghost" hidden></button>
+  </div>
   <div id="adminEmailListe" class="loglist adminliste"></div>
   <form id="formAdminAdd" style="margin-top:12px">
     <label><span data-i18n>Neue E-Mail-Adressen (beliebig getrennt, auch als Outlook-Liste „Name &lt;adresse&gt;; …“)</span>
@@ -323,6 +346,25 @@
     <span class="spacer"></span>
     <button type="button" class="btn btn--ghost" data-close data-i18n>Schließen</button>
     <button type="submit" form="formAdminAdd" id="btnAdminAdd" class="btn btn--primary" data-i18n>Hinzufügen</button>
+  </footer>
+</dialog>
+
+<!-- Dialog: eigenes Passwort festlegen/aendern -->
+<dialog id="dlgPasswort" class="dialog">
+  <h2 id="pwTitel" data-i18n>Passwort ändern</h2>
+  <p id="pwHinweisNeu" class="hint" hidden data-i18n>Das gemeinsame Passwort gilt nicht mehr. Bitte lege jetzt dein eigenes Passwort fest – damit meldest du dich künftig an.</p>
+  <form id="formPasswort">
+    <label id="pwAltLabel"><span data-i18n>Bisheriges Passwort</span>
+      <input id="pwAlt" type="password" autocomplete="current-password"></label>
+    <label><span data-i18n>Neues Passwort (mind. 10 Zeichen)</span>
+      <input id="pwNeu" type="password" autocomplete="new-password" minlength="10" required></label>
+    <label><span data-i18n>Neues Passwort wiederholen</span>
+      <input id="pwNeu2" type="password" autocomplete="new-password" minlength="10" required></label>
+  </form>
+  <footer class="dialog__footer">
+    <span class="spacer"></span>
+    <button type="button" class="btn btn--ghost" data-close data-i18n>Später</button>
+    <button type="submit" form="formPasswort" class="btn btn--primary" data-i18n>Speichern</button>
   </footer>
 </dialog>
 
@@ -345,9 +387,10 @@
   var form = document.getElementById('loginForm');
   var errEl = document.getElementById('loginError');
 
-  function showApp(userName, isAdmin, rolle) {
+  function showApp(userName, isAdmin, rolle, eigenesPasswort) {
     gate.hidden = true;
     app.hidden = false;
+    window.__OPL_EIGENES_PW = eigenesPasswort !== false;
     if (userName) window.__OPL_LOGIN_USER = userName;
     window.__OPL_IS_ADMIN = !!isAdmin;
     window.__OPL_ROLLE = rolle || (isAdmin ? 'admin' : 'bearbeiten');
@@ -371,7 +414,7 @@
   fetch('/api/auth').then(function(r) {
     if (r.ok) return r.json();
   }).then(function(data) {
-    if (data && data.authenticated) showApp(data.user, data.isAdmin, data.rolle);
+    if (data && data.authenticated) showApp(data.user, data.isAdmin, data.rolle, data.eigenesPasswort);
   }).catch(function() {});
 
   form.addEventListener('submit', function(e) {
@@ -379,15 +422,34 @@
     errEl.hidden = true;
     var email = document.getElementById('loginEmail').value.trim();
     var pw = document.getElementById('loginPw').value;
+    var neuBox = document.getElementById('loginNeu');
+    var body = { password: pw, email: email };
+    if (!neuBox.hidden) {
+      var neu = document.getElementById('loginNeuPw').value;
+      if (neu.length < 10) { errEl.textContent = OPLi18n.T('Das Passwort muss mindestens 10 Zeichen lang sein'); errEl.hidden = false; return; }
+      if (neu !== document.getElementById('loginNeuPw2').value) { errEl.textContent = OPLi18n.T('Die beiden neuen Passwörter stimmen nicht überein'); errEl.hidden = false; return; }
+      body.neuesPasswort = neu;
+    }
     fetch('/api/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ password: pw, email: email })
+      body: JSON.stringify(body)
     }).then(function(r) {
       if (r.ok) return r.json();
       return r.json().then(function(e) { throw new Error(OPLi18n.T(e.error || 'Fehler')); });
     }).then(function(data) {
-      showApp(data.user, data.isAdmin, data.rolle);
+      if (data.mussWechseln) {
+        // Einmalpasswort korrekt: jetzt das eigene Passwort festlegen lassen
+        neuBox.hidden = false;
+        document.getElementById('loginEmail').readOnly = true;
+        document.getElementById('loginPw').readOnly = true;
+        document.getElementById('loginBtn').textContent = OPLi18n.T('Passwort festlegen und anmelden');
+        document.getElementById('loginNeuPw').required = true;
+        document.getElementById('loginNeuPw2').required = true;
+        document.getElementById('loginNeuPw').focus();
+        return;
+      }
+      showApp(data.user, data.isAdmin, data.rolle, data.eigenesPasswort);
     }).catch(function(err) {
       errEl.textContent = err.message && err.message !== 'Failed to fetch' ? err.message : OPLi18n.T('Verbindungsfehler');
       errEl.hidden = false;

@@ -1613,6 +1613,7 @@
       je[z.rolle]++;
       var row = el('div', 'adminzeile');
       var mail = el('span', 'adminzeile__mail', z.email);
+      mail.title = z.email;
       if (z.extern) {
         var ext = el('span', 'adminzeile__extern', T('extern'));
         ext.title = T('Adresse außerhalb von NEURA');
@@ -1630,7 +1631,27 @@
           .then(function (l) { zeigeAdminListe(l); toast(T('{email}: Rolle {rolle}.', { email: z.email, rolle: T(ROLLEN_ANZEIGE[sel.value]) })); })
           .catch(function (err) { toast(err.message, true); ladeAdminListe(); });
       });
+      var pwText = { eigen: T('eigenes Passwort'), einmal: T('Einmalpasswort offen'), abgelaufen: T('Einmalpasswort abgelaufen'), keins: T('kein Passwort') }[z.passwort] || '';
+      if (z.extern) pwText = T('kein Login (extern)');
+      var chip = el('span', 'pwchip pwchip--' + (z.extern ? 'keins' : z.passwort), pwText);
+      if (z.einmalBis) chip.title = T('gültig bis {d}', { d: new Date(z.einmalBis).toLocaleDateString() });
+      row.appendChild(chip);
       row.appendChild(sel);
+      if (!istHaupt && !z.extern) {
+        var pwBtn = el('button', 'btn btn--ghost', T('🔑 Einmalpasswort'));
+        pwBtn.type = 'button';
+        pwBtn.title = T('Einmalpasswort erzeugen');
+        pwBtn.addEventListener('click', function () {
+          var frage = z.passwort === 'eigen'
+            ? T('{email} hat schon ein eigenes Passwort. Neues Einmalpasswort erzeugen? Das bisherige Passwort gilt dann nicht mehr und die Person wird abgemeldet.', { email: z.email })
+            : T('Einmalpasswort für {email} erzeugen?', { email: z.email });
+          if (!confirm(frage)) return;
+          einmalpasswortAnfrage({ email: z.email });
+        });
+        row.appendChild(pwBtn);
+      } else {
+        row.appendChild(el('span', 'adminzeile__platz'));
+      }
       if (!istHaupt) {
         var del = el('button', 'btn btn--ghost', T('✕ entfernen'));
         del.type = 'button';
@@ -1648,6 +1669,30 @@
     });
     $('#adminZaehler').textContent = T('{n} Zugänge · {l} Lesen · {b} Bearbeiten · {a} Admin',
       { n: liste.length, l: je.lesen, b: je.bearbeiten, a: je.admin });
+    var ohne = liste.filter(function (z) { return z.passwort === 'keins' && !z.extern && z.email !== 'david.rybinski@neura-robotics.com'; }).length;
+    $('#btnPwAlle').hidden = !ohne;
+    $('#btnPwAlle').textContent = T('🔑 Einmalpasswörter für alle ohne Passwort ({n})', { n: ohne });
+  }
+
+  function einmalpasswortAnfrage(body) {
+    adminAnfrage('POST', '/api/admin/einmalpasswort', body).then(function (r) {
+      zeigeAdminListe(r.liste);
+      if (!r.ergebnis.length) { toast(T('Keine Adresse ohne Passwort.')); return; }
+      $('#adminPwText').value = r.ergebnis.map(function (e) { return e.email + '\t' + e.passwort; }).join('\n');
+      $('#adminPwText').rows = Math.min(10, r.ergebnis.length + 1);
+      $('#adminPwBis').textContent = T('gültig bis {d}', { d: new Date(r.gueltigBis).toLocaleDateString() });
+      $('#adminPwErgebnis').hidden = false;
+      $('#adminPwErgebnis').scrollIntoView({ block: 'nearest' });
+    }).catch(function (err) { toast(err.message, true); });
+  }
+
+  function zeigePasswort(pflicht) {
+    var f = $('#formPasswort');
+    f.reset();
+    $('#pwHinweisNeu').hidden = !pflicht;
+    $('#pwAltLabel').hidden = !window.__OPL_EIGENES_PW;
+    $('#pwTitel').textContent = window.__OPL_EIGENES_PW ? T('Passwort ändern') : T('Eigenes Passwort festlegen');
+    $('#dlgPasswort').showModal();
   }
 
   function zeigeAdmin() {
@@ -1805,6 +1850,7 @@
       } else if (act === 'roadmap') location.href = 'roadmap.html';
       else if (act === 'log') zeigeLog();
       else if (act === 'admin') zeigeAdmin();
+      else if (act === 'passwort') zeigePasswort(false);
       else if (act === 'reset' && !Store.isOnline()) {
         toast(T('Keine Verbindung zum Server – Zurücksetzen ist gerade nicht möglich.'), true);
       }
@@ -1823,6 +1869,38 @@
       $('#adminMenuDivider').hidden = false;
     }
 
+    $('#btnPwAlle').addEventListener('click', function () {
+      if (!confirm(T('Für alle Adressen ohne Passwort ein Einmalpasswort erzeugen?'))) return;
+      einmalpasswortAnfrage({ ohnePasswort: true });
+    });
+    $('#btnPwKopieren').addEventListener('click', function () {
+      var t = $('#adminPwText');
+      (navigator.clipboard ? navigator.clipboard.writeText(t.value) : Promise.reject())
+        .catch(function () { t.select(); document.execCommand('copy'); })
+        .then(function () { toast(T('Kopiert.')); });
+    });
+    $('#btnPwZu').addEventListener('click', function () {
+      $('#adminPwText').value = '';
+      $('#adminPwErgebnis').hidden = true;
+    });
+    $('#formPasswort').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var neu = $('#pwNeu').value;
+      if (neu !== $('#pwNeu2').value) { toast(T('Die beiden neuen Passwörter stimmen nicht überein'), true); return; }
+      fetch('/api/passwort', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ neu: neu, alt: $('#pwAlt').value })
+      }).then(function (r) {
+        return r.json().then(function (d) { if (!r.ok) throw new Error(T(d.error || 'Fehler')); return d; });
+      }).then(function () {
+        window.__OPL_EIGENES_PW = true;
+        $('#dlgPasswort').close();
+        toast(T('Passwort gespeichert.'));
+      }).catch(function (err) { toast(err.message, true); });
+    });
+    // Uebergang: wer noch mit dem alten gemeinsamen Passwort angemeldet ist, legt jetzt ein eigenes fest
+    if (window.__OPL_EIGENES_PW === false) setTimeout(function () { zeigePasswort(true); }, 400);
+
     $('#formAdminAdd').addEventListener('submit', function (ev) {
       ev.preventDefault();
       var input = $('#adminNeueEmail');
@@ -1836,12 +1914,11 @@
         return adminAnfrage('POST', '/api/admin/emails', { emails: emails, rolle: rolle, extern: extern });
       }
       senden(false).catch(function (err) {
-        // Externe Adressen (nicht @neura-robotics.com) nur nach ausdruecklicher Bestaetigung
-        if (err.status !== 409 || !err.body || !err.body.extern) throw err;
-        var ok = confirm(T('Externe Adresse(n) – nicht @neura-robotics.com:\n\n{liste}\n\nDiese Person(en) sehen dann alle OPL-Punkte inkl. Bilder. Wirklich freischalten?',
-          { liste: err.body.extern.join('\n') }));
-        if (!ok) { var abbruch = new Error(T('Abgebrochen – nichts freigeschaltet.')); abbruch.still = true; throw abbruch; }
-        return senden(true);
+        // Externe Adressen (nicht @neura-robotics.com) werden nicht mehr freigeschaltet
+        if (err.body && err.body.extern) {
+          throw new Error(T('Nur @neura-robotics.com-Adressen möglich:\n{liste}', { liste: err.body.extern.join(', ') }));
+        }
+        throw err;
       }).then(function (l) {
         input.value = '';
         zeigeAdminListe(l);
