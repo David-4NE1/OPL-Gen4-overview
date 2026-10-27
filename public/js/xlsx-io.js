@@ -764,29 +764,41 @@
     });
   }
 
-  // Ueberschrift -> Feld. Fehlt eine Ueberschrift ganz (aeltere Dateien), gilt
-  // die feste Position aus dem urspruenglichen Schema.
+  // Ueberschrift -> Feld. Verglichen wird ohne Gross-/Kleinschreibung, Leer- und
+  // Sonderzeichen, damit auch eigene Listen passen ("Verantwortlich",
+  // "Release Version", "Bis wann?"). Fehlt eine Kopfzeile ganz (aeltere Dateien),
+  // gilt die feste Position aus dem urspruenglichen Schema.
   var KOPF_FELDER = [
-    ['nr', ['nr'], 1], ['bereich', ['bereich'], 2], ['thema', ['thema/aufgabe', 'thema'], 3],
-    ['prio', ['prio'], 4], ['verantwortlicher', ['verantwortlicher'], 5], ['faellig', ['bis wann'], 6],
-    ['status', ['status'], 7], ['todo', ['to do'], 8], ['notiz', ['bild'], 9], ['erstelltAm', ['erstellt am'], 10],
-    ['verantwortlichkeit', ['verantwortlichkeit'], 12], ['baugruppe', ['baugruppe'], 13],
-    ['nacharbeit', ['nacharbeit'], 14], ['zielRelease', ['ziel-release', 'ziel release'], 15],
-    ['unterthema', ['unterthema'], 16]
+    ['nr', /^(nr|nummer|oplnr|lfdnr)$/, 1],
+    ['bereich', /^bereich/, 2],
+    ['thema', /^thema/, 3],
+    ['prio', /^prio/, 4],
+    ['verantwortlicher', /^(verantwortliche[rn]?|verantwortlich|owner|zustaendig|zuständig)$/, 5],
+    ['faellig', /^(biswann|faellig|fällig|termin|deadline|due)/, 6],
+    ['status', /^status/, 7],
+    ['todo', /^(todo|beschreibung|aufgabe)$/, 8],
+    ['notiz', /^(bild|notiz|bemerkung|kommentar)$/, 9],
+    ['erstelltAm', /^erstellt/, 10],
+    ['verantwortlichkeit', /^(verantwortlichkeit|team)$/, 12],
+    ['baugruppe', /^baugruppe/, 13],
+    ['nacharbeit', /^nacharbeit/, 14],
+    ['zielRelease', /^(zielrelease|release)/, 15],
+    ['unterthema', /^unterthema/, 16]
   ];
 
   function spaltenAusKopf(kopfZeile) {
-    var nachName = {};
-    Object.keys(kopfZeile || {}).forEach(function (c) {
-      nachName[String(kopfZeile[c]).trim().toLowerCase()] = Number(c);
-    });
+    var spalten = Object.keys(kopfZeile || {}).map(Number).sort(function (a, b) { return a - b; });
+    var vergeben = {};
     var sp = {};
-    var bekannt = KOPF_FELDER.filter(function (f) { return f[1].some(function (n) { return nachName[n]; }); }).length;
     KOPF_FELDER.forEach(function (f) {
-      var treffer = f[1].map(function (n) { return nachName[n]; }).filter(Boolean)[0];
-      // Mit erkennbarer Kopfzeile nur die vorhandenen Ueberschriften, sonst feste Positionen
-      sp[f[0]] = treffer || (bekannt >= 5 ? undefined : f[2]);
+      var treffer = spalten.filter(function (c) {
+        return !vergeben[c] && f[1].test(schluesselVon(kopfZeile[c]));
+      })[0];
+      if (treffer) { sp[f[0]] = treffer; vergeben[treffer] = true; }
     });
+    var bekannt = Object.keys(sp).length;
+    // Ohne erkennbare Kopfzeile: feste Positionen des urspruenglichen Schemas
+    if (bekannt < 5) KOPF_FELDER.forEach(function (f) { if (!sp[f[0]]) sp[f[0]] = f[2]; });
     return sp;
   }
 
