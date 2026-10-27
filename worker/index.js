@@ -424,6 +424,12 @@ async function handleAPI(url, method, request, env) {
     const now = new Date().toISOString();
     // Bild-Verweise aufloesen, solange die alten Daten noch in der DB stehen
     for (const raw of entries) raw.bilder = await bilderAufloesen(db, raw.bilder);
+    // D1 erlaubt max. 2 MB je Zeile: zu grosse Bilder vorher klar melden, statt
+    // den ganzen Import an einer Zeile scheitern zu lassen
+    const zuGross = entries.filter(raw => JSON.stringify(raw.bilder || []).length > 1900000).map(raw => '#' + raw.nr);
+    if (zuGross.length) {
+      return json({ error: `Bilder zu groß bei ${zuGross.join(', ')} – bitte weniger oder kleinere Bilder je Punkt (max. ca. 1,9 MB).` }, 413);
+    }
 
     if (modus === 'ersetzen') {
       // Die Excel kennt weder Release noch Seite: bisherige Werte je Nr behalten

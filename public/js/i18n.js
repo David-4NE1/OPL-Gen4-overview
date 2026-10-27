@@ -141,6 +141,8 @@
     'davon Hoch': 'of which high',
     'Umgesetzt': 'Implemented',
     '⬇ Export ▾': '⬇ Export ▾',
+    'Bilder werden vorbereitet …': 'Preparing images …',
+    '{b} Bilder': '{b} images',
     'Fokus entfernen': 'Remove focus',
     'Als Fokus markieren – steht dann für alle oben': 'Mark as focus – shown at the top for everyone',
     'Fokus-Kategorie': 'Focus category',

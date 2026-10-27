@@ -639,6 +639,7 @@
       var doc = xml(sheetName);
       var rowNodes = doc.getElementsByTagName('row');
       var grid = {}; // row -> {col -> value}
+      var zellBilder = []; // [{row, vm}] Bilder, die in einer Zelle stehen
 
       for (var r = 0; r < rowNodes.length; r++) {
         var cs = rowNodes[r].getElementsByTagName('c');
@@ -646,6 +647,11 @@
           var cell = cs[c];
           var ref = parseRef(cell.getAttribute('r'));
           if (!ref) continue;
+          // Bild "in Zelle platziert" (Excel 365): Wert ist nur ein Platzhalter
+          if (cell.getAttribute('vm')) {
+            zellBilder.push({ row: ref.row, vm: parseInt(cell.getAttribute('vm'), 10) });
+            continue;
+          }
           var t = cell.getAttribute('t');
           var val = '';
           if (t === 'inlineStr') {
@@ -725,10 +731,10 @@
           bilder: [],
           notiz: (zelle('notiz') || '').trim(),
           erstelltAm: erstelltAm,
-          verantwortlichkeit: normalize(zelle('verantwortlichkeit'), ['Advanced Development', 'Pre Series']) || '',
-          baugruppe: normalize(zelle('baugruppe'), ['Kopf', 'Torso', 'Arm', 'Pelvis/Hüfte', 'Bein', 'Fuß', 'Übergreifend']) || '',
-          nacharbeit: normalize(zelle('nacharbeit'), ['Re-Milling', 'Modification', 'Re-Milling + Modification']) || '',
-          zielRelease: normalize(zelle('zielRelease'), ['4.1.1', '4.1.2', '4.1.3', '4.2.0']) || '',
+          verantwortlichkeit: feldWert(rn, 'Verantwortlichkeit', zelle('verantwortlichkeit'), VERANTWORTLICHKEITEN, ALIAS_TEAM, warnungen),
+          baugruppe: feldWert(rn, 'Baugruppe', zelle('baugruppe'), BAUGRUPPEN, ALIAS_BAUGRUPPE, warnungen),
+          nacharbeit: feldWert(rn, 'Nacharbeit', zelle('nacharbeit'), NACHARBEIT, {}, warnungen),
+          zielRelease: feldWert(rn, 'Ziel-Release', zielReleaseText(zelle('zielRelease')), ZIEL_RELEASES, {}, warnungen),
           unterthema: (zelle('unterthema') || '').trim()
         };
         entries.push(eintrag);
@@ -746,6 +752,13 @@
         warnungen.push('Eingebettete Bilder konnten nicht gelesen werden: ' + err.message);
       }
       warnungen = warnungen.concat(bildWarnungen);
+      if (zellBilder.length) {
+        try {
+          warnungen = warnungen.concat(zellBilderEinlesen(zip, xml, zellBilder, entryByRow));
+        } catch (err) {
+          warnungen.push('In Zellen platzierte Bilder konnten nicht gelesen werden: ' + err.message);
+        }
+      }
 
       return { entries: entries, warnungen: warnungen };
     });
@@ -1029,6 +1042,12 @@
       if (isNaN(row0)) return;
       var rn = row0 + 1; // Excel-Zeile ist 1-basiert
       var eintrag = entryByRow[rn];
+      if (!eintrag) {
+        // z. B. Bild ragt von der Zeile darueber herein: Endzeile des Ankers probieren
+        var toEl = anchor.getElementsByTagName('xdr:to')[0];
+        var toRow = toEl && toEl.getElementsByTagName('xdr:row')[0];
+        if (toRow) eintrag = entryByRow[parseInt(toRow.textContent, 10) + 1];
+      }
       if (!eintrag) return; // Bild ausserhalb einer erkannten Datenzeile
 
       var blip = anchor.getElementsByTagName('a:blip')[0];
@@ -1048,6 +1067,105 @@
     if (!gefunden && anchors.length) {
       warnungen.push('In der Datei eingebettete Grafiken konnten keiner Zeile zugeordnet werden.');
     }
+    return warnungen;
+  }
+
+  var VERANTWORTLICHKEITEN = ['Advanced Development', 'Pre Series'];
+  var BAUGRUPPEN = ['Kopf', 'Torso', 'Arm', 'Pelvis/Hüfte', 'Bein', 'Fuß', 'Übergreifend'];
+  var NACHARBEIT = ['Re-Milling', 'Modification', 'Re-Milling + Modification'];
+  var ZIEL_RELEASES = ['4.1.1', '4.1.2', '4.1.3', '4.2.0'];
+  var ALIAS_TEAM = { ad: 'Advanced Development', advdev: 'Advanced Development', ps: 'Pre Series', vorserie: 'Pre Series', preserie: 'Pre Series' };
+  var ALIAS_BAUGRUPPE = { pelvis: 'Pelvis/Hüfte', huefte: 'Pelvis/Hüfte', hufte: 'Pelvis/Hüfte', fuss: 'Fuß', fus: 'Fuß', uebergreifend: 'Übergreifend', ubergreifend: 'Übergreifend', head: 'Kopf', leg: 'Bein', foot: 'Fuß' };
+
+  // Vergleichsschluessel: klein, ohne Leer-/Sonderzeichen (Pre-Series = Pre Series = preseries)
+  function schluesselVon(v) {
+    return String(v).toLowerCase().replace(/ß/g, 'ss').replace(/[^a-z0-9äöü]+/g, '');
+  }
+
+  // Wert einer Auswahlspalte tolerant erkennen; Unbekanntes melden statt still zu verwerfen
+  function feldWert(rn, name, value, allowed, alias, warnungen) {
+    if (value == null || String(value).trim() === '') return '';
+    var k = schluesselVon(value);
+    for (var i = 0; i < allowed.length; i++) if (schluesselVon(allowed[i]) === k) return allowed[i];
+    if (alias[k]) return alias[k];
+    warnungen.push('Zeile ' + rn + ': ' + name + ' "' + String(value).trim() + '" unbekannt – leer gelassen (erlaubt: ' + allowed.join(', ') + ').');
+    return '';
+  }
+
+  // Ziel-Release: Excel macht aus "4.1.1" ohne Textformat das Datum 04.01.2001
+  // (gespeichert als Zahl 36895). Das wird hier zurueckgerechnet.
+  function zielReleaseText(value) {
+    if (value == null) return value;
+    var s = String(value).trim();
+    var m = /(\d+)\.(\d+)\.(\d+)/.exec(s);
+    if (m) return +m[1] + '.' + +m[2] + '.' + +m[3];
+    if (/^\d{4,5}(\.0+)?$/.test(s)) {
+      var d = new Date(Date.UTC(1899, 11, 30) + Math.round(parseFloat(s)) * 86400000);
+      return d.getUTCDate() + '.' + (d.getUTCMonth() + 1) + '.' + (d.getUTCFullYear() % 100);
+    }
+    return s;
+  }
+
+  /**
+   * Bilder, die in Excel 365 "in der Zelle platziert" wurden (Rich Data statt Zeichnung):
+   * Zelle -> vm -> metadata.xml -> Rich Value -> richValueRel -> Bilddatei.
+   */
+  function zellBilderEinlesen(zip, xml, zellBilder, entryByRow) {
+    var warnungen = [];
+    var rvDoc = xml('xl/richData/rdrichvalue.xml');
+    var relDoc = xml('xl/richData/richValueRel.xml');
+    var relRelsDoc = xml('xl/richData/_rels/richValueRel.xml.rels');
+    if (!rvDoc || !relDoc || !relRelsDoc) {
+      warnungen.push(zellBilder.length + ' in Zellen platzierte Bilder konnten nicht zugeordnet werden.');
+      return warnungen;
+    }
+    // vm (1-basiert) -> Index des Rich Value, ueber metadata.xml; sonst vm - 1
+    var vmZuRv = {};
+    var metaDoc = xml('xl/metadata.xml');
+    if (metaDoc) {
+      var rvbs = [].slice.call(metaDoc.getElementsByTagName('*')).filter(function (n) { return n.localName === 'rvb'; });
+      var vmBlock = [].slice.call(metaDoc.getElementsByTagName('*')).filter(function (n) { return n.localName === 'valueMetadata'; })[0];
+      if (vmBlock) {
+        [].slice.call(vmBlock.childNodes).filter(function (n) { return n.localName === 'bk'; }).forEach(function (bk, i) {
+          var rc = [].slice.call(bk.childNodes).filter(function (n) { return n.localName === 'rc'; })[0];
+          var v = rc ? parseInt(rc.getAttribute('v'), 10) : NaN;
+          if (!isNaN(v) && rvbs[v]) vmZuRv[i + 1] = parseInt(rvbs[v].getAttribute('i'), 10);
+        });
+      }
+    }
+    // Position des Bild-Schluessels je Struktur
+    var keyPos = {};
+    var stDoc = xml('xl/richData/rdrichvaluestructure.xml');
+    if (stDoc) {
+      [].slice.call(stDoc.getElementsByTagName('*')).filter(function (n) { return n.localName === 's'; }).forEach(function (st, i) {
+        var keys = [].slice.call(st.childNodes).filter(function (n) { return n.localName === 'k'; });
+        var pos = keys.map(function (k) { return k.getAttribute('n'); }).indexOf('_rvRel:LocalImageIdentifier');
+        keyPos[i] = pos >= 0 ? pos : 0;
+      });
+    }
+    var rvs = [].slice.call(rvDoc.getElementsByTagName('*')).filter(function (n) { return n.localName === 'rv'; });
+    var rels = [].slice.call(relDoc.getElementsByTagName('*')).filter(function (n) { return n.localName === 'rel'; });
+    var ridZuDatei = {};
+    [].slice.call(relRelsDoc.getElementsByTagName('Relationship')).forEach(function (r) {
+      ridZuDatei[r.getAttribute('Id')] = resolveRelPath('xl/richData', r.getAttribute('Target'));
+    });
+    var nicht = 0;
+    zellBilder.forEach(function (zb) {
+      var eintrag = entryByRow[zb.row];
+      var rv = rvs[vmZuRv[zb.vm] != null ? vmZuRv[zb.vm] : zb.vm - 1];
+      if (!eintrag || !rv) { nicht++; return; }
+      var werte = [].slice.call(rv.childNodes).filter(function (n) { return n.localName === 'v'; });
+      var w = werte[keyPos[parseInt(rv.getAttribute('s'), 10)] || 0];
+      var rel = w && rels[parseInt(w.textContent, 10)];
+      var rid = rel && (rel.getAttribute('r:id') || rel.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id'));
+      var datei = rid && ridZuDatei[rid];
+      if (!datei || !zip[datei]) { nicht++; return; }
+      eintrag.bilder.push({
+        name: 'Bild ' + (eintrag.bilder.length + 1),
+        src: 'data:' + mimeForExt(datei.split('.').pop()) + ';base64,' + bytesToBase64(zip[datei])
+      });
+    });
+    if (nicht) warnungen.push(nicht + ' in Zellen platzierte Bilder konnten keiner Zeile zugeordnet werden.');
     return warnungen;
   }
 
