@@ -556,8 +556,16 @@
     // Beim Zusammenfuehren nur die Eintraege aus der Datei schicken, damit
     // parallele Aenderungen anderer an den uebrigen Karten nicht mit dem
     // lokalen Stand ueberschrieben werden.
-    syncToAPI('POST', '/api/import', {
+    API.post('/api/import', {
       entries: modus === 'ersetzen' ? state.entries : betroffen, modus: modus, user: state.user
+    }).catch(function (err) {
+      syncFehler(err);
+      // Import auf dem Server gescheitert: lokale Anzeige wieder auf den echten Stand bringen
+      ladeVomServer().then(function (entries) {
+        state.entries = entries.map(normalizeEntry);
+        saveLocal();
+        emit();
+      }).catch(function () {});
     });
 
     return { neu: neu, aktualisiert: aktualisiert };

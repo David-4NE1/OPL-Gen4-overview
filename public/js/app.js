@@ -1526,6 +1526,55 @@
     toast(T('CSV exportiert.') + exportHinweis());
   }
 
+  // Bilder aus der Excel kommen in Originalgroesse (Handyfotos mehrere MB). Die
+  // Datenbank nimmt je Punkt hoechstens ca. 2 MB an, sonst scheitert der ganze
+  // Import. Darum: jedes Bild wie beim Hochladen auf max. 1400 px / JPEG bringen
+  // und je Punkt ein Gesamtbudget einhalten (notfalls in Stufen kleiner rechnen).
+  var BILD_BUDGET = 1500000; // Zeichen data-URL je Punkt
+
+  function bildNeuKodieren(src, max, qualitaet) {
+    return new Promise(function (resolve) {
+      var img = new Image();
+      img.onload = function () {
+        var scale = Math.min(1, max / Math.max(img.width, img.height));
+        var cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(img.width * scale)); cv.height = Math.max(1, Math.round(img.height * scale));
+        var g = cv.getContext('2d');
+        g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+        g.drawImage(img, 0, 0, cv.width, cv.height);
+        var neu = cv.toDataURL('image/jpeg', qualitaet);
+        resolve({ src: neu.length < src.length || scale < 1 ? neu : src, gross: Math.max(img.width, img.height) });
+      };
+      img.onerror = function () { resolve({ src: src, gross: 0 }); };
+      img.src = src;
+    });
+  }
+
+  function importBilderVerkleinern(entries) {
+    var anzahl = 0;
+    var summe = function (e) { return e.bilder.reduce(function (n, b) { return n + (b.src || '').length; }, 0); };
+    return Promise.all(entries.map(function (e) {
+      var bilder = (e.bilder || []).filter(function (b) { return b.src && b.src.indexOf('data:') === 0; });
+      anzahl += (e.bilder || []).length;
+      if (!bilder.length) return null;
+      // 1. Stufe: grosse Bilder auf 1400 px, kleine JPEGs (z. B. aus unserem Export) bleiben
+      return Promise.all(bilder.map(function (b) {
+        if (b.src.length < 600000 && /^data:image\/jpe?g/.test(b.src)) return null;
+        return bildNeuKodieren(b.src, 1400, 0.82).then(function (r) { b.src = r.src; });
+      })).then(function () {
+        // 2. Stufe: Punkt insgesamt zu gross -> alle Bilder schrittweise kleiner
+        var stufen = [[1200, 0.75], [1000, 0.7], [800, 0.65], [640, 0.6]];
+        var naechste = function (i) {
+          if (summe(e) <= BILD_BUDGET || i >= stufen.length) return null;
+          return Promise.all(bilder.map(function (b) {
+            return bildNeuKodieren(b.src, stufen[i][0], stufen[i][1]).then(function (r) { b.src = r.src; });
+          })).then(function () { return naechste(i + 1); });
+        };
+        return naechste(0);
+      });
+    })).then(function () { return anzahl; });
+  }
+
   function vorschauImport(file) {
     var box = $('#impVorschau');
     box.hidden = false;
@@ -1536,6 +1585,9 @@
     file.arrayBuffer().then(function (buf) {
       return Xlsx.importWorkbook(buf);
     }).then(function (res) {
+      box.textContent = T('Bilder werden vorbereitet …');
+      return importBilderVerkleinern(res.entries).then(function (anzahl) { res.bilderGesamt = anzahl; return res; });
+    }).then(function (res) {
       importPuffer = res.entries;
       box.textContent = '';
       var vorhandene = {};
@@ -1543,7 +1595,8 @@
       var treffer = res.entries.filter(function (e) { return vorhandene[e.nr]; }).length;
       box.appendChild(el('div', null,
         T('✓ {n} Zeilen gelesen · {treffer} davon mit bekannter Nr · {neu} neu',
-          { n: res.entries.length, treffer: treffer, neu: res.entries.length - treffer })));
+          { n: res.entries.length, treffer: treffer, neu: res.entries.length - treffer }) +
+        (res.bilderGesamt ? ' · ' + T('{b} Bilder', { b: res.bilderGesamt }) : '')));
       if (res.warnungen.length) {
         box.appendChild(el('div', null, T('⚠ {n} Hinweis(e):', { n: res.warnungen.length })));
         var ul = el('ul');
