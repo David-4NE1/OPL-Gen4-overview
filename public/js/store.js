@@ -500,7 +500,7 @@
       if (e.erstelltAm) erstelltAmProNr[e.nr] = e.erstelltAm;
     });
 
-    var neu = 0, aktualisiert = 0;
+    var neu = 0, aktualisiert = 0, bilderNeu = 0;
     var betroffen = [];
     if (modus === 'ersetzen') {
       state.entries = entries.map(function (e) {
@@ -518,6 +518,7 @@
         var vorhanden = byNr(n.nr);
         if (vorhanden) {
           if (!n.bilder.length) n.bilder = vorhanden.bilder;
+          else bilderNeu += Math.max(0, n.bilder.length - (vorhanden.bilder || []).length);
           n.erstelltAm = n.erstelltAm || vorhanden.erstelltAm || heute();
           n.verantwortlichkeit = n.verantwortlichkeit || vorhanden.verantwortlichkeit || teamStandard(n.verantwortlicher);
           n.baugruppe = n.baugruppe || vorhanden.baugruppe;
@@ -568,7 +569,7 @@
       }).catch(function () {});
     });
 
-    return { neu: neu, aktualisiert: aktualisiert };
+    return { neu: neu, aktualisiert: aktualisiert, bilderNeu: bilderNeu };
   }
 
   function reset() {
