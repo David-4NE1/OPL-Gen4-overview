@@ -1591,12 +1591,34 @@
       importPuffer = res.entries;
       box.textContent = '';
       var vorhandene = {};
-      Store.state.entries.forEach(function (e) { vorhandene[e.nr] = true; });
+      Store.state.entries.forEach(function (e) { vorhandene[e.nr] = e; });
       var treffer = res.entries.filter(function (e) { return vorhandene[e.nr]; }).length;
       box.appendChild(el('div', null,
-        T('✓ {n} Zeilen gelesen · {treffer} davon mit bekannter Nr · {neu} neu',
+        T('✓ {n} Zeilen gelesen · {treffer} bestehende Punkte werden aktualisiert · {neu} neue Punkte',
           { n: res.entries.length, treffer: treffer, neu: res.entries.length - treffer }) +
-        (res.bilderGesamt ? ' · ' + T('{b} Bilder', { b: res.bilderGesamt }) : '')));
+        (res.bilderGesamt ? ' · ' + T('{b} Bilder in der Datei', { b: res.bilderGesamt }) : '')));
+      // Bildaenderungen je Punkt sichtbar machen (Anzahl im Board -> in der Datei).
+      // Beim Zusammenfuehren ersetzt die Datei die Bilder eines Punkts, sofern sie dort welche hat.
+      var bildDiff = res.entries.filter(function (e) {
+        var alt = vorhandene[e.nr];
+        return alt && e.bilder.length && e.bilder.length !== (alt.bilder || []).length;
+      });
+      var mehr = bildDiff.filter(function (e) { return e.bilder.length > vorhandene[e.nr].bilder.length; });
+      var weniger = bildDiff.filter(function (e) { return e.bilder.length < vorhandene[e.nr].bilder.length; });
+      var neuMitBild = res.entries.filter(function (e) { return !vorhandene[e.nr] && e.bilder.length; });
+      if (bildDiff.length || neuMitBild.length) {
+        box.appendChild(el('div', 'imp-bilder', T('🖼 Bilder: {m} Punkte mit zusätzlichen Bildern, {w} mit weniger Bildern, {n} neue Punkte mit Bildern',
+          { m: mehr.length, w: weniger.length, n: neuMitBild.length })));
+        var bl = el('ul');
+        bildDiff.slice(0, 15).forEach(function (e) {
+          bl.appendChild(el('li', null, '#' + e.nr + ': ' + T('{a} → {b} Bilder', { a: vorhandene[e.nr].bilder.length, b: e.bilder.length }) +
+            (e.bilder.length < vorhandene[e.nr].bilder.length ? ' ' + T('(fehlende werden entfernt)') : '')));
+        });
+        if (bildDiff.length > 15) bl.appendChild(el('li', null, '…'));
+        box.appendChild(bl);
+      } else if (res.bilderGesamt) {
+        box.appendChild(el('div', 'imp-bilder', T('🖼 Bilder: keine Änderung an der Anzahl je Punkt')));
+      }
       if (res.warnungen.length) {
         box.appendChild(el('div', null, T('⚠ {n} Hinweis(e):', { n: res.warnungen.length })));
         var ul = el('ul');
@@ -2023,7 +2045,8 @@
       $('#dlgImport').close();
       toast(modus === 'ersetzen'
         ? T('Import fertig: Liste durch {n} Punkte aus der Excel ersetzt.', { n: res.neu })
-        : T('Import fertig: {a} aktualisiert, {n} neu.', { a: res.aktualisiert, n: res.neu }));
+        : T('Import fertig: {a} Punkte aktualisiert, {n} neue Punkte.', { a: res.aktualisiert, n: res.neu }) +
+          (res.bilderNeu ? ' ' + T('{b} zusätzliche Bilder.', { b: res.bilderNeu }) : ''));
     });
 
     // Dialoge schließen
