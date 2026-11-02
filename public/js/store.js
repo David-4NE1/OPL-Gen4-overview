@@ -275,6 +275,12 @@
 
   // Stand vor der Liste holen: aendert sich dazwischen etwas, ist der
   // gemerkte Stand aelter und die naechste Abfrage laedt erneut.
+  // serverZeit = juengstes geaendert_am aus Serverdaten (fuer ?seit=…)
+  var serverZeit = '';
+  function merkeServerZeit(entries) {
+    entries.forEach(function (e) { if (e.geaendertAm && e.geaendertAm > serverZeit) serverZeit = e.geaendertAm; });
+  }
+
   function ladeVomServer() {
     var stand;
     return API.get('/api/stand').then(function (r) {
@@ -282,7 +288,33 @@
       return API.get('/api/entries');
     }).then(function (entries) {
       letzterStand = stand;
+      serverZeit = '';
+      merkeServerZeit(entries);
       return entries;
+    });
+  }
+
+  // Stand "<version>|<anzahl>|<version der letzten Vollaenderung>"
+  function standTeile(st) { var t = String(st || '').split('|'); return { anzahl: +t[1], voll: t[2] || '' }; }
+
+  // Nur die seit dem letzten Abruf geaenderten Punkte holen und einmischen.
+  // Passt die Anzahl danach nicht (geloescht) oder gab es eine Vollaenderung
+  // (Import, Reset, Release), wird die ganze Liste geladen.
+  function ladeAenderungen(neuerStand) {
+    var alt = standTeile(letzterStand), neu = standTeile(neuerStand);
+    if (!serverZeit || !letzterStand || alt.voll !== neu.voll) return ladeVomServer();
+    return API.get('/api/entries?seit=' + encodeURIComponent(serverZeit)).then(function (geaendert) {
+      var liste = state.entries.slice();
+      geaendert.forEach(function (raw) {
+        var n = normalizeEntry(raw);
+        var i = liste.findIndex(function (e) { return e.nr === n.nr; });
+        if (i >= 0) liste[i] = n; else liste.push(n);
+      });
+      if (liste.length !== neu.anzahl) return ladeVomServer();
+      liste.sort(function (a, b) { return a.nr - b.nr; });
+      letzterStand = neuerStand;
+      merkeServerZeit(geaendert);
+      return liste;
     });
   }
 
@@ -291,7 +323,7 @@
     API.get('/api/stand')
       .then(function (r) {
         if (online && r.stand === letzterStand) return null;
-        return ladeVomServer();
+        return online ? ladeAenderungen(r.stand) : ladeVomServer();
       })
       .then(function (entries) {
         pollFehler = 0;
