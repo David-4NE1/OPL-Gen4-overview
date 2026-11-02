@@ -385,6 +385,16 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
 }
 .dialog textarea { resize: vertical; }
 .grid2 { display: grid; gap: 0 12px; grid-template-columns: 1fr 1fr; }
+.grid2 .f-komponenten { grid-column: 1 / -1; }
+.chip--komp { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; white-space: normal; text-align: left; }
+/* lange Woerter/URLs im Text duerfen umbrechen, sonst wird die Karte breiter als der Bildschirm */
+.card__todo, .card__meta { overflow-wrap: anywhere; }
+.td-komp { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; white-space: normal; }
+/* Bearbeiten-Dialog breiter, To Do waechst mit (siehe todoHoeheAnpassen) */
+@media (min-width: 900px) {
+  #dlgEdit { width: min(1180px, calc(100vw - 48px)); max-height: calc(100vh - 32px); }
+}
+#fmTodo { min-height: 120px; line-height: 1.45; }
 .dialog__footer { display: flex; gap: 8px; align-items: center; margin-top: 14px; }
 .spacer { flex: 1; }
 .hint { font-size: 12.5px; color: var(--ink-soft); background: var(--bg); padding: 9px 11px; border-radius: 8px; }
@@ -457,7 +467,7 @@ table.opl .sort-ind { opacity: .6; font-size: 10px; }
   .user-input { width: 104px; }
   .filterbar { top: auto; position: static; }
   .grid2 { grid-template-columns: 1fr; }
-  .cards { grid-template-columns: 1fr; }
+  .cards { grid-template-columns: minmax(0, 1fr); }
   main { padding: 12px; }
 }
 
@@ -716,7 +726,7 @@ body:not([data-rolle="admin"]) .nur-admin { display: none !important; }
   .topbar__actions { gap: 6px; margin-left: 0; }
   .topbar__actions .btn { padding: 8px 11px; }
   .user-input, #btnNeu { display: none; }
-  .kpis { flex-wrap: nowrap; overflow-x: auto; margin: 0 -12px; padding: 0 12px 2px; scrollbar-width: none; }
+  .kpis { flex-wrap: nowrap; overflow-x: auto; min-width: 0; max-width: calc(100% + 24px); margin: 0 -12px; padding: 0 12px 2px; scrollbar-width: none; }
   .kpis::-webkit-scrollbar { display: none; }
   .kpi { flex: 0 0 auto; min-width: 66px; padding: 6px 8px; }
   .kpi__label { font-size: 9px; white-space: nowrap; }
@@ -798,6 +808,7 @@ body:not([data-rolle="admin"]) .nur-admin { display: none !important; }
   .f-team { order: 11; }
   .f-nacharbeit { order: 12; }
   .f-zielrelease { order: 12; }
+  .f-komponenten { order: 6; }
   .f-bereich { order: 13; }
   .f-notiz { order: 14; }
   #formEdit .dialog__footer {
