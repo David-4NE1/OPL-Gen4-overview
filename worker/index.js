@@ -28,6 +28,7 @@ import { Buffer } from 'node:buffer';
  *   GET    /api/admin/emails      → Freigabeliste mit Rollen lesen (nur Admin)
  *   POST   /api/admin/emails      → E-Mail(s) freischalten bzw. Rolle setzen { email | emails, rolle } (nur Admin)
  *   DELETE /api/admin/emails/:e   → E-Mail von der Freigabeliste entfernen (nur Admin)
+ *   GET    /api/admin/umzug       → Datenpaket Umzug: alle Tabellen als Rohdaten + Schema, Bilder als Verweis (nur Admin)
  *   POST   /api/translate         → Texte DE→EN maschinell uebersetzen (Workers AI, Cache in D1)
  *   GET    /api/releases          → Releases fuer die Roadmap (Name, Zieltermin, Status, Beschreibung)
  *   POST   /api/releases          → Release anlegen/aendern { name, ziel, status, beschreibung }
@@ -808,7 +809,84 @@ async function handleAdmin(path, method, request, env, sitzung) {
     return json(await listeEmails(db));
   }
 
+  // GET /api/admin/umzug → alle Nutzdaten fuer einen Umzug (ohne Bilddaten)
+  if (path === '/api/admin/umzug' && method === 'GET') {
+    return json(await umzugsDaten(db));
+  }
+
   return json({ error: 'Route nicht gefunden' }, 404);
+}
+
+// Datenpaket Umzug: alle Tabellen mit Nutzdaten als Rohzeilen plus deren
+// CREATE-Anweisungen. Bewusst NICHT enthalten: Sitzungsschluessel und
+// Aenderungszaehler (settings), Login-Fehlversuche, Uebersetzungs-Cache und
+// Secrets (Passwort, Lese-Token). Bilddaten laedt der Browser einzeln ueber
+// /api/bild/..., damit die Antwort klein bleibt.
+const UMZUG_TABELLEN = ['entries', 'changelog', 'forderungen', 'lastenheft_ziele', 'releases', 'allowed_emails', 'settings'];
+const UMZUG_EINSTELLUNGEN = ['lh_fokus'];
+
+async function umzugsDaten(db) {
+  await schemaSicherstellen(db);
+  const platzhalter = UMZUG_TABELLEN.map(() => '?').join(',');
+  const { results: schema } = await db.prepare(
+    `SELECT type, name, tbl_name, sql FROM sqlite_master
+      WHERE tbl_name IN (${platzhalter}) AND sql IS NOT NULL AND type IN ('table', 'index')
+      ORDER BY type = 'index', name`
+  ).bind(...UMZUG_TABELLEN).all();
+
+  // entries ohne die (grosse) Bildspalte; stattdessen Name/Laenge je Bild
+  const { results: spalten } = await db.prepare('PRAGMA table_info(entries)').all();
+  const ohneBilder = spalten.map(s => s.name).filter(n => n !== 'bilder')
+    .map(n => '"' + String(n).replace(/"/g, '""') + '"').join(', ');
+  const { results: entries } = await db.prepare(
+    `SELECT ${ohneBilder},
+            (SELECT json_group_array(json_object(
+                       'i', CAST(j.key AS INTEGER),
+                       'name', json_extract(j.value, '$.name'),
+                       'len', length(json_extract(j.value, '$.src'))))
+               FROM json_each(CASE WHEN json_valid(entries.bilder) THEN entries.bilder ELSE '[]' END) AS j
+            ) AS bilder_meta
+       FROM entries ORDER BY nr`
+  ).all();
+  const eintraege = entries.map(row => {
+    let meta = [];
+    try { meta = JSON.parse(row.bilder_meta || '[]'); } catch { meta = []; }
+    const { bilder_meta, ...rest } = row;
+    return {
+      ...rest,
+      bilder: meta.filter(m => m && m.len > 0).sort((a, b) => a.i - b.i)
+        .map(m => ({ i: m.i, name: m.name || '', src: bildUrl(row.nr, m.i, m.len) }))
+    };
+  });
+
+  const alle = async sql => (await db.prepare(sql).all()).results;
+  const [changelog, forderungen, ziele, releases, emails, settings] = await Promise.all([
+    alle('SELECT * FROM changelog ORDER BY id'),
+    alle('SELECT * FROM forderungen ORDER BY kategorie, pos, id'),
+    alle('SELECT * FROM lastenheft_ziele ORDER BY schluessel'),
+    alle('SELECT * FROM releases ORDER BY name'),
+    alle('SELECT * FROM allowed_emails ORDER BY email'),
+    db.prepare(`SELECT key, value FROM settings WHERE key IN (${UMZUG_EINSTELLUNGEN.map(() => '?').join(',')})`)
+      .bind(...UMZUG_EINSTELLUNGEN).all().then(r => r.results)
+  ]);
+
+  return {
+    format: 'opl-umzug',
+    version: 1,
+    exportiert_am: new Date().toISOString(),
+    admin_email: ADMIN_EMAIL,
+    rollen: ROLLEN,
+    schema,
+    tabellen: {
+      entries: eintraege,
+      changelog,
+      forderungen,
+      lastenheft_ziele: ziele,
+      releases,
+      allowed_emails: emails,
+      settings
+    }
+  };
 }
 
 /* -------------------------------------------------------- Uebersetzung */
