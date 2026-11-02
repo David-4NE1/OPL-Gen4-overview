@@ -275,7 +275,7 @@
   /* ------------------------------------------------------------------ */
 
   var HEADERS = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Bilder', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit', 'Ziel-Release', 'Unterthema'];
+                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Bilder', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit', 'Ziel-Release', 'Unterthema', 'Komponenten'];
 
   // Feste Anzeigegroesse je eingebettetem Bild in Pixel (96 dpi).
   var IMG_W_PX = 110, IMG_H_PX = 80, IMG_GAP_PX = 6;
@@ -391,7 +391,8 @@
         cellStr('M' + r, e.baugruppe ? S.CELL : S.PFLEGE, e.baugruppe || ''),
         cellStr('N' + r, S.CELL, e.nacharbeit || ''),
         cellStr('O' + r, S.TEXT, e.zielRelease || ''),
-        cellStr('P' + r, S.CELL, e.unterthema || '')
+        cellStr('P' + r, S.CELL, e.unterthema || ''),
+        cellStr('Q' + r, S.TEXT, e.komponenten || '')
       ];
 
       var bilder = (e.bilder || []).map(function (b) { return dataUrlToBytes(b.src); })
@@ -465,11 +466,12 @@
         '<col min="14" max="14" width="24" customWidth="1"/>' +
         '<col min="15" max="15" width="13" style="' + S.TEXT + '" customWidth="1"/>' +
         '<col min="16" max="16" width="30" customWidth="1"/>' +
+        '<col min="17" max="17" width="24" style="' + S.TEXT + '" customWidth="1"/>' +
       '</cols>' +
       '<sheetData>' + rows.join('') + '</sheetData>' +
-      '<autoFilter ref="A7:P' + last + '"/>' +
+      '<autoFilter ref="A7:Q' + last + '"/>' +
       '<mergeCells count="3">' +
-        '<mergeCell ref="A1:P1"/><mergeCell ref="A2:P2"/><mergeCell ref="H5:I5"/>' +
+        '<mergeCell ref="A1:Q1"/><mergeCell ref="A2:Q2"/><mergeCell ref="H5:I5"/>' +
       '</mergeCells>' +
       '<dataValidations count="' + (4 + (opts.themen ? 1 : 0) + (opts.baugruppen ? 1 : 0) + (opts.nacharbeit ? 1 : 0) + (opts.zielReleases ? 1 : 0)) + '">' +
         (opts.themen ? validation('list', 'C' + first + ':C' + last, '"' + opts.themen.join(',') + '"') : '') +
@@ -735,7 +737,8 @@
           baugruppe: feldWert(rn, 'Baugruppe', zelle('baugruppe'), BAUGRUPPEN, ALIAS_BAUGRUPPE, warnungen),
           nacharbeit: feldWert(rn, 'Nacharbeit', zelle('nacharbeit'), NACHARBEIT, {}, warnungen),
           zielRelease: feldWert(rn, 'Ziel-Release', zielReleaseText(zelle('zielRelease')), ZIEL_RELEASES, {}, warnungen),
-          unterthema: (zelle('unterthema') || '').trim()
+          unterthema: (zelle('unterthema') || '').trim(),
+          komponenten: String(zelle('komponenten') || '').trim()
         };
         entries.push(eintrag);
         entryByRow[rn] = eintrag;
@@ -783,7 +786,8 @@
     ['baugruppe', /^baugruppe/, 13],
     ['nacharbeit', /^nacharbeit/, 14],
     ['zielRelease', /^(zielrelease|release)/, 15],
-    ['unterthema', /^unterthema/, 16]
+    ['unterthema', /^unterthema/, 16],
+    ['komponenten', /^(komponente|komponenten|bauteil|bauteile|bauteilnr|teilenr|teilenummer|teilenummern|teile)$/, 17]
   ];
 
   function spaltenAusKopf(kopfZeile) {

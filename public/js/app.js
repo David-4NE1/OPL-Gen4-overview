@@ -206,7 +206,7 @@
     if (quick === 'niedrig' && !(e.prio === 'Niedrig' && e.status !== 'Erledigt')) return false;
     if (quick === 'ueberfaellig' && !Store.istUeberfaellig(e)) return false;
     if (filter.suche) {
-      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.nacharbeit, e.zielRelease, e.unterthema, e.lhTitel, e.anforderung, e.bereich, e.notiz,
+      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.nacharbeit, e.zielRelease, e.unterthema, e.komponenten, e.lhTitel, e.anforderung, e.bereich, e.notiz,
         TR[e.thema], TR[e.todo], TR[e.notiz], T(e.bereich), T(e.status), T(e.prio)]
         .join(' ').toLowerCase();
       if (hay.indexOf(filter.suche) < 0) return false;
@@ -477,6 +477,14 @@
     bg.addEventListener('click', function () { oeffneEdit(e.nr, 'baugruppe'); });
     meta.appendChild(bg);
 
+    if (e.komponenten) {
+      var ko = el('button', 'chip chip--komp', '🔩 ' + e.komponenten);
+      ko.type = 'button';
+      ko.title = T('Komponenten');
+      ko.addEventListener('click', function () { oeffneEdit(e.nr, 'komponenten'); });
+      meta.appendChild(ko);
+    }
+
     if (e.zielRelease) {
       var zr = el('button', 'chip chip--ziel', '🎯 ' + e.zielRelease);
       zr.type = 'button';
@@ -541,6 +549,7 @@
     { feld: 'thema', label: 'Thema' },
     { feld: 'unterthema', label: 'Unterthema' },
     { feld: 'baugruppe', label: 'Baugruppe' },
+    { feld: 'komponenten', label: 'Komponenten' },
     { feld: 'nacharbeit', label: 'Nacharbeit' },
     { feld: 'zielRelease', label: 'Ziel-Release' },
     { feld: 'prio', label: 'Prio' },
@@ -580,6 +589,7 @@
       row.appendChild(el('td', Store.istThema(e.thema) ? null : 'is-warn', Store.istThema(e.thema) ? T(e.thema) : (e.thema ? '⚠ ' + tx(e.thema) : '⚠')));
       row.appendChild(el('td', null, e.unterthema ? T(e.unterthema) : '–'));
       row.appendChild(el('td', null, e.baugruppe ? T(e.baugruppe) : '–'));
+      row.appendChild(el('td', 'td-komp', e.komponenten || '–'));
       row.appendChild(el('td', null, e.nacharbeit ? T(e.nacharbeit) : '–'));
       row.appendChild(el('td', null, e.zielRelease || '–'));
 
@@ -830,6 +840,15 @@
     }
   }
 
+  // To Do waechst mit dem Text, damit er ohne inneres Scrollen lesbar ist
+  // (Obergrenze: gut die Haelfte der Fensterhoehe)
+  function todoHoeheAnpassen() {
+    var t = $('#fmTodo');
+    if (!t) return;
+    t.style.height = 'auto';
+    t.style.height = Math.min(t.scrollHeight + 4, Math.max(160, Math.round(window.innerHeight * 0.55))) + 'px';
+  }
+
   function oeffneEdit(nr, fokus) {
     if (nr == null && !Store.darf('bearbeiten')) return;
     editNr = nr == null ? null : nr;
@@ -845,10 +864,12 @@
     $('#fmSeite').value = e ? (e.seite || '') : '';
     $('#fmNacharbeit').value = e ? (e.nacharbeit || '') : '';
     $('#fmZielRelease').value = e ? (e.zielRelease || '') : einzigerFilter('zielRelease');
+    $('#fmKomponenten').value = e ? (e.komponenten || '') : '';
     $('#fmLhTitel').value = e ? (e.lhTitel || '') : '';
     $('#fmAnforderung').value = e ? (e.anforderung || '') : '';
     $('#fmFaellig').value = e ? e.faellig : '';
     $('#fmTodo').value = e ? e.todo : '';
+    setTimeout(todoHoeheAnpassen, 0);
     $('#fmNotiz').value = e ? e.notiz : '';
     $('#fmBilder').value = '';
     $('#fmLangHint').hidden = !EN;
@@ -882,6 +903,7 @@
       else if (fokus === 'baugruppe') $('#fmBaugruppe').focus();
       else if (fokus === 'nacharbeit') $('#fmNacharbeit').focus();
       else if (fokus === 'zielRelease') $('#fmZielRelease').focus();
+      else if (fokus === 'komponenten') $('#fmKomponenten').focus();
       else if (fokus === 'anforderung') $('#fmAnforderung').focus();
       else $('#fmThema').focus();
     }, 30);
@@ -900,6 +922,7 @@
       seite: $('#fmSeite').value,
       nacharbeit: $('#fmNacharbeit').value,
       zielRelease: $('#fmZielRelease').value,
+      komponenten: Store.komponentenNormalisieren($('#fmKomponenten').value),
       lhTitel: $('#fmLhTitel').value.trim(),
       anforderung: $('#fmAnforderung').value.trim(),
       faellig: $('#fmFaellig').value,
@@ -1503,7 +1526,7 @@
 
   function exportCsv() {
     var kopf = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit', 'Ziel-Release', 'Unterthema'];
+                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit', 'Ziel-Release', 'Unterthema', 'Komponenten'];
     function q(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
     var zeilen = [kopf.map(q).join(';')];
     var auswahl = exportEintraege();
@@ -1517,7 +1540,8 @@
         e.baugruppe,
         e.nacharbeit,
         e.zielRelease,
-        e.unterthema
+        e.unterthema,
+        e.komponenten
       ].map(q).join(';'));
     });
     // BOM, damit Excel UTF-8 erkennt
@@ -1961,6 +1985,7 @@
       }).catch(function (err) { toast(err.message, true); });
     });
 
+    $('#fmTodo').addEventListener('input', todoHoeheAnpassen);
     $('#formEdit').addEventListener('submit', function (ev) {
       ev.preventDefault();
       if (editSpeichern()) {

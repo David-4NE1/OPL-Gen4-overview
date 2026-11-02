@@ -129,6 +129,17 @@
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
+  // Komponenten: Teilenummern (z. B. 4101, 47012) oder Kennungen (X8, RMD-X8);
+  // getrennt durch Komma, Semikolon, Leerzeichen oder Zeilenumbruch.
+  // Gespeichert als "4101, 4701, X8": eindeutig, Grossbuchstaben, max. 30 IDs.
+  function komponentenNormalisieren(v) {
+    var gesehen = {};
+    return String(v == null ? '' : v).split(/[\s,;|]+/)
+      .map(function (t) { return t.trim().replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '').toUpperCase(); })
+      .filter(function (t) { return t && t.length <= 30 && /^[A-Z0-9][A-Z0-9._\/-]*$/.test(t) && !gesehen[t] && (gesehen[t] = true); })
+      .slice(0, 30).join(', ');
+  }
+
   function normalizeEntry(e) {
     return {
       nr: e.nr,
@@ -143,6 +154,7 @@
       zielRelease: ZIEL_RELEASES.indexOf(e.zielRelease) >= 0 ? e.zielRelease
         : (e.status === 'Erledigt' ? ZIEL_RELEASE_ERLEDIGT : ''),
       unterthema: unterthemenVon(e.thema).indexOf(e.unterthema) >= 0 ? e.unterthema : '',
+      komponenten: komponentenNormalisieren(e.komponenten),
       // Lastenheft: Kurztitel und Anforderung (Zielzustand) zum OPL-Punkt
       lhTitel: String(e.lhTitel || '').trim(),
       anforderung: String(e.anforderung || '').trim(),
@@ -366,7 +378,7 @@
   }
 
   var FELDER = ['bereich', 'thema', 'prio', 'verantwortlicher', 'verantwortlichkeit', 'baugruppe', 'seite',
-    'nacharbeit', 'zielRelease', 'unterthema', 'release', 'faellig', 'status', 'todo', 'notiz', 'lhTitel', 'anforderung'];
+    'nacharbeit', 'zielRelease', 'unterthema', 'komponenten', 'release', 'faellig', 'status', 'todo', 'notiz', 'lhTitel', 'anforderung'];
 
   // Gleicher Fingerabdruck wie bildSignatur() im Worker (Anzahl und Namen)
   function bildSignatur(bilder) {
@@ -431,7 +443,7 @@
 
   var FELD_NAMEN = {
     bereich: 'Bereich', thema: 'Thema', prio: 'Prio', verantwortlicher: 'Verantwortlicher',
-    verantwortlichkeit: 'Verantwortlichkeit', baugruppe: 'Baugruppe', seite: 'Seite', nacharbeit: 'Nacharbeit', zielRelease: 'Ziel-Release',
+    verantwortlichkeit: 'Verantwortlichkeit', baugruppe: 'Baugruppe', seite: 'Seite', nacharbeit: 'Nacharbeit', zielRelease: 'Ziel-Release', komponenten: 'Komponenten',
     release: 'Release', faellig: 'Bis wann', status: 'Status', todo: 'To Do', notiz: 'Notiz', bilder: 'Bilder',
     unterthema: 'Unterthema', lhTitel: 'Lastenheft-Titel', anforderung: 'Anforderung'
   };
@@ -525,6 +537,7 @@
           n.release = n.release || vorhanden.release;
           n.seite = n.seite || vorhanden.seite;
           n.nacharbeit = n.nacharbeit || vorhanden.nacharbeit;
+          n.komponenten = n.komponenten || vorhanden.komponenten;
           if (!n.unterthema && n.thema === vorhanden.thema) n.unterthema = vorhanden.unterthema;
           n.lhTitel = n.lhTitel || vorhanden.lhTitel;
           n.anforderung = n.anforderung || vorhanden.anforderung;
@@ -591,6 +604,6 @@
     load: load, subscribe: subscribe, onError: onError, onStatus: onStatus, isOnline: isOnline,
     add: add, update: update, updateNacheinander: updateNacheinander, remove: remove, cycle: cycle, byNr: byNr,
     setUser: setUser, setRolle: setRolle, darf: darf, applyImport: applyImport, reset: reset,
-    istUeberfaellig: istUeberfaellig, heute: heute, clone: clone
+    istUeberfaellig: istUeberfaellig, komponentenNormalisieren: komponentenNormalisieren, heute: heute, clone: clone
   };
 })(window);
