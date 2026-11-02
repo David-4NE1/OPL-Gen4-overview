@@ -3,3 +3,5 @@ package-lock.json
 .DS_Store
 .wrangler/
 .dev.vars
+tools/opl-spiegel/token.txt
+tools/opl-spiegel/*.sqlite

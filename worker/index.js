@@ -9,7 +9,7 @@ import { Buffer } from 'node:buffer';
  *   GET    /api/auth              → Auth-Status prüfen
  *   GET    /api/logout            → Abmelden (löscht Cookie)
  *   GET    /api/health            → Erreichbarkeit (kein Auth, keine Daten)
- *   GET    /api/entries           → alle Einträge (Sitzung ODER Bearer READ_TOKEN)
+ *   GET    /api/entries           → alle Einträge (Sitzung ODER Bearer READ_TOKEN); ?seit=<ISO> nur geänderte
  *   GET    /api/stand             → Aenderungsstand (kleiner Fingerabdruck fuers Polling)
  *   GET    /api/entries/:nr       → ein Eintrag
  *   GET    /api/bild/:nr/:i       → einzelnes Bild als Binaerdatei
@@ -23,7 +23,8 @@ import { Buffer } from 'node:buffer';
  *   DELETE /api/entries/:nr       → Eintrag löschen
  *   POST   /api/import            → Bulk-Import (ersetzen / zusammenführen)
  *   POST   /api/reset             → auf Seed-Stand zurücksetzen
- *   GET    /api/log               → Änderungsprotokoll (neueste zuerst, max 500)
+ *   GET    /api/log               → Änderungsprotokoll (neueste zuerst, max 500; Sitzung ODER Bearer READ_TOKEN);
+ *                                    ?nach_id=<id>&limit=<n> aufsteigend ab id (inkrementelles Abholen)
  *   GET    /api/admin/emails      → Freigabeliste mit Rollen lesen (nur Admin)
  *   POST   /api/admin/emails      → E-Mail(s) freischalten bzw. Rolle setzen { email | emails, rolle } (nur Admin)
  *   DELETE /api/admin/emails/:e   → E-Mail von der Freigabeliste entfernen (nur Admin)
@@ -172,8 +173,9 @@ async function authSchemaSicherstellen(db) {
   authSchemaOk = true;
 }
 
-// Read-only Zugang fuer GET /api/entries per Bearer-Token (fuer maschinelle
-// Konsumenten wie den Planner). Konstante Zeit, damit die Antwortzeit nicht
+// Read-only Zugang fuer GET /api/entries und GET /api/log per Bearer-Token
+// (fuer maschinelle Konsumenten wie den Planner und den Datenspiegel auf dem
+// internen Server). Nie fuer schreibende Routen. Konstante Zeit, damit die Antwortzeit nicht
 // Stueck fuer Stueck den richtigen Wert verraet. Greift NICHT, wenn
 // READ_TOKEN nicht gesetzt ist.
 function tokenGueltig(request, env) {
@@ -265,12 +267,14 @@ async function handleAPI(url, method, request, env) {
     return json({ ok: true });
   }
 
-  // GET /api/entries per Bearer-Token (read-only, fuer maschinelle Konsumenten).
-  // Gilt ausschliesslich fuer diese eine Route/Methode und ersetzt die
+  // GET /api/entries und GET /api/log per Bearer-Token (read-only, fuer
+  // maschinelle Konsumenten wie den Datenspiegel auf dem internen Server).
+  // Gilt ausschliesslich fuer diese zwei Routen mit GET und ersetzt die
   // Cookie-Pruefung nicht, sondern ergaenzt sie nur als Alternative.
-  if (path === '/api/entries' && method === 'GET' && tokenGueltig(request, env)) {
+  if (method === 'GET' && (path === '/api/entries' || path === '/api/log') && tokenGueltig(request, env)) {
     await schemaSicherstellen(env.DB);
-    return json(await listeEintraege(env.DB));
+    if (path === '/api/log') return json(await protokollLesen(env.DB, url));
+    return json(await listeEintraege(env.DB, seitParam(url)));
   }
 
   // --- Ab hier: gueltige Sitzung erforderlich ---
@@ -312,8 +316,7 @@ async function handleAPI(url, method, request, env) {
   // geaenderten Punkte (Index auf geaendert_am, liest also nur diese Zeilen;
   // ohne ORDER BY, sonst waehlt SQLite den Scan ueber nr – sortiert wird im Browser)
   if (path === '/api/entries' && method === 'GET') {
-    const seit = url.searchParams.get('seit');
-    return json(await listeEintraege(db, seit && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(seit) ? seit : null));
+    return json(await listeEintraege(db, seitParam(url)));
   }
 
   if (path === '/api/releases' || path.startsWith('/api/releases/')) {
@@ -487,10 +490,7 @@ async function handleAPI(url, method, request, env) {
 
   // GET /api/log
   if (path === '/api/log' && method === 'GET') {
-    const { results } = await db.prepare(
-      'SELECT * FROM changelog ORDER BY id DESC LIMIT 500'
-    ).all();
-    return json(results);
+    return json(await protokollLesen(db, url));
   }
 
   return json({ error: 'Route nicht gefunden' }, 404);
@@ -904,6 +904,26 @@ function mitBildVerweisen(e) {
 
 // Kartenliste ohne Base64-Bilddaten. Die Bild-Metadaten (Name, Laenge) ermittelt
 // D1 per JSON-Funktionen, damit der Worker die grossen Daten nie parsen muss.
+// ?seit=<ISO-Zeitpunkt> fuer "nur geaenderte Punkte"; alles andere wird ignoriert
+function seitParam(url) {
+  const seit = url.searchParams.get('seit');
+  return seit && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(seit) ? seit : null;
+}
+
+// Protokoll: ohne Parameter die neuesten 500 (Anzeige im Board); mit
+// ?nach_id=<id> aufsteigend ab dieser id (Primaerschluessel, liest nur neue Zeilen)
+async function protokollLesen(db, url) {
+  const nachId = url.searchParams.get('nach_id');
+  if (nachId == null) {
+    const { results } = await db.prepare('SELECT * FROM changelog ORDER BY id DESC LIMIT 500').all();
+    return results;
+  }
+  const limit = Math.min(5000, Math.max(1, parseInt(url.searchParams.get('limit'), 10) || 1000));
+  const { results } = await db.prepare('SELECT * FROM changelog WHERE id > ? ORDER BY id LIMIT ?')
+    .bind(Math.max(0, parseInt(nachId, 10) || 0), limit).all();
+  return results;
+}
+
 async function listeEintraege(db, seit) {
   const { results } = await db.prepare(
     `SELECT nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, seite, nacharbeit, ziel_release, unterthema, komponenten, lh_titel, anforderung, release, faellig, status, todo, notiz,
