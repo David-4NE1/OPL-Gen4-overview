@@ -1524,6 +1524,203 @@
     });
   }
 
+  /* ------------------------------------------------ Datenpaket Umzug */
+
+  // Admin: ZIP mit allem, was fuer einen Umzug der OPL noetig ist – alle
+  // Tabellen als JSON (Rohspalten wie in der Datenbank), Bilder als Dateien,
+  // Schema, ein Skript zum Einspielen in SQLite und die Excel-Liste zum Ansehen.
+  var MIME_ENDUNG = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg', 'image/bmp': 'bmp' };
+
+  function datenpaketUmzug() {
+    var enc = new TextEncoder();
+    var dateien = [];
+    function datei(name, inhalt) {
+      dateien.push({ name: name, data: typeof inhalt === 'string' ? enc.encode(inhalt) : inhalt });
+    }
+    function jsonText(o) { return JSON.stringify(o, null, 2) + '\n'; }
+
+    toast(T('Datenpaket wird erstellt …'));
+    var d, bildStat = { ok: 0, fehler: 0, bytes: 0 };
+    fetch('/api/admin/umzug', { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (daten) {
+      d = daten;
+      if (d.format !== 'opl-umzug') throw new Error(T('Unerwartete Antwort vom Server'));
+      // Bilder nacheinander (4 parallel) als Dateien holen
+      var jobs = [];
+      d.tabellen.entries.forEach(function (e) {
+        e.bilder.forEach(function (b, k) {
+          jobs.push({ e: e, b: b, k: k });
+        });
+      });
+      var gesamt = jobs.length, fertig = 0, pos = 0;
+      function weiter() {
+        if (pos >= jobs.length) return Promise.resolve();
+        var j = jobs[pos++];
+        return fetch(j.b.src).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.blob();
+        }).then(function (blob) {
+          return blob.arrayBuffer().then(function (buf) {
+            var mime = (blob.type || '').split(';')[0].toLowerCase();
+            var name = 'bilder/OPL-' + j.e.nr + '_' + (j.k + 1) + '.' + (MIME_ENDUNG[mime] || 'bin');
+            datei(name, new Uint8Array(buf));
+            j.b.datei = name;
+            j.b.mime = mime || 'application/octet-stream';
+            bildStat.ok++;
+            bildStat.bytes += buf.byteLength;
+          });
+        }).catch(function (err) {
+          console.error(err);
+          j.b.fehler = String(err.message || err);
+          bildStat.fehler++;
+        }).then(function () {
+          fertig++;
+          if (fertig % 10 === 0 || fertig === gesamt) {
+            toast(T('Datenpaket: Bilder {n} von {g} …', { n: fertig, g: gesamt }));
+          }
+          return weiter();
+        });
+      }
+      return Promise.all([weiter(), weiter(), weiter(), weiter()]);
+    }).then(function () {
+      var t = d.tabellen;
+      // Bildverweise durch Dateinamen ersetzen (src wuerde auf die alte Adresse zeigen)
+      var punkte = t.entries.map(function (e) {
+        return Object.assign({}, e, {
+          bilder: e.bilder.map(function (b) {
+            return b.datei ? { name: b.name, datei: b.datei, mime: b.mime } : { name: b.name, fehler: b.fehler || 'nicht geladen' };
+          })
+        });
+      });
+      var schemaSql = '-- Schema der OPL-Datenbank (Cloudflare D1 = SQLite), Stand ' + d.exportiert_am + '\n\n' +
+        d.schema.map(function (s) {
+          return String(s.sql).replace(/^CREATE (UNIQUE )?(TABLE|INDEX) (?!IF NOT EXISTS)/i, 'CREATE $1$2 IF NOT EXISTS ') + ';';
+        }).join('\n\n') + '\n';
+      var anzahl = {
+        punkte: punkte.length,
+        bilder: bildStat.ok,
+        bilder_fehlend: bildStat.fehler,
+        protokoll: t.changelog.length,
+        forderungen: t.forderungen.length,
+        lastenheft_ziele: t.lastenheft_ziele.length,
+        releases: t.releases.length,
+        zugriff: t.allowed_emails.length,
+        einstellungen: t.settings.length
+      };
+      datei('daten/punkte.json', jsonText(punkte));
+      datei('daten/protokoll.json', jsonText(t.changelog));
+      datei('daten/forderungen.json', jsonText(t.forderungen));
+      datei('daten/lastenheft_ziele.json', jsonText(t.lastenheft_ziele));
+      datei('daten/releases.json', jsonText(t.releases));
+      datei('daten/zugriff.json', jsonText({ admin_email: d.admin_email, rollen: d.rollen, freigaben: t.allowed_emails }));
+      datei('daten/einstellungen.json', jsonText(t.settings));
+      datei('daten/schema.sql', schemaSql);
+      datei('manifest.json', jsonText({
+        format: d.format, version: d.version, exportiert_am: d.exportiert_am,
+        exportiert_von: Store.state.user || '', quelle: location.origin,
+        anzahl: anzahl, bilder_bytes: bildStat.bytes,
+        tabellen: {
+          'daten/punkte.json': 'entries', 'daten/protokoll.json': 'changelog',
+          'daten/forderungen.json': 'forderungen', 'daten/lastenheft_ziele.json': 'lastenheft_ziele',
+          'daten/releases.json': 'releases', 'daten/zugriff.json': 'allowed_emails (freigaben)',
+          'daten/einstellungen.json': 'settings'
+        }
+      }));
+      datei('LIESMICH.txt', umzugLiesmich(d, anzahl).replace(/\n/g, '\r\n'));
+      // Einspiel-Skript und Excel (zum Ansehen) dazu
+      return Promise.all([
+        fetch('assets/umzug/opl_umzug_einspielen.py', { cache: 'no-store' })
+          .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+          .then(function (buf) { datei('opl_umzug_einspielen.py', new Uint8Array(buf)); })
+          .catch(function (err) { console.error(err); }),
+        mitBildDaten(Store.state.entries.slice().sort(function (a, b) { return a.nr - b.nr; })).then(function (entries) {
+          return Xlsx.exportWorkbook(entries, {
+            stand: Xlsx.ddmmyyyy(Store.heute()), bereiche: Store.BEREICHE, themen: Store.THEMEN,
+            baugruppen: Store.BAUGRUPPEN, nacharbeit: Store.NACHARBEIT, zielReleases: Store.ZIEL_RELEASES
+          }).arrayBuffer();
+        }).then(function (buf) { datei('OPL_4NE1_Gen4_' + dateiStempel() + '.xlsx', new Uint8Array(buf)); })
+      ]);
+    }).then(function () {
+      // Lesbare Dateien zuerst, Bilder ans Ende
+      dateien.sort(function (a, b) {
+        var ba = a.name.indexOf('bilder/') === 0, bb = b.name.indexOf('bilder/') === 0;
+        return ba === bb ? (ba ? a.name.localeCompare(b.name, 'de', { numeric: true }) : 0) : (ba ? 1 : -1);
+      });
+      download(new Blob([Xlsx.zipBuild(dateien)], { type: 'application/zip' }),
+        'OPL_4NE1_Gen4_Datenpaket-Umzug_' + dateiStempel() + '.zip');
+      if (bildStat.fehler) {
+        toast(T('Datenpaket erstellt, aber {f} Bilder fehlen (siehe LIESMICH.txt).', { f: bildStat.fehler }), true);
+      } else {
+        toast(T('Datenpaket erstellt: {p} Punkte, {b} Bilder, {l} Protokollzeilen.',
+          { p: d.tabellen.entries.length, b: bildStat.ok, l: d.tabellen.changelog.length }));
+      }
+    }).catch(function (err) {
+      console.error(err);
+      toast(T('Datenpaket fehlgeschlagen: {msg}', { msg: err.message }), true);
+    });
+  }
+
+  function umzugLiesmich(d, n) {
+    var fehlend = d.tabellen.entries.filter(function (e) {
+      return e.bilder.some(function (b) { return !b.datei; });
+    }).map(function (e) { return e.nr; });
+    return [
+      'OPL 4NE1 Gen4 – Datenpaket Umzug',
+      '================================',
+      '',
+      'Exportiert am: ' + d.exportiert_am + ' (UTC)',
+      'Exportiert von: ' + (Store.state.user || '') + '',
+      'Quelle: ' + location.origin,
+      '',
+      'INHALT',
+      '------',
+      '  ' + n.punkte + ' OPL-Punkte (daten/punkte.json, alle Spalten der Tabelle "entries")',
+      '  ' + n.bilder + ' Bilder (Ordner bilder/, Name: OPL-<Nr>_<laufende Nr>.<Endung>)' +
+        (n.bilder_fehlend ? '  – ' + n.bilder_fehlend + ' konnten NICHT geladen werden (Punkte: ' + fehlend.join(', ') + ')' : ''),
+      '  ' + n.protokoll + ' Zeilen Änderungsprotokoll, vollständig (daten/protokoll.json)',
+      '  ' + n.forderungen + ' Lastenheft-Forderungen inkl. Beschreibung und Beispielen (daten/forderungen.json)',
+      '  ' + n.lastenheft_ziele + ' Lastenheft-Ziele (daten/lastenheft_ziele.json)',
+      '  ' + n.releases + ' Releases der Roadmap (daten/releases.json)',
+      '  ' + n.zugriff + ' freigeschaltete E-Mail-Adressen mit Rolle (daten/zugriff.json)',
+      '  Einstellungen: Fokus-Kategorie im Lastenheft (daten/einstellungen.json)',
+      '  daten/schema.sql – Tabellen und Indizes genau wie in der heutigen Datenbank',
+      '  opl_umzug_einspielen.py – baut daraus eine fertige SQLite-Datenbank',
+      '  OPL_4NE1_Gen4_<Datum>.xlsx – die OPL als Excel mit Bildern, nur zum Ansehen',
+      '  manifest.json – Zähler und Zuordnung Datei → Tabelle (zur Kontrolle)',
+      '',
+      'NICHT ENTHALTEN (bewusst)',
+      '-------------------------',
+      '  - Login-Passwort (OPL_PASSWORD) und Lese-Token (READ_TOKEN): liegen als Secret',
+      '    in Cloudflare und werden auf dem neuen Server neu gesetzt.',
+      '  - Sitzungsschlüssel: alle melden sich nach dem Umzug einmal neu an.',
+      '  - Login-Fehlversuche, Änderungszähler und der Übersetzungs-Cache (DE→EN):',
+      '    entstehen von selbst neu.',
+      '  - Der Programmcode: liegt im Repository (worker/, public/).',
+      '',
+      'SO WIRD DARAUS EINE DATENBANK',
+      '-----------------------------',
+      '  ZIP entpacken, im entpackten Ordner (Python 3, keine Zusatzpakete):',
+      '',
+      '      python opl_umzug_einspielen.py',
+      '',
+      '  Ergebnis: opl.sqlite mit derselben Struktur wie heute in Cloudflare D1',
+      '  (Bilder wieder als Daten in der Spalte "bilder"). Das Skript prüft die',
+      '  Anzahl je Tabelle gegen manifest.json.',
+      '',
+      'HINWEISE',
+      '--------',
+      '  - Die Excel-Datei reicht für einen Umzug NICHT aus: Protokoll, Forderungen,',
+      '    Ziele, Releases und Zugriffsliste fehlen darin.',
+      '  - Das Paket enthält E-Mail-Adressen und Namen (Protokoll) – nur intern',
+      '    ablegen und nicht weitergeben.',
+      '  - Änderungen nach dem Exportzeitpunkt sind nicht enthalten. Für den echten',
+      '    Umzug kurz vorher die OPL auf "nur lesen" stellen und neu exportieren.',
+      ''
+    ].join('\n');
+  }
+
   function exportCsv() {
     var kopf = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit', 'Ziel-Release', 'Unterthema', 'Komponenten'];
@@ -1904,6 +2101,7 @@
       } else if (act === 'roadmap') location.href = 'roadmap.html';
       else if (act === 'log') zeigeLog();
       else if (act === 'admin') zeigeAdmin();
+      else if (act === 'umzug') datenpaketUmzug();
       else if (act === 'reset' && !Store.isOnline()) {
         toast(T('Keine Verbindung zum Server – Zurücksetzen ist gerade nicht möglich.'), true);
       }
@@ -1919,6 +2117,7 @@
 
     if (Store.darf('admin')) {
       $('#btnAdminMenu').hidden = false;
+      $('#btnUmzugMenu').hidden = false;
       $('#adminMenuDivider').hidden = false;
     }
 

@@ -84,6 +84,14 @@
     'Release-Zuordnung in der Roadmap ändern': 'Change release assignment in the roadmap',
     '↺ Auf Excel-Startstand zurücksetzen': '↺ Reset to Excel baseline',
     '🔐 Zugriff verwalten': '🔐 Manage access',
+    '📦 Datenpaket Umzug': '📦 Migration data package',
+    'ZIP mit allen Daten für einen Umzug: Punkte, Bilder, Protokoll, Forderungen, Ziele, Releases, Zugriffsliste': 'ZIP with all data for a migration: items, images, log, requirements, targets, releases, access list',
+    'Datenpaket wird erstellt …': 'Creating data package …',
+    'Unerwartete Antwort vom Server': 'Unexpected response from server',
+    'Datenpaket: Bilder {n} von {g} …': 'Data package: images {n} of {g} …',
+    'Datenpaket erstellt, aber {f} Bilder fehlen (siehe LIESMICH.txt).': 'Data package created, but {f} images are missing (see LIESMICH.txt).',
+    'Datenpaket erstellt: {p} Punkte, {b} Bilder, {l} Protokollzeilen.': 'Data package created: {p} items, {b} images, {l} log entries.',
+    'Datenpaket fehlgeschlagen: {msg}': 'Data package failed: {msg}',
     '🚪 Abmelden': '🚪 Sign out',
 
     // Filterleiste
