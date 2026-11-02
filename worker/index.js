@@ -204,6 +204,11 @@ export default {
 
     try {
       const res = await handleAPI(url, method, request, env);
+      // Jede erfolgreiche Schreibanfrage erhoeht den Aenderungsstand, den die
+      // Browser alle 30 s abfragen (eine einzige Zeile statt Tabellen-Scans).
+      if (method !== 'GET' && res.ok && STAND_RELEVANT.test(url.pathname)) {
+        try { await standErhoehen(env.DB, STAND_VOLL.test(url.pathname) || method === 'DELETE'); } catch (e) { /* Stand ist nur ein Hinweis */ }
+      }
       return corsResponse(res);
     } catch (err) {
       return corsResponse(json({ error: err.message }, 500));
@@ -303,9 +308,12 @@ async function handleAPI(url, method, request, env) {
     return json({ stand: await aenderungsStand(db) });
   }
 
-  // GET /api/entries
+  // GET /api/entries – volle Liste; mit ?seit=<geaendert_am> nur die seitdem
+  // geaenderten Punkte (Index auf geaendert_am, liest also nur diese Zeilen;
+  // ohne ORDER BY, sonst waehlt SQLite den Scan ueber nr – sortiert wird im Browser)
   if (path === '/api/entries' && method === 'GET') {
-    return json(await listeEintraege(db));
+    const seit = url.searchParams.get('seit');
+    return json(await listeEintraege(db, seit && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(seit) ? seit : null));
   }
 
   if (path === '/api/releases' || path.startsWith('/api/releases/')) {
@@ -493,15 +501,27 @@ async function handleAPI(url, method, request, env) {
 // Jede Schreib-Route aendert mindestens einen dieser Werte: Anlegen/Loeschen
 // die Anzahl, Bearbeiten (auch nur Bilder) geaendert_am, Import/Reset das
 // Protokoll bzw. die Anzahl.
+// Schreibrouten, nach denen sich der Stand aendert; nach Import, Reset und
+// Release-Aenderungen laden die Browser die volle Liste (STAND_VOLL), sonst
+// nur die geaenderten Punkte.
+const STAND_RELEVANT = /^\/api\/(entries|import|reset|releases|forderungen|ziele)/;
+const STAND_VOLL = /^\/api\/(import|reset|releases)/;
+
+// Stand = "<version>|<anzahl punkte>|<version der letzten Vollaenderung>"
+async function standErhoehen(db, voll) {
+  const alt = await db.prepare("SELECT value FROM settings WHERE key = 'stand'").first();
+  const [, , altVoll] = String(alt?.value || '').split('|');
+  const version = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const anzahl = (await db.prepare('SELECT COUNT(*) AS n FROM entries').first()).n;
+  const wert = [version, anzahl, voll || !altVoll ? version : altVoll].join('|');
+  await db.prepare("INSERT INTO settings (key, value) VALUES ('stand', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+    .bind(wert).run();
+  return wert;
+}
+
 async function aenderungsStand(db) {
-  const row = await db.prepare(
-    `SELECT (SELECT COUNT(*) FROM entries) AS n,
-            (SELECT MAX(geaendert_am) FROM entries) AS g,
-            (SELECT MAX(id) FROM changelog) AS l,
-            (SELECT COUNT(*) FROM changelog) AS lc,
-            (SELECT COUNT(*) || '/' || IFNULL(MAX(geaendert_am), '') FROM releases) AS r`
-  ).first();
-  return [row.n, row.g || '', row.l || 0, row.lc, row.r || ''].join('|');
+  const row = await db.prepare("SELECT value FROM settings WHERE key = 'stand'").first();
+  return row ? row.value : standErhoehen(db, true);
 }
 
 /* ------------------------------------------------------ Lastenheft-Ziele */
@@ -884,7 +904,7 @@ function mitBildVerweisen(e) {
 
 // Kartenliste ohne Base64-Bilddaten. Die Bild-Metadaten (Name, Laenge) ermittelt
 // D1 per JSON-Funktionen, damit der Worker die grossen Daten nie parsen muss.
-async function listeEintraege(db) {
+async function listeEintraege(db, seit) {
   const { results } = await db.prepare(
     `SELECT nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, seite, nacharbeit, ziel_release, unterthema, komponenten, lh_titel, anforderung, release, faellig, status, todo, notiz,
             erstellt_am, geaendert_am, geaendert_von,
@@ -894,8 +914,8 @@ async function listeEintraege(db) {
                        'len', length(json_extract(j.value, '$.src'))))
                FROM json_each(CASE WHEN json_valid(entries.bilder) THEN entries.bilder ELSE '[]' END) AS j
             ) AS bilder_meta
-       FROM entries ORDER BY nr`
-  ).all();
+       FROM entries ${seit ? 'WHERE geaendert_am >= ?' : 'ORDER BY nr'}`
+  ).bind(...(seit ? [seit] : [])).all();
   return results.map(row => {
     let meta = [];
     try { meta = JSON.parse(row.bilder_meta || '[]'); } catch { meta = []; }
@@ -989,6 +1009,8 @@ async function schemaSicherstellen(db) {
         .bind(ZIEL_RELEASE_ERLEDIGT)
     ]);
   }
+  await db.prepare('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)').run();
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_entries_geaendert ON entries (geaendert_am)').run();
   await db.prepare(`CREATE TABLE IF NOT EXISTS lastenheft_ziele (
     schluessel TEXT PRIMARY KEY, anforderung TEXT NOT NULL DEFAULT '', ziel TEXT NOT NULL DEFAULT '',
     geaendert_am TEXT NOT NULL DEFAULT '', geaendert_von TEXT NOT NULL DEFAULT '')`).run();
