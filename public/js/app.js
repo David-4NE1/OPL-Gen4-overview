@@ -1631,10 +1631,12 @@
       datei('LIESMICH.txt', umzugLiesmich(d, anzahl).replace(/\n/g, '\r\n'));
       // Einspiel-Skript und Excel (zum Ansehen) dazu
       return Promise.all([
-        fetch('assets/umzug/opl_umzug_einspielen.py', { cache: 'no-store' })
-          .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
-          .then(function (buf) { datei('opl_umzug_einspielen.py', new Uint8Array(buf)); })
-          .catch(function (err) { console.error(err); }),
+        Promise.all(['opl_umzug_einspielen.py', 'opl_umzug_einspielen.mjs', 'testbetrieb.ps1'].map(function (n) {
+          return fetch('assets/umzug/' + n, { cache: 'no-store' })
+            .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+            .then(function (buf) { datei(n, new Uint8Array(buf)); })
+            .catch(function (err) { console.error(err); });
+        })),
         mitBildDaten(Store.state.entries.slice().sort(function (a, b) { return a.nr - b.nr; })).then(function (entries) {
           return Xlsx.exportWorkbook(entries, {
             stand: Xlsx.ddmmyyyy(Store.heute()), bereiche: Store.BEREICHE, themen: Store.THEMEN,
@@ -1689,6 +1691,7 @@
       '  opl_umzug_einspielen.py – baut daraus eine fertige SQLite-Datenbank',
       '  OPL_4NE1_Gen4_<Datum>.xlsx – die OPL als Excel mit Bildern, nur zum Ansehen',
       '  manifest.json – Zähler und Zuordnung Datei → Tabelle (zur Kontrolle)',
+      '  testbetrieb.ps1 + opl_umzug_einspielen.mjs – OPL mit diesen Daten testweise starten',
       '',
       'NICHT ENTHALTEN (bewusst)',
       '-------------------------',
@@ -1708,6 +1711,19 @@
       '  Ergebnis: opl.sqlite mit derselben Struktur wie heute in Cloudflare D1',
       '  (Bilder wieder als Daten in der Spalte "bilder"). Das Skript prüft die',
       '  Anzahl je Tabelle gegen manifest.json.',
+      '',
+      'TESTBETRIEB AUF EINEM WINDOWS-SERVER',
+      '------------------------------------',
+      '  Im entpackten Ordner in einer normalen PowerShell (keine Admin-Rechte nötig):',
+      '',
+      '      powershell -ExecutionPolicy Bypass -File .\\testbetrieb.ps1',
+      '',
+      '  Lädt Node.js (portabel), den Programmcode von GitHub und Wrangler in den',
+      '  Unterordner "testbetrieb", fragt ein Test-Passwort ab, spielt die Daten ein',
+      '  und startet die OPL unter http://localhost:8787. Nächster Start: dasselbe',
+      '  Kommando (geht dann schnell). Optionen: -NeuEinspielen, -CodeAktualisieren,',
+      '  -Port <Nr>. Nur zum Ausprobieren – Änderungen bleiben auf dem Server und',
+      '  fließen nicht in die echte OPL zurück.',
       '',
       'HINWEISE',
       '--------',

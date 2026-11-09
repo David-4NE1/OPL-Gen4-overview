@@ -155,9 +155,14 @@ function keinRecht(mindestens) {
   return json({ error: text }, 403);
 }
 
-function cookiesLoeschen(headers) {
+// "Secure" laesst der Browser nur ueber HTTPS zu. Nur im lokalen Testbetrieb
+// (wrangler dev ueber http://server:port, Variable HTTP_TESTBETRIEB=1 in
+// .dev.vars) entfaellt es; in Cloudflare ist die Variable nie gesetzt.
+const cookieSicher = env => (env.HTTP_TESTBETRIEB === '1' ? '' : ' Secure;');
+
+function cookiesLoeschen(headers, env) {
   for (const n of [SESSION_COOKIE, ...ALTE_COOKIES]) {
-    headers.append('set-cookie', `${n}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`);
+    headers.append('set-cookie', `${n}=; Path=/; HttpOnly;${cookieSicher(env)} SameSite=Strict; Max-Age=0`);
   }
 }
 
@@ -251,15 +256,15 @@ async function handleAPI(url, method, request, env) {
     }
     await env.DB.prepare('DELETE FROM login_fehler WHERE email = ?').bind(email).run();
     const headers = new Headers({ 'content-type': 'application/json' });
-    cookiesLoeschen(headers);
-    headers.append('set-cookie', `${SESSION_COOKIE}=${await sitzungErstellen(env, email)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_TAGE * 86400}`);
+    cookiesLoeschen(headers, env);
+    headers.append('set-cookie', `${SESSION_COOKIE}=${await sitzungErstellen(env, email)}; Path=/; HttpOnly;${cookieSicher(env)} SameSite=Strict; Max-Age=${SESSION_TAGE * 86400}`);
     return new Response(JSON.stringify({ ok: true, user: nameFromEmail(email), rolle, isAdmin: rolle === 'admin' }), { status: 200, headers });
   }
 
   // GET /api/logout
   if (path === '/api/logout') {
     const headers = new Headers({ 'content-type': 'application/json' });
-    cookiesLoeschen(headers);
+    cookiesLoeschen(headers, env);
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
   }
 
