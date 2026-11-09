@@ -2,9 +2,11 @@
  * roadmap.js – Release-Board auf Basis der OPL.
  *
  * Liest die OPL-Punkte (/api/entries) und Releases (/api/releases) und ordnet
- * Punkte per Drag & Drop einem Release zu. Die Zuordnung steht als Feld
- * "release" direkt am Punkt (PUT /api/entries/:nr) – damit ist die Roadmap
- * keine zweite Liste, sondern eine Sicht auf die OPL.
+ * Punkte per Drag & Drop einem Release zu. Die Zuordnung ist das Feld
+ * "Ziel-Release" der OPL (zielRelease, PUT /api/entries/:nr) – das Board ist
+ * der Master, die Roadmap nur eine andere Sicht darauf. Spalten sind die
+ * festen Ziel-Releases der OPL; die Tabelle "releases" liefert nur Zieltermin,
+ * Status und Beschreibung dazu.
  *
  * Ohne Server (Datei lokal geoeffnet) laeuft die Seite als Demo mit den
  * Startdaten aus js/seed.js; Zuordnungen bleiben dann nur in diesem Browser.
@@ -19,8 +21,10 @@
   var STATI = ['Offen', 'In Arbeit', 'Erledigt'];
   var TEAMS = ['Advanced Development', 'Pre Series'];
   var RELEASE_STATI = ['Geplant', 'In Arbeit', 'Freigegeben'];
-  var STANDARD_RELEASES = ['4.0.1', '4.0.2', '4.0.3'];
-  var DEMO_KEY = 'opl.roadmap.demo.v1';
+  // Feste Ziel-Releases wie im Board (store.js / worker: ZIEL_RELEASES)
+  var ZIEL_RELEASES = ['4.1.1', '4.1.2', '4.1.3', '4.2.0'];
+  var STANDARD_RELEASES = ZIEL_RELEASES;
+  var DEMO_KEY = 'opl.roadmap.demo.v2';
   var POLL_MS = 30000; // wie in store.js
 
   var SEITEN = ['Links', 'Rechts', 'Beidseitig'];
@@ -120,14 +124,14 @@
       return { name: n, ziel: '', status: 'Geplant', beschreibung: '' };
     });
     state.entries = (window.OPL_SEED || []).map(function (e) {
-      return Object.assign({}, e, { release: zuordnung[e.nr] || '', seite: seiten[e.nr] || '' });
+      return Object.assign({}, e, { zielRelease: zuordnung[e.nr] || '', seite: seiten[e.nr] || '' });
     });
   }
 
   function demoSpeichern() {
     var zuordnung = {}, seiten = {};
     state.entries.forEach(function (e) {
-      if (e.release) zuordnung[e.nr] = e.release;
+      if (e.zielRelease) zuordnung[e.nr] = e.zielRelease;
       if (e.seite) seiten[e.nr] = e.seite;
     });
     try { localStorage.setItem(DEMO_KEY, JSON.stringify({ releases: state.releases, zuordnung: zuordnung, seiten: seiten })); } catch (e) {}
@@ -149,7 +153,7 @@
   }
 
   function zuordnen(nr, release) {
-    aendern(nr, 'release', release, release ? 'Release ' + release : 'nicht eingeplant');
+    aendern(nr, 'zielRelease', release, release ? 'Release ' + release : 'nicht eingeplant');
   }
 
   // Rollen: lesen < bearbeiten < admin (verbindlich prueft der Worker)
@@ -206,7 +210,7 @@
   function releaseLoeschen(name) {
     if (state.modus === 'demo') {
       state.releases = state.releases.filter(function (r) { return r.name !== name; });
-      state.entries.forEach(function (e) { if (e.release === name) e.release = ''; });
+      state.entries.forEach(function (e) { if (e.zielRelease === name) e.zielRelease = ''; });
       demoSpeichern();
       render();
       return Promise.resolve();
@@ -256,18 +260,15 @@
 
   /* ------------------------------------------------------------ Rendering */
 
-  // Releases in Versionsreihenfolge; Werte an Punkten ohne angelegtes Release
-  // (z. B. nach dem Loeschen auf einem anderen Rechner) bekommen trotzdem eine Spalte.
+  // Spalten = feste Ziel-Releases der OPL; Zieltermin/Status/Beschreibung aus
+  // der Release-Tabelle, sofern dort angelegt. Andere Eintraege der Tabelle
+  // (z. B. alte 4.0.x) sind keine Ziel-Releases und erscheinen nicht.
   function spalten() {
-    var bekannt = {};
-    var liste = state.releases.map(function (r) { bekannt[r.name] = true; return r; });
-    state.entries.forEach(function (e) {
-      if (e.release && !bekannt[e.release]) {
-        bekannt[e.release] = true;
-        liste.push({ name: e.release, ziel: '', status: '', beschreibung: '', fehlt: true });
-      }
+    var meta = {};
+    state.releases.forEach(function (r) { meta[r.name] = r; });
+    return ZIEL_RELEASES.map(function (n) {
+      return meta[n] || { name: n, ziel: '', status: 'Geplant', beschreibung: '' };
     });
-    return liste.sort(function (a, b) { return versionVergleich(a.name, b.name); });
   }
 
   function render() {
@@ -299,7 +300,7 @@
     var k = $('#kpis');
     k.innerHTML = '';
     var offen = state.entries.filter(function (e) { return e.status !== 'Erledigt'; });
-    var ohne = offen.filter(function (e) { return !e.release; });
+    var ohne = offen.filter(function (e) { return !e.zielRelease; });
     var hochOhne = ohne.filter(function (e) { return e.prio === 'Hoch'; });
     [
       [offen.length - ohne.length, 'offen eingeplant', ''],
@@ -318,7 +319,7 @@
     var col = el('section', 'rm-col' + (r ? '' : ' rm-col--backlog'));
     col.dataset.release = name;
 
-    var alle = state.entries.filter(function (e) { return (e.release || '') === name; });
+    var alle = state.entries.filter(function (e) { return (e.zielRelease || '') === name; });
     var sichtbar = alle.filter(function (e) { return passt(e, f); }).sort(sortierung);
 
     var head = el('header', 'rm-col__head');
@@ -418,7 +419,7 @@
     sel.setAttribute('aria-label', 'Release für Punkt ' + e.nr);
     sel.appendChild(new Option('– nicht eingeplant', ''));
     spalten().forEach(function (r) { sel.appendChild(new Option(r.name, r.name)); });
-    sel.value = e.release || '';
+    sel.value = e.zielRelease || '';
     sel.addEventListener('change', function () { zuordnen(e.nr, sel.value); });
     meta.appendChild(sel);
     c.appendChild(meta);
@@ -461,7 +462,7 @@
   }
 
   function releasePasst(e) {
-    return state.koerperRelease === '*' || (e.release || '') === state.koerperRelease;
+    return state.koerperRelease === '*' || (e.zielRelease || '') === state.koerperRelease;
   }
 
   function zonenWerte(z, f) {
@@ -552,7 +553,7 @@
         tr.appendChild(th);
         var punkte = state.entries.filter(function (e) { return passt(e, f) && inZone(e, zz.key); });
         [''].concat(rel.map(function (r) { return r.name; })).forEach(function (name) {
-          var n = punkte.filter(function (e) { return (e.release || '') === name; }).length;
+          var n = punkte.filter(function (e) { return (e.zielRelease || '') === name; }).length;
           var td = el('td', n ? 'has-n' : '', n ? String(n) : '·');
           if (n) {
             td.title = zz.label + ' · ' + (name ? 'Release ' + name : 'nicht eingeplant');
@@ -621,7 +622,8 @@
     $('#rlStatus').value = r && r.status ? r.status : 'Geplant';
     $('#rlZiel').value = r ? r.ziel || '' : '';
     $('#rlBeschreibung').value = r ? r.beschreibung || '' : '';
-    $('#btnReleaseDelete').hidden = !r || !darf('admin');
+    // Ziel-Releases sind fest (Board ist Master) – nicht loeschbar
+    $('#btnReleaseDelete').hidden = true;
     $('#dlgRelease').showModal();
   }
 
@@ -630,7 +632,7 @@
   function releaseNotes() {
     var zeilen = ['# Roadmap 4NE1 Gen4', ''];
     spalten().forEach(function (r) {
-      var punkte = state.entries.filter(function (e) { return e.release === r.name; }).sort(sortierung);
+      var punkte = state.entries.filter(function (e) { return e.zielRelease === r.name; }).sort(sortierung);
       zeilen.push('## ' + r.name + ' – ' + (r.status || 'Geplant') + (r.ziel ? ' (Ziel ' + ddmmyyyy(r.ziel) + ')' : ''));
       if (r.beschreibung) zeilen.push('', r.beschreibung);
       zeilen.push('');
@@ -661,10 +663,10 @@
     var feld = function (v) { v = String(v == null ? '' : v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     var kopf = ['Release', 'Nr', 'Bereich', 'Baugruppe', 'Thema', 'Prio', 'Status', 'Verantwortlicher', 'Bis wann', 'To Do'];
     var reihen = state.entries.slice().sort(function (a, b) {
-      if (!a.release !== !b.release) return a.release ? -1 : 1;
-      return (a.release && b.release ? versionVergleich(a.release, b.release) : 0) || sortierung(a, b);
+      if (!a.zielRelease !== !b.zielRelease) return a.zielRelease ? -1 : 1;
+      return (a.zielRelease && b.zielRelease ? versionVergleich(a.zielRelease, b.zielRelease) : 0) || sortierung(a, b);
     }).map(function (e) {
-      return [e.release || 'nicht eingeplant', e.nr, e.bereich, e.baugruppe, e.thema, e.prio, e.status,
+      return [e.zielRelease || 'nicht eingeplant', e.nr, e.bereich, e.baugruppe, e.thema, e.prio, e.status,
         e.verantwortlicher, ddmmyyyy(e.faellig), e.todo].map(feld).join(';');
     });
     var blob = new Blob(['﻿' + [kopf.join(';')].concat(reihen).join('\r\n')], { type: 'text/csv;charset=utf-8' });
@@ -724,7 +726,7 @@
     });
     $('#btnReleaseDelete').addEventListener('click', function () {
       var name = $('#rlName').value;
-      var n = state.entries.filter(function (e) { return e.release === name; }).length;
+      var n = state.entries.filter(function (e) { return e.zielRelease === name; }).length;
       if (!confirm('Release ' + name + ' löschen?' + (n ? '\n' + n + ' Punkte werden wieder „nicht eingeplant“.' : ''))) return;
       releaseLoeschen(name).then(function () {
         $('#dlgRelease').close();
