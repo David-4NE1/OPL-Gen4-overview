@@ -70,8 +70,8 @@
         '<p class="umzug__en" lang="en">From now on, the OPL is maintained on the Pre-Series Development server. This version is locked and will no longer be updated.</p>' +
         '<a class="umzug__link" href="' + ZIEL + '">' + ZIEL + '</a>' +
         '<div class="umzug__hinweis">' +
-          '<p><strong>Hinweis:</strong> Benutzername und Startpasswort solltest du von David Rybinski bekommen haben. Bei Problemen gerne melden.</p>' +
-          '<p class="umzug__en" lang="en"><strong>Note:</strong> You should have received your username and initial password from David Rybinski. If you have any problems, please get in touch.</p>' +
+          '<p><strong>Hinweis:</strong> Benutzername und Startpasswort solltest du von <strong>David Rybinski (david.rybinski@neura-robotics.com)</strong> bekommen haben. Bei Problemen gerne melden.</p>' +
+          '<p class="umzug__en" lang="en"><strong>Note:</strong> You should have received your username and initial password from <strong>David Rybinski (david.rybinski@neura-robotics.com)</strong>. If you have any problems, please get in touch.</p>' +
         '</div>' +
         '<div class="umzug__admin" id="umzugAdmin"></div>' +
       '</div>';
