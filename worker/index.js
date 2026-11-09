@@ -210,6 +210,15 @@ export default {
       return new Response('Not found', { status: 404 });
     }
 
+    // Nach dem Umzug: nur noch lesen (Datenspiegel, Datenpaket); jede
+    // Aenderung wird mit Hinweis auf die neue Adresse abgelehnt.
+    if (OPL_GESPERRT && method !== 'GET' && !['/api/login', '/api/logout'].includes(url.pathname)) {
+      return corsResponse(json({
+        error: `Die OPL ist umgezogen und hier gesperrt – bitte ${OPL_NEUE_ADRESSE} verwenden. / The OPL has moved – please use ${OPL_NEUE_ADRESSE}.`,
+        umgezogen: OPL_NEUE_ADRESSE
+      }, 423));
+    }
+
     try {
       const res = await handleAPI(url, method, request, env);
       // Jede erfolgreiche Schreibanfrage erhoeht den Aenderungsstand, den die
@@ -510,6 +519,10 @@ async function handleAPI(url, method, request, env) {
 // Schreibrouten, nach denen sich der Stand aendert; nach Import, Reset und
 // Release-Aenderungen laden die Browser die volle Liste (STAND_VOLL), sonst
 // nur die geaenderten Punkte.
+// Umzug auf den internen Server: true = Schreibsperre (Hinweis im Browser: js/umzug-hinweis.js)
+const OPL_GESPERRT = true;
+const OPL_NEUE_ADRESSE = 'http://100.64.0.52:8000/#/opl';
+
 const STAND_RELEVANT = /^\/api\/(entries|import|reset|releases|forderungen|ziele)/;
 const STAND_VOLL = /^\/api\/(import|reset|releases)/;
 
