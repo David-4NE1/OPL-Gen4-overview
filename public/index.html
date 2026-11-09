@@ -358,6 +358,7 @@
     window.__OPL_IS_ADMIN = !!isAdmin;
     window.__OPL_ROLLE = rolle || (isAdmin ? 'admin' : 'bearbeiten');
     document.body.dataset.rolle = window.__OPL_ROLLE;
+    if (window.OPLUmzug) window.OPLUmzug.angemeldet(!!isAdmin);
     loadScripts();
   }
 

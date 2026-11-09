@@ -210,8 +210,9 @@ export default {
       return new Response('Not found', { status: 404 });
     }
 
-    // Nach dem Umzug: nur noch lesen (Datenspiegel, Datenpaket); jede
-    // Aenderung wird mit Hinweis auf die neue Adresse abgelehnt.
+    // Nach dem Umzug auf den Pre-Series Development Server: nur noch lesen
+    // (Admin-Archiv, Datenspiegel); jede Aenderung wird mit Hinweis auf die
+    // neue Adresse abgelehnt.
     if (OPL_GESPERRT && method !== 'GET' && !['/api/login', '/api/logout'].includes(url.pathname)) {
       return corsResponse(json({
         error: `Die OPL ist umgezogen und hier gesperrt – bitte ${OPL_NEUE_ADRESSE} verwenden. / The OPL has moved – please use ${OPL_NEUE_ADRESSE}.`,
@@ -304,6 +305,11 @@ async function handleAPI(url, method, request, env) {
 
   if (!sitzung) {
     return json({ error: 'Nicht angemeldet' }, 401);
+  }
+
+  // Nach dem Umzug: alte OPL nur noch fuer Admins lesbar (Archiv)
+  if (OPL_GESPERRT && sitzung.rolle !== 'admin' && path !== '/api/logout') {
+    return json({ error: `Die OPL ist umgezogen – bitte ${OPL_NEUE_ADRESSE} verwenden. / The OPL has moved – please use ${OPL_NEUE_ADRESSE}.`, umgezogen: OPL_NEUE_ADRESSE }, 423);
   }
 
   // --- Admin-Routen: Freigabeliste und Rollen verwalten ---
@@ -519,7 +525,7 @@ async function handleAPI(url, method, request, env) {
 // Schreibrouten, nach denen sich der Stand aendert; nach Import, Reset und
 // Release-Aenderungen laden die Browser die volle Liste (STAND_VOLL), sonst
 // nur die geaenderten Punkte.
-// Umzug auf den internen Server: true = Schreibsperre (Hinweis im Browser: js/umzug-hinweis.js)
+// Umzug auf den Pre-Series Development Server: true = Schreibsperre fuer alle, Lesen nur Admin (Hinweis im Browser: js/umzug-hinweis.js)
 const OPL_GESPERRT = true;
 const OPL_NEUE_ADRESSE = 'http://100.64.0.52:8000/#/opl';
 
