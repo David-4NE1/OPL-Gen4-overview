@@ -299,7 +299,18 @@
   }
 
   var PRIO_STYLE = { 'Hoch': S.PRIO_HOCH, 'Mittel': S.PRIO_MITTEL, 'Niedrig': S.PRIO_NIEDRIG };
-  var STATUS_STYLE = { 'Offen': S.ST_OFFEN, 'In Arbeit': S.ST_ARBEIT, 'Erledigt': S.ST_ERLEDIGT };
+  var STATUS_STYLE = { 'Open': S.ST_OFFEN, 'Assigned': S.ST_ARBEIT, 'In Progress': S.ST_ARBEIT, 'In Review': S.ST_ARBEIT,
+    'Closed': S.ST_ERLEDIGT, 'Canceled': S.ST_ERLEDIGT };
+  var STATI = ['Open', 'Assigned', 'In Progress', 'In Review', 'Closed', 'Canceled'];
+  // Alte Werte (bis 11/2026) und Schreibvarianten beim Import akzeptieren
+  var STATUS_ALT = { offen: 'Open', inarbeit: 'In Progress', erledigt: 'Closed', cancelled: 'Canceled', done: 'Closed' };
+  function statusNormalisieren(v) {
+    var k = String(v || '').toLowerCase().replace(/[^a-z]/g, '');
+    if (!k) return null;
+    for (var i = 0; i < STATI.length; i++) if (STATI[i].toLowerCase().replace(/[^a-z]/g, '') === k) return STATI[i];
+    return STATUS_ALT[k] || null;
+  }
+  function istErledigt(e) { return e.status === 'Closed' || e.status === 'Canceled'; }
 
   function cellStr(ref, style, value) {
     if (value === '' || value == null) return '<c r="' + ref + '" s="' + style + '"/>';
@@ -337,7 +348,7 @@
       ' · Stand: ' + (opts.stand || ddmmyyyy(new Date().toISOString().slice(0, 10)))) + '</row>');
 
     var kpiLabels = ['Gesamt offene Punkte', 'Prio Hoch', 'Prio Mittel', 'Prio Niedrig',
-                     'Status Offen', 'Status Erledigt'];
+                     'Status Open', 'Status Closed/Canceled'];
     var r3 = kpiLabels.map(function (l, i) { return cellStr(colName(i + 1) + '3', S.KPI_LABEL, l); });
     r3.push(cellStr('H3', S.KPI_LABEL, 'Legende:'));
     rows.push('<row r="3">' + r3.join('') + '</row>');
@@ -350,8 +361,8 @@
       'COUNTIF(' + prioRange + ',"Hoch")',
       'COUNTIF(' + prioRange + ',"Mittel")',
       'COUNTIF(' + prioRange + ',"Niedrig")',
-      'COUNTIF(' + statusRange + ',"Offen")',
-      'COUNTIF(' + statusRange + ',"Erledigt")'
+      'COUNTIF(' + statusRange + ',"Open")',
+      'COUNTIF(' + statusRange + ',"Closed")+COUNTIF(' + statusRange + ',"Canceled")'
     ];
     var r5 = kpiFormulas.map(function (f, i) { return cellFormula(colName(i + 1) + '5', S.KPI_VALUE, f); });
     r5.push(cellStr('H5', S.LEGEND, 'Gelbe Zellen (Verantwortlicher/Bis wann/Status) bitte pflegen'));
@@ -373,7 +384,7 @@
     var today = new Date().toISOString().slice(0, 10);
     entries.forEach(function (e, idx) {
       var r = first + idx;
-      var offen = e.status !== 'Erledigt';
+      var offen = !istErledigt(e);
       var overdue = offen && e.faellig && e.faellig < today;
       var cells = [
         cellNum('A' + r, S.NR, e.nr),
@@ -480,7 +491,7 @@
         (opts.zielReleases ? validation('list', 'O' + first + ':O' + last, '"' + opts.zielReleases.join(',') + '"') : '') +
         // Unterthema (P) ohne Auswahlliste: Excel erlaubt dort hoechstens 255 Zeichen
         validation('list', 'D' + first + ':D' + last, '"Hoch,Mittel,Niedrig"') +
-        validation('list', 'G' + first + ':G' + last, '"Offen,In Arbeit,Erledigt"') +
+        validation('list', 'G' + first + ':G' + last, '"Open,Assigned,In Progress,In Review,Closed,Canceled"') +
         validation('list', 'L' + first + ':L' + last, '"Advanced Development,Pre Series"') +
         validation('list', 'B' + first + ':B' + last,
           '"' + (opts.bereiche || []).join(',') + '"') +
@@ -710,10 +721,10 @@
           if (zelle('prio')) warnungen.push('Zeile ' + rn + ': Prio "' + zelle('prio') + '" unbekannt – auf "Mittel" gesetzt.');
           prio = 'Mittel';
         }
-        var status = normalize(zelle('status'), ['Offen', 'In Arbeit', 'Erledigt']);
+        var status = statusNormalisieren(zelle('status'));
         if (!status) {
-          if (zelle('status')) warnungen.push('Zeile ' + rn + ': Status "' + zelle('status') + '" unbekannt – auf "Offen" gesetzt.');
-          status = 'Offen';
+          if (zelle('status')) warnungen.push('Zeile ' + rn + ': Status "' + zelle('status') + '" unbekannt – auf "Open" gesetzt.');
+          status = 'Open';
         }
         var faellig = toIsoDate(zelle('faellig'));
         if (zelle('faellig') && !faellig) warnungen.push('Zeile ' + rn + ': Datum "' + zelle('faellig') + '" nicht lesbar – leer gelassen.');

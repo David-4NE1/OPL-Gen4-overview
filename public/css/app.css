@@ -321,6 +321,12 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 .chip--status-offen { background: var(--offen-bg); border-color: #f1cfcf; }
 .chip--status-in-arbeit { background: var(--arbeit-bg); border-color: #efd9a8; }
 .chip--status-erledigt { background: var(--erledigt-bg); border-color: #c3dfc0; }
+.chip--status-open { background: var(--offen-bg); border-color: #f1cfcf; }
+.chip--status-assigned { background: var(--arbeit-bg); border-color: #e6dcc4; }
+.chip--status-in-progress { background: var(--arbeit-bg); border-color: #efd9a8; }
+.chip--status-in-review { background: var(--arbeit-bg); border-color: #b9cbe6; }
+.chip--status-closed { background: var(--erledigt-bg); border-color: #c3dfc0; }
+.chip--status-canceled { background: transparent; border-style: dashed; color: var(--ink-soft); text-decoration: line-through; }
 
 .chip--due.is-overdue { background: var(--hoch); color: #fff; border-color: var(--hoch); font-weight: 700; }
 .chip--due.is-soon { background: var(--mittel-bg); border-color: #efd9a8; }
