@@ -70,8 +70,8 @@
         '<p class="umzug__en" lang="en">From now on, the OPL is maintained on the Pre-Series Development server. This version is locked and will no longer be updated.</p>' +
         '<a class="umzug__link" href="' + ZIEL + '">' + ZIEL + '</a>' +
         '<div class="umzug__hinweis">' +
-          '<p><strong>Hinweis:</strong> Benutzername und Startpasswort solltest du von <strong>David Rybinski (david.rybinski@neura-robotics.com)</strong> bekommen haben. Falls noch nicht: Die Mail kommt heute, am <strong>10.11. bis spätestens 10:00 Uhr</strong>. Bei Problemen gerne melden.</p>' +
-          '<p class="umzug__en" lang="en"><strong>Note:</strong> You should have received your username and initial password from <strong>David Rybinski (david.rybinski@neura-robotics.com)</strong>. If not yet, you will receive the email today, <strong>10 Nov, by 10:00 at the latest</strong>. If you have any problems, please get in touch.</p>' +
+          '<p><strong>Hinweis:</strong> Benutzername und Startpasswort solltest du von <strong>David Rybinski (david.rybinski@neura-robotics.com)</strong> bekommen haben. Falls noch nicht: Die Mail kommt heute, am <strong>10.11. bis spätestens 11:00 Uhr</strong>. Bei Problemen gerne melden.</p>' +
+          '<p class="umzug__en" lang="en"><strong>Note:</strong> You should have received your username and initial password from <strong>David Rybinski (david.rybinski@neura-robotics.com)</strong>. If not yet, you will receive the email today, <strong>10 Nov, by 11:00 at the latest</strong>. If you have any problems, please get in touch.</p>' +
         '</div>' +
         '<div class="umzug__admin" id="umzugAdmin"></div>' +
       '</div>';
