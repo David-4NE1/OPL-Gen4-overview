@@ -526,7 +526,7 @@ async function handleAPI(url, method, request, env) {
 // Release-Aenderungen laden die Browser die volle Liste (STAND_VOLL), sonst
 // nur die geaenderten Punkte.
 // Umzug auf den Pre-Series Development Server: true = Schreibsperre fuer alle, Lesen nur Admin (Hinweis im Browser: js/umzug-hinweis.js)
-const OPL_GESPERRT = true;
+const OPL_GESPERRT = false; // muss zu AKTIV in public/js/umzug-hinweis.js passen
 const OPL_NEUE_ADRESSE = 'http://100.64.0.52:8000/#/opl';
 
 const STAND_RELEVANT = /^\/api\/(entries|import|reset|releases|forderungen|ziele)/;
