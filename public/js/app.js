@@ -27,7 +27,7 @@
   var filter = leererFilter();
 
   var PRIO_RANK = { 'Hoch': 0, 'Mittel': 1, 'Niedrig': 2 };
-  var STATUS_RANK = { 'Offen': 0, 'In Arbeit': 1, 'Erledigt': 2 };
+  var STATUS_RANK = { 'Open': 0, 'Assigned': 1, 'In Progress': 2, 'In Review': 3, 'Closed': 4, 'Canceled': 5 };
 
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
@@ -199,11 +199,11 @@
     if (filter.nacharbeit.length && !filter.nacharbeit.some(function (v) {
       return v === '(keine)' ? !e.nacharbeit : (e.nacharbeit || '').indexOf(v) >= 0;
     })) return false;
-    if (quick === 'offen' && e.status === 'Erledigt') return false;
-    if (quick === 'erledigt' && e.status !== 'Erledigt') return false;
-    if (quick === 'hoch' && !(e.prio === 'Hoch' && e.status !== 'Erledigt')) return false;
-    if (quick === 'mittel' && !(e.prio === 'Mittel' && e.status !== 'Erledigt')) return false;
-    if (quick === 'niedrig' && !(e.prio === 'Niedrig' && e.status !== 'Erledigt')) return false;
+    if (quick === 'offen' && Store.istErledigt(e)) return false;
+    if (quick === 'erledigt' && !Store.istErledigt(e)) return false;
+    if (quick === 'hoch' && !(e.prio === 'Hoch' && !Store.istErledigt(e))) return false;
+    if (quick === 'mittel' && !(e.prio === 'Mittel' && !Store.istErledigt(e))) return false;
+    if (quick === 'niedrig' && !(e.prio === 'Niedrig' && !Store.istErledigt(e))) return false;
     if (quick === 'ueberfaellig' && !Store.istUeberfaellig(e)) return false;
     if (filter.suche) {
       var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.nacharbeit, e.zielRelease, e.unterthema, e.komponenten, e.lhTitel, e.anforderung, e.bereich, e.notiz,
@@ -332,8 +332,8 @@
       return;
     }
 
-    var offeneListe = liste.filter(function (e) { return e.status !== 'Erledigt'; });
-    var erledigt = liste.filter(function (e) { return e.status === 'Erledigt'; });
+    var offeneListe = liste.filter(function (e) { return !Store.istErledigt(e); });
+    var erledigt = liste.filter(function (e) { return Store.istErledigt(e); });
 
     var gruppen = {};
     offeneListe.forEach(function (e) { (gruppen[e.bereich] = gruppen[e.bereich] || []).push(e); });
@@ -374,8 +374,8 @@
       var alleImBereich = Store.state.entries.filter(function (e) { return e.bereich === titel; });
       var total = alleImBereich.length;
       if (total) {
-        var nErl = alleImBereich.filter(function (e) { return e.status === 'Erledigt'; }).length;
-        var nArb = alleImBereich.filter(function (e) { return e.status === 'In Arbeit'; }).length;
+        var nErl = alleImBereich.filter(function (e) { return Store.istErledigt(e); }).length;
+        var nArb = alleImBereich.filter(function (e) { return !Store.istErledigt(e) && e.status !== 'Open'; }).length;
         var nOff = total - nErl - nArb;
         var bar = el('span', 'progress');
         var s1 = el('span', 'progress__seg progress__seg--erledigt');
@@ -407,7 +407,7 @@
   }
 
   function renderCard(e) {
-    var c = el('article', 'card card--' + slug(e.prio) + (e.status === 'Erledigt' ? ' card--erledigt' : ''));
+    var c = el('article', 'card card--' + slug(e.prio) + (Store.istErledigt(e) ? ' card--erledigt' : ''));
 
     var top = el('div', 'card__top');
     top.appendChild(el('span', 'card__nr', '#' + e.nr));
@@ -442,14 +442,14 @@
 
     var st = el('button', 'chip chip--status-' + slug(e.status), T(e.status));
     st.type = 'button';
-    st.title = T('Klick: Status wechseln (Offen → In Arbeit → Erledigt)');
+    st.title = T('Klick: Status wechseln (Open → Assigned → In Progress → In Review → Closed)');
     st.addEventListener('click', function () { Store.cycle(e.nr, 'status'); });
     meta.appendChild(st);
 
     var ueberfaellig = Store.istUeberfaellig(e);
     var tage = tageBis(e.faellig);
     var due = el('button', 'chip chip--due' +
-      (ueberfaellig ? ' is-overdue' : (tage != null && tage >= 0 && tage <= 7 && e.status !== 'Erledigt' ? ' is-soon' : '')) +
+      (ueberfaellig ? ' is-overdue' : (tage != null && tage >= 0 && tage <= 7 && !Store.istErledigt(e) ? ' is-soon' : '')) +
       (e.faellig ? '' : ' chip--none'), (ueberfaellig ? '⚠ ' : '📅 ') + datumLabel(e.faellig));
     due.type = 'button';
     due.title = T('Fälligkeit ändern');
@@ -583,7 +583,7 @@
 
     var tbody = el('tbody');
     liste.slice().sort(sortiereTabelle).forEach(function (e) {
-      var row = el('tr', e.status === 'Erledigt' ? 'is-erledigt' : '');
+      var row = el('tr', Store.istErledigt(e) ? 'is-erledigt' : '');
       row.appendChild(el('td', null, String(e.nr)));
       row.appendChild(el('td', null, T(e.bereich)));
       row.appendChild(el('td', Store.istThema(e.thema) ? null : 'is-warn', Store.istThema(e.thema) ? T(e.thema) : (e.thema ? '⚠ ' + tx(e.thema) : '⚠')));
@@ -628,7 +628,7 @@
   }
 
   function renderKpis(alle) {
-    var offen = alle.filter(function (e) { return e.status !== 'Erledigt'; });
+    var offen = alle.filter(function (e) { return !Store.istErledigt(e); });
     $('#kpiOffen').textContent = offen.length;
     $('#kpiHoch').textContent = offen.filter(function (e) { return e.prio === 'Hoch'; }).length;
     $('#kpiMittel').textContent = offen.filter(function (e) { return e.prio === 'Mittel'; }).length;
@@ -857,7 +857,7 @@
     themaAuswahl(e ? e.thema : einzigerFilter('thema'));
     unterthemaAuswahl(e ? e.unterthema : einzigerFilter('unterthema'));
     $('#fmPrio').value = e ? e.prio : 'Mittel';
-    $('#fmStatus').value = e ? e.status : 'Offen';
+    $('#fmStatus').value = e ? e.status : 'Open';
     $('#fmVerant').value = e ? e.verantwortlicher : (Store.state.user || '');
     $('#fmTeam').value = e ? e.verantwortlichkeit : einzigerFilter('team');
     $('#fmBaugruppe').value = e ? (e.baugruppe || '') : einzigerFilter('baugruppe');
@@ -1194,7 +1194,7 @@
     var liste = window.OPLLastenheft.vorschlaege(Store.state.entries, kategorie, text, detail, 25);
     if (!text.trim() && !detail.trim()) return;
     // Reihenfolge: offen und noch nicht zugeordnet, dann schon zugeordnet, zuletzt erledigt
-    var offen = function (v) { return v.e.status !== 'Erledigt'; };
+    var offen = function (v) { return !Store.istErledigt(v.e); };
     var frei = liste.filter(function (v) { return offen(v) && !belegt[v.e.nr]; });
     var schon = liste.filter(function (v) { return offen(v) && belegt[v.e.nr]; });
     var erledigt = liste.filter(function (v) { return !offen(v); });
@@ -1205,7 +1205,7 @@
     var drin = beispielNrsImFeld();
     liste.forEach(function (v) {
       var e = v.e;
-      var zeile = el('label', 'fovor__zeile' + (e.status === 'Erledigt' ? ' is-erledigt' : '') + (belegt[e.nr] ? ' is-belegt' : ''));
+      var zeile = el('label', 'fovor__zeile' + (Store.istErledigt(e) ? ' is-erledigt' : '') + (belegt[e.nr] ? ' is-belegt' : ''));
       var cb = el('input');
       cb.type = 'checkbox';
       cb.value = e.nr;
@@ -1219,7 +1219,7 @@
       zeile.appendChild(el('b', 'fovor__nr', '#' + e.nr));
       zeile.appendChild(el('span', 'pill pill--' + String(e.prio).toLowerCase(), T(e.prio)));
       var txt = el('span', 'fovor__text', window.OPLLastenheft.kurztext(e, 120));
-      txt.appendChild(el('small', null, ' · ' + T(e.thema) + (e.status === 'Erledigt' ? ' · ' + T('erledigt') : '') +
+      txt.appendChild(el('small', null, ' · ' + T(e.thema) + (Store.istErledigt(e) ? ' · ' + T('erledigt') : '') +
         ' · ' + T('Treffer: {w}', { w: v.treffer.join(', ') })));
       // Aufklappen: vollstaendiger Text, Status, Verantwortlich, Bilder
       var auf = el('button', 'fovor__auf', vorAuf[e.nr] ? '▾' : '▸');
@@ -1333,7 +1333,7 @@
     var vorher = sel.value;
     sel.textContent = '';
     Store.THEMEN.forEach(function (t) {
-      var n = Store.state.entries.filter(function (e) { return e.thema === t && e.status !== 'Erledigt'; }).length;
+      var n = Store.state.entries.filter(function (e) { return e.thema === t && !Store.istErledigt(e); }).length;
       var fo = (lhForderungen || []).filter(function (f) { return f.kategorie === t; }).length;
       var o = el('option', null, T(t) + ' – ' + T('{o} offen', { o: n }) + ', ' + T('{n} Forderungen', { n: fo }));
       o.value = t;
@@ -2182,9 +2182,9 @@
     $('#fmThema').addEventListener('change', aktualisiereEditTitel);
     $('#fmThema').addEventListener('change', function () { unterthemaAuswahl($('#fmUnterthema').value); });
     // Verantwortlichkeit nach Person vorbelegen, solange sie leer ist
-    // Erledigt ohne Ziel-Release → 4.1.1 vorschlagen (der Server setzt es ohnehin)
+    // Closed ohne Ziel-Release → 4.1.1 vorschlagen (der Server setzt es ohnehin)
     $('#fmStatus').addEventListener('change', function () {
-      if ($('#fmStatus').value === 'Erledigt' && !$('#fmZielRelease').value) $('#fmZielRelease').value = '4.1.1';
+      if ($('#fmStatus').value === 'Closed' && !$('#fmZielRelease').value) $('#fmZielRelease').value = '4.1.1';
     });
     $('#fmVerant').addEventListener('change', function () {
       if (!$('#fmTeam').value) $('#fmTeam').value = Store.teamStandard($('#fmVerant').value);
@@ -2232,7 +2232,7 @@
 
     $('#btnDelete').addEventListener('click', function () {
       if (editNr == null) return;
-      if (!confirm(T('Punkt #{nr} wirklich löschen? Tipp: Status „Erledigt” behält die Historie.', { nr: editNr }))) return;
+      if (!confirm(T('Punkt #{nr} wirklich löschen? Tipp: Status „Closed” oder „Canceled” behält die Historie.', { nr: editNr }))) return;
       Store.remove(editNr);
       editListe = [];
       $('#dlgEdit').close();

@@ -334,6 +334,7 @@
     'Erstellt: {datum}': 'Created: {datum}',
     'Klick: Prio wechseln (Hoch → Mittel → Niedrig)': 'Click: change prio (High → Medium → Low)',
     'Klick: Status wechseln (Offen → In Arbeit → Erledigt)': 'Click: change status (Open → In progress → Done)',
+    'Klick: Status wechseln (Open → Assigned → In Progress → In Review → Closed)': 'Click: change status (Open → Assigned → In Progress → In Review → Closed)',
     'Fälligkeit ändern': 'Change due date',
     'Verantwortlichen setzen': 'Set owner',
     'Verantwortlichkeit offen': 'Responsibility open',
@@ -380,8 +381,8 @@
     'Bitte ein Thema angeben.': 'Please enter a topic.',
     'Punkt #{nr} angelegt.': 'Item #{nr} created.',
     'Punkt #{nr} gespeichert.': 'Item #{nr} saved.',
-    'Punkt #{nr} wirklich löschen? Tipp: Status „Erledigt” behält die Historie.':
-      'Really delete item #{nr}? Tip: status “Done” keeps the history.',
+    'Punkt #{nr} wirklich löschen? Tipp: Status „Closed” oder „Canceled” behält die Historie.':
+      'Really delete item #{nr}? Tip: status “Closed” or “Canceled” keeps the history.',
     'Punkt gelöscht.': 'Item deleted.',
     'Datei nicht lesbar: {name}': 'File not readable: {name}',
     'Kein gültiges Bild: {name}': 'Not a valid image: {name}',

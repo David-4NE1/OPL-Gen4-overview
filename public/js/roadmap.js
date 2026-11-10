@@ -18,7 +18,10 @@
     'Montage/Fertigung', 'Design', 'Software', 'Advanced Development'];
   var BAUGRUPPEN = ['Kopf', 'Torso', 'Arm', 'Pelvis/Hüfte', 'Bein', 'Fuß', 'Übergreifend'];
   var PRIOS = ['Hoch', 'Mittel', 'Niedrig'];
-  var STATI = ['Offen', 'In Arbeit', 'Erledigt'];
+  var STATI = ['Open', 'Assigned', 'In Progress', 'In Review', 'Closed', 'Canceled'];
+  // Closed/Canceled = abgeschlossen (alte Werte "Erledigt" usw. kommen nicht mehr vom Server)
+  function fertig(e) { return e.status === 'Closed' || e.status === 'Canceled' || e.status === 'Erledigt'; }
+  function inArbeit(e) { return !fertig(e) && e.status !== 'Open' && e.status !== 'Offen'; }
   var TEAMS = ['Advanced Development', 'Pre Series'];
   var RELEASE_STATI = ['Geplant', 'In Arbeit', 'Freigegeben'];
   // Feste Ziel-Releases wie im Board (store.js / worker: ZIEL_RELEASES)
@@ -239,7 +242,7 @@
     if (f.baugruppe && e.baugruppe !== f.baugruppe) return false;
     if (f.prio && e.prio !== f.prio) return false;
     if (f.team && e.verantwortlichkeit !== f.team) return false;
-    if (!f.erledigt && e.status === 'Erledigt') return false;
+    if (!f.erledigt && fertig(e)) return false;
     if (f.zone && !inZone(e, f.zone)) return false;
     if (f.q) {
       var text = ['#' + e.nr, e.thema, e.todo, e.verantwortlicher, e.bereich, e.baugruppe, e.seite].join(' ').toLowerCase();
@@ -254,7 +257,7 @@
 
   // Offene zuerst, Erledigte ans Ende; innerhalb nach Prio, dann Nr
   function sortierung(a, b) {
-    return ((a.status === 'Erledigt') - (b.status === 'Erledigt')) ||
+    return (fertig(a) - fertig(b)) ||
       (PRIOS.indexOf(a.prio) - PRIOS.indexOf(b.prio)) || (a.nr - b.nr);
   }
 
@@ -299,7 +302,7 @@
   function renderKpis() {
     var k = $('#kpis');
     k.innerHTML = '';
-    var offen = state.entries.filter(function (e) { return e.status !== 'Erledigt'; });
+    var offen = state.entries.filter(function (e) { return !fertig(e); });
     var ohne = offen.filter(function (e) { return !e.zielRelease; });
     var hochOhne = ohne.filter(function (e) { return e.prio === 'Hoch'; });
     [
@@ -341,9 +344,9 @@
 
     var sub = [];
     if (r && r.ziel) sub.push('Ziel: ' + ddmmyyyy(r.ziel));
-    var offen = alle.filter(function (e) { return e.status !== 'Erledigt'; }).length;
+    var offen = alle.filter(function (e) { return !fertig(e); }).length;
     sub.push(punkte(alle.length) + ' · ' + offen + ' offen');
-    var hoch = alle.filter(function (e) { return e.prio === 'Hoch' && e.status !== 'Erledigt'; }).length;
+    var hoch = alle.filter(function (e) { return e.prio === 'Hoch' && !fertig(e); }).length;
     if (hoch) sub.push(hoch + '× Prio hoch');
     if (sichtbar.length !== alle.length) sub.push(sichtbar.length + ' angezeigt');
     head.appendChild(el('p', 'rm-col__sub', sub.join(' · ')));
@@ -352,16 +355,17 @@
     if (r && alle.length) {
       var stats = el('div', 'rm-col__stats');
       var bar = el('div', 'progress');
-      [['Erledigt', 'erledigt'], ['In Arbeit', 'arbeit'], ['Offen', 'offen']].forEach(function (s) {
-        var n = alle.filter(function (e) { return e.status === s[0]; }).length;
+      [['Closed/Canceled', 'erledigt', fertig], ['Assigned/In Progress/In Review', 'arbeit', inArbeit],
+       ['Open', 'offen', function (e) { return !fertig(e) && !inArbeit(e); }]].forEach(function (s) {
+        var n = alle.filter(s[2]).length;
         var seg = el('div', 'progress__seg progress__seg--' + s[1]);
         seg.style.width = (100 * n / alle.length) + '%';
         seg.title = s[0] + ': ' + n;
         bar.appendChild(seg);
       });
       stats.appendChild(bar);
-      var fertig = alle.filter(function (e) { return e.status === 'Erledigt'; }).length;
-      stats.appendChild(el('span', null, Math.round(100 * fertig / alle.length) + ' % erledigt'));
+      var nFertig = alle.filter(fertig).length;
+      stats.appendChild(el('span', null, Math.round(100 * nFertig / alle.length) + ' % erledigt'));
       head.appendChild(stats);
     }
     col.appendChild(head);
@@ -394,7 +398,7 @@
 
   function renderKarte(e) {
     var c = el('article', 'rm-card rm-card--' + slug(e.prio) +
-      (e.status === 'Erledigt' ? ' rm-card--erledigt' : '') + (e._speichert ? ' is-saving' : ''));
+      (fertig(e) ? ' rm-card--erledigt' : '') + (e._speichert ? ' is-saving' : ''));
     c.draggable = darf('bearbeiten');
     c.dataset.nr = e.nr;
 
@@ -469,7 +473,7 @@
     var punkte = state.entries.filter(function (e) { return passt(e, f) && releasePasst(e) && inZone(e, z.key); });
     return {
       punkte: punkte,
-      hoch: punkte.filter(function (e) { return e.prio === 'Hoch' && e.status !== 'Erledigt'; }).length
+      hoch: punkte.filter(function (e) { return e.prio === 'Hoch' && !fertig(e); }).length
     };
   }
 
@@ -638,7 +642,7 @@
       zeilen.push('');
       if (!punkte.length) zeilen.push('_keine Punkte_');
       punkte.forEach(function (e) {
-        zeilen.push('- [' + (e.status === 'Erledigt' ? 'x' : ' ') + '] #' + e.nr + ' ' + (e.thema || '') +
+        zeilen.push('- [' + (fertig(e) ? 'x' : ' ') + '] #' + e.nr + ' ' + (e.thema || '') +
           ' (' + e.prio + (e.baugruppe ? ', ' + e.baugruppe : '') + ') – ' + (e.todo || '').replace(/\s*\n\s*/g, ' '));
       });
       zeilen.push('');

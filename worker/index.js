@@ -427,7 +427,7 @@ async function handleAPI(url, method, request, env) {
       geaendertAm: now,
       geaendertVon: sitzung.name
     });
-    // Automatisch gesetztes Ziel-Release (Erledigt → 4.1.1) ebenfalls protokollieren
+    // Automatisch gesetztes Ziel-Release (Closed → 4.1.1) ebenfalls protokollieren
     if (patch.zielRelease === undefined && updated.zielRelease !== old.zielRelease) {
       changes.push(`zielRelease: "${old.zielRelease || '–'}" → "${updated.zielRelease}" (automatisch, erledigt)`);
     }
@@ -1126,13 +1126,31 @@ async function schemaSicherstellen(db) {
     await db.batch([
       db.prepare(`INSERT INTO changelog (nr, text, wann, wer)
         SELECT nr, 'zielRelease: "–" → "${ZIEL_RELEASE_ERLEDIGT}" (automatisch, erledigt)', ?, 'Automatik'
-        FROM entries WHERE status = 'Erledigt' AND COALESCE(ziel_release, '') = ''`).bind(jetzt),
-      db.prepare("UPDATE entries SET ziel_release = ? WHERE status = 'Erledigt' AND COALESCE(ziel_release, '') = ''")
+        FROM entries WHERE status IN ('Erledigt', 'Closed') AND COALESCE(ziel_release, '') = ''`).bind(jetzt),
+      db.prepare("UPDATE entries SET ziel_release = ? WHERE status IN ('Erledigt', 'Closed') AND COALESCE(ziel_release, '') = ''")
         .bind(ZIEL_RELEASE_ERLEDIGT)
     ]);
   }
   await db.prepare('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)').run();
   await db.prepare('CREATE INDEX IF NOT EXISTS idx_entries_geaendert ON entries (geaendert_am)').run();
+  // Einmalig: Status auf den neuen Workflow umstellen (Offen → Open,
+  // In Arbeit → In Progress, Erledigt → Closed). Merker in settings, damit
+  // nicht jede neue Worker-Instanz die Tabelle durchsucht.
+  const statusV2 = await db.prepare("SELECT value FROM settings WHERE key = 'status_v2'").first();
+  if (!statusV2) {
+    const res = await db.prepare(`UPDATE entries SET status = CASE status
+        WHEN 'Offen' THEN 'Open' WHEN 'In Arbeit' THEN 'In Progress' WHEN 'Erledigt' THEN 'Closed' END
+      WHERE status IN ('Offen', 'In Arbeit', 'Erledigt')`).run();
+    const n = (res && res.meta && res.meta.changes) || 0;
+    const jetzt = new Date().toISOString();
+    await db.batch([
+      db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('status_v2', ?)").bind(jetzt),
+      ...(n ? [db.prepare('INSERT INTO changelog (nr, text, wann, wer) VALUES (0, ?, ?, ?)')
+        .bind(`Status-Umstellung auf Open/Assigned/In Progress/In Review/Closed/Canceled: ${n} Punkte (Offen → Open, In Arbeit → In Progress, Erledigt → Closed)`, jetzt, 'Automatik')] : [])
+    ]);
+    // Offene Browser laden die volle Liste neu
+    if (n) { try { await standErhoehen(db, true); } catch (e) { /* nur Hinweis */ } }
+  }
   await db.prepare(`CREATE TABLE IF NOT EXISTS lastenheft_ziele (
     schluessel TEXT PRIMARY KEY, anforderung TEXT NOT NULL DEFAULT '', ziel TEXT NOT NULL DEFAULT '',
     geaendert_am TEXT NOT NULL DEFAULT '', geaendert_von TEXT NOT NULL DEFAULT '')`).run();
@@ -1157,7 +1175,16 @@ async function schemaSicherstellen(db) {
   schemaOk = true;
 }
 
-// Ziel-Release je Punkt (feste Auswahl); erledigte Punkte ohne Angabe → 4.1.1
+// Status-Workflow (muss zu store.js passen); Closed und Canceled = abgeschlossen
+const STATUS_LISTE = ['Open', 'Assigned', 'In Progress', 'In Review', 'Closed', 'Canceled'];
+// Alte Werte (bis 11/2026) und Schreibvarianten
+const STATUS_ALT = { offen: 'Open', inarbeit: 'In Progress', erledigt: 'Closed', cancelled: 'Canceled', done: 'Closed' };
+function statusNormalisieren(v) {
+  const k = String(v || '').toLowerCase().replace(/[^a-z]/g, '');
+  return STATUS_LISTE.find(s => s.toLowerCase().replace(/[^a-z]/g, '') === k) || STATUS_ALT[k] || '';
+}
+
+// Ziel-Release je Punkt (feste Auswahl); abgeschlossene (Closed) Punkte ohne Angabe → 4.1.1
 const ZIEL_RELEASES = ['4.1.1', '4.1.2', '4.1.3', '4.2.0'];
 const ZIEL_RELEASE_ERLEDIGT = '4.1.1';
 
@@ -1190,17 +1217,17 @@ function normalize(e) {
     'Montage/Fertigung','Design','Software','Advanced Development'
   ];
   const PRIOS = ['Hoch','Mittel','Niedrig'];
-  const STATI = ['Offen','In Arbeit','Erledigt'];
+  const STATI = STATUS_LISTE;
   const VERANTWORTLICHKEITEN = ['Advanced Development','Pre Series'];
   const BAUGRUPPEN = ['Kopf','Torso','Arm','Pelvis/Hüfte','Bein','Fuß','Übergreifend'];
   // Seite aus Sicht des Roboters
   const SEITEN = ['Links','Rechts','Beidseitig'];
   // Nacharbeit an bestehenden Teilen
   const NACHARBEIT = ['Re-Milling','Modification','Re-Milling + Modification'];
-  const status = STATI.includes(e.status) ? e.status : 'Offen';
+  const status = statusNormalisieren(e.status) || 'Open';
   let zielRelease = ZIEL_RELEASES.includes(e.zielRelease) ? e.zielRelease : '';
-  // Erledigte Punkte ohne Ziel-Release laufen automatisch unter 4.1.1
-  if (status === 'Erledigt' && !zielRelease) zielRelease = ZIEL_RELEASE_ERLEDIGT;
+  // Abgeschlossene (Closed) Punkte ohne Ziel-Release laufen automatisch unter 4.1.1
+  if (status === 'Closed' && !zielRelease) zielRelease = ZIEL_RELEASE_ERLEDIGT;
   return {
     nr: e.nr,
     bereich: BEREICHE.includes(e.bereich) ? e.bereich : BEREICHE[0],

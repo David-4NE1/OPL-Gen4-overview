@@ -10,6 +10,7 @@
   'use strict';
 
   var Store = global.OPLStore;
+  var fertig = function (e) { return Store.istErledigt(e); }; // Closed oder Canceled
   var Xlsx = global.OPLXlsx;
   var T = global.OPLi18n.T;
 
@@ -74,14 +75,14 @@
   function zahlen(l) {
     return {
       gesamt: l.length,
-      offen: l.filter(function (e) { return e.status !== 'Erledigt'; }).length,
-      hoch: l.filter(function (e) { return e.status !== 'Erledigt' && e.prio === 'Hoch'; }).length,
-      umgesetzt: l.filter(function (e) { return e.status === 'Erledigt'; }).length,
+      offen: l.filter(function (e) { return !fertig(e); }).length,
+      hoch: l.filter(function (e) { return !fertig(e) && e.prio === 'Hoch'; }).length,
+      umgesetzt: l.filter(function (e) { return e.status === 'Closed'; }).length,
       ohneText: l.filter(function (e) { return !e.anforderung; }).length
     };
   }
 
-  function statusText(e) { return e.status === 'Erledigt' ? T('umgesetzt') : T(e.status); }
+  function statusText(e) { return e.status === 'Closed' ? T('umgesetzt') : T(e.status); }
 
   /* ------------------------------------------------------------- Ansicht */
 
@@ -342,8 +343,8 @@
         var istOffen = offen[key] === undefined ? x.fokus : !!offen[key];
         var nrs = beispielNrs(f);
         var bsp = nrs.map(function (n) { return nachNr[n]; }).filter(Boolean);
-        var bFertig = bsp.filter(function (e) { return e.status === 'Erledigt'; }).length;
-        var bHoch = bsp.filter(function (e) { return e.status !== 'Erledigt' && e.prio === 'Hoch'; }).length;
+        var bFertig = bsp.filter(function (e) { return e.status === 'Closed'; }).length;
+        var bHoch = bsp.filter(function (e) { return !fertig(e) && e.prio === 'Hoch'; }).length;
         var li = el('li', 'fo__f' + (istOffen ? ' is-offen' : ''));
         var z = el('div', 'fo__fkopf');
         z.tabIndex = 0;
@@ -379,7 +380,7 @@
           if (bsp.length) {
             tief.appendChild(el('div', 'lh__label', T('Aktuelle Beispiele aus der OPL')));
             var karten = el('div', 'lh__liste');
-            bsp.sort(function (a, b) { return (a.status === 'Erledigt') - (b.status === 'Erledigt') || PRIO_RANG[a.prio] - PRIO_RANG[b.prio] || a.nr - b.nr; })
+            bsp.sort(function (a, b) { return fertig(a) - fertig(b) || PRIO_RANG[a.prio] - PRIO_RANG[b.prio] || a.nr - b.nr; })
               .forEach(function (e) { karten.appendChild(kartenZeile(e, opts)); });
             tief.appendChild(karten);
           } else {
@@ -393,7 +394,7 @@
       art.appendChild(ul);
 
       // offene Punkte, die keiner Forderung zugeordnet sind
-      var rest = k.punkte.filter(function (e) { return e.status !== 'Erledigt' && !verknuepft[e.nr]; });
+      var rest = k.punkte.filter(function (e) { return !fertig(e) && !verknuepft[e.nr]; });
       if (rest.length) {
         var rkey = 'fo-rest:' + k.name;
         var r = el('div', 'fo__rest' + (offen[rkey] ? ' is-offen' : ''));
@@ -416,7 +417,7 @@
 
   // Einzelner OPL-Punkt kompakt: ID, Titel/Anforderung, Baugruppe, Prio, Status
   function kartenZeile(e, opts) {
-    var z = el('article', 'lh__anf' + (e.status === 'Erledigt' ? ' is-umgesetzt' : ''));
+    var z = el('article', 'lh__anf' + (e.status === 'Closed' ? ' is-umgesetzt' : ''));
     z.tabIndex = 0;
     z.title = T('Punkt #{nr} öffnen', { nr: e.nr });
     z.appendChild(el('div', 'lh__id', id(e)));
@@ -433,7 +434,7 @@
     var meta = el('div', 'lh__meta');
     meta.appendChild(el('span', 'lh__bgchip', '📍 ' + T(e.baugruppe || OHNE_BG)));
     meta.appendChild(el('span', 'pill pill--' + String(e.prio).toLowerCase(), T(e.prio)));
-    meta.appendChild(el('span', 'lh__status' + (e.status === 'Erledigt' ? ' is-umgesetzt' : ''), statusText(e)));
+    meta.appendChild(el('span', 'lh__status' + (e.status === 'Closed' ? ' is-umgesetzt' : ''), statusText(e)));
     if (e.zielRelease) meta.appendChild(el('span', 'lh__ziel', '🎯 ' + e.zielRelease));
     z.appendChild(meta);
     z.addEventListener('click', function () { opts.oeffnen(e.nr); });
@@ -454,7 +455,7 @@
       forderungenVon(forderungen, k.name).forEach(function (f) {
         var bsp = beispielNrs(f).map(function (n) { return nachNr[n]; }).filter(Boolean);
         fo.push([k.name, frage(k.name), f.text, f.detail || '', beispielNrs(f).join(', '),
-          bsp.filter(function (e) { return e.status !== 'Erledigt'; }).length,
+          bsp.filter(function (e) { return !fertig(e); }).length,
           bsp.map(function (e) { return '#' + e.nr + ' ' + kurztext(e, 90); }).join('\n')]);
       });
     });
@@ -474,7 +475,7 @@
       k.gruppen.forEach(function (g) {
         g.punkte.forEach(function (e) {
           zeilen.push([id(e), k.name, g.name, e.baugruppe || OHNE_BG, e.lhTitel, e.anforderung || '', e.nr, e.prio,
-            e.status === 'Erledigt' ? 'umgesetzt' : e.status, e.zielRelease, e.nacharbeit,
+            e.status === 'Closed' ? 'umgesetzt' : e.status, e.zielRelease, e.nacharbeit,
             e.verantwortlichkeit, e.verantwortlicher, e.anforderung ? '' : 'ja', e.todo]);
         });
       });
@@ -678,7 +679,7 @@
             { xml: text },
             mitte('#' + e.nr),
             mitte(e.prio, PRIO_FARBE[e.prio]),
-            mitte(e.status === 'Erledigt' ? 'umgesetzt' : e.status.toLowerCase(), e.status === 'Erledigt' ? 'E3F3E1' : null),
+            mitte(e.status === 'Closed' ? 'umgesetzt' : e.status.toLowerCase(), e.status === 'Closed' ? 'E3F3E1' : null),
             mitte(e.zielRelease || '–')
           ];
         }));
@@ -747,8 +748,8 @@
       });
       if (!punkte) return null;
       if (e.thema === kategorie) punkte += 1;
-      if (e.status !== 'Erledigt') punkte += 1.5;
-      if (e.status !== 'Erledigt' && e.prio === 'Hoch') punkte += 0.4;
+      if (!fertig(e)) punkte += 1.5;
+      if (!fertig(e) && e.prio === 'Hoch') punkte += 0.4;
       return { e: e, punkte: punkte, treffer: treffer };
     }).filter(Boolean).sort(function (a, b) { return b.punkte - a.punkte || a.e.nr - b.e.nr; }).slice(0, max || 12);
   }
@@ -758,7 +759,7 @@
   // OPL-Nummern, die im Export einer Kategorie vorkommen (Beispiele + Punkte der Kategorie)
   function kategorieNrs(eintraege, kategorie, forderungen) {
     var nrs = {};
-    eintraege.forEach(function (e) { if (e.thema === kategorie && e.status !== 'Erledigt') nrs[e.nr] = true; });
+    eintraege.forEach(function (e) { if (e.thema === kategorie && !fertig(e)) nrs[e.nr] = true; });
     forderungenVon(forderungen, kategorie).forEach(function (f) { beispielNrs(f).forEach(function (n) { nrs[n] = true; }); });
     return Object.keys(nrs).map(Number);
   }
@@ -777,7 +778,7 @@
       return t.length > 320 ? t.slice(0, 319) + '…' : t;
     };
     var sortiert = function (l) {
-      return l.slice().sort(function (a, b) { return (a.status === 'Erledigt') - (b.status === 'Erledigt') || PRIO_RANG[a.prio] - PRIO_RANG[b.prio] || a.nr - b.nr; });
+      return l.slice().sort(function (a, b) { return fertig(a) - fertig(b) || PRIO_RANG[a.prio] - PRIO_RANG[b.prio] || a.nr - b.nr; });
     };
     var zelleText = function (t, o) { return { xml: para(run(t, Object.assign({ sz: 17 }, o || {})), { after: 0, jc: o && o.jc }) }; };
     // Bilder je OPL-Nr (vom Aufrufer als JPEG vorbereitet): { nr: [{ data, w, h }] }
@@ -797,7 +798,7 @@
       return tabelle([700, 5338, 900, 1100, 1600], ['OPL', 'Punkt', 'Prio', 'Status', 'Verantwortlich'], l.map(function (e) {
         return [zelleText('#' + e.nr, { b: true }), { xml: para(run(langtext(e), { sz: 17 }), { after: 0 }) + bilderXml(e) },
           { xml: para(run(e.prio, { sz: 16 }), { after: 0, jc: 'center' }), fill: PRIO_FARBE[e.prio] },
-          zelleText(e.status === 'Erledigt' ? 'erledigt' : e.status, { sz: 16, jc: 'center' }),
+          zelleText(e.status === 'Closed' ? 'erledigt' : e.status, { sz: 16, jc: 'center' }),
           zelleText(e.verantwortlicher || e.verantwortlichkeit || '–', { sz: 15 })];
       }));
     };
@@ -834,7 +835,7 @@
         }
       });
     }
-    var rest = sortiert(punkte.filter(function (e) { return e.status !== 'Erledigt' && !verknuepft[e.nr]; }));
+    var rest = sortiert(punkte.filter(function (e) { return !fertig(e) && !verknuepft[e.nr]; }));
     if (rest.length) {
       body += para(run('Weitere offene Punkte ohne Forderung', { b: true, sz: 20, color: NAVY }), { before: 200, after: 50, keepNext: true });
       body += beispielTabelle(rest);
@@ -852,7 +853,7 @@
     var ziele = opts.ziele || {};
     var kap = struktur(eintraege);
     var z = zahlen(eintraege);
-    var offen = eintraege.filter(function (e) { return e.status !== 'Erledigt'; });
+    var offen = eintraege.filter(function (e) { return !fertig(e); });
     var hoch = offen.filter(function (e) { return e.prio === 'Hoch'; });
     var hochTermin = hoch.filter(function (e) { return e.faellig; }).length;
     var hochRelease = hoch.filter(function (e) { return e.zielRelease; }).length;
@@ -890,22 +891,22 @@
         (zz && zz.ziel ? '   Ziel: ' : ''), { sz: 16, color: GRAU }) + (zz && zz.ziel ? run(zz.ziel, { sz: 16, color: GRAU, i: true }) : ''),
         { after: 60, keepNext: true });
       if (!liste.length) {
-        var hochK = k.punkte.filter(function (e) { return e.status !== 'Erledigt' && e.prio === 'Hoch'; });
+        var hochK = k.punkte.filter(function (e) { return !fertig(e) && e.prio === 'Hoch'; });
         body += para(run('Noch keine Forderungen formuliert.' + (hochK.length ? ' Offen mit Prio Hoch: ' : ''), { sz: 17, i: true, color: GRAU }) +
           run(hochK.map(function (e) { return '#' + e.nr; }).join(', '), { sz: 17, color: GRAU }), { ind: [360, 0] });
         return;
       }
       liste.forEach(function (f, fi) {
         var bsp = beispielNrs(f).map(function (n) { return nachNr[n]; }).filter(Boolean)
-          .sort(function (a, b) { return (a.status === 'Erledigt') - (b.status === 'Erledigt') || PRIO_RANG[a.prio] - PRIO_RANG[b.prio] || a.nr - b.nr; });
+          .sort(function (a, b) { return fertig(a) - fertig(b) || PRIO_RANG[a.prio] - PRIO_RANG[b.prio] || a.nr - b.nr; });
         var letzte = fi === liste.length - 1;
         body += para(run('•', { b: true, color: BLAU }) + '<w:r><w:tab/></w:r>' + run(f.text, { b: true, sz: 19 }),
           { ind: [360, 240], after: f.detail || bsp.length ? 0 : 50, keepNext: !letzte || !!(f.detail || bsp.length) });
         if (f.detail) body += para(run(f.detail, { sz: 17 }), { ind: [360, 0], after: bsp.length ? 0 : 50 });
         if (bsp.length) {
-          var marke = function (e) { return e.status === 'Erledigt' ? ' ✓' : e.prio === 'Hoch' ? ' !' : ''; };
+          var marke = function (e) { return e.status === 'Closed' ? ' ✓' : e.prio === 'Hoch' ? ' !' : ''; };
           body += para(run('OPL: ', { sz: 16, b: true, color: GRAU }) + bsp.map(function (e, i) {
-            return run((i ? ', ' : '') + '#' + e.nr + marke(e), { sz: 16, color: e.prio === 'Hoch' && e.status !== 'Erledigt' ? 'B02A2A' : GRAU, b: e.prio === 'Hoch' && e.status !== 'Erledigt' });
+            return run((i ? ', ' : '') + '#' + e.nr + marke(e), { sz: 16, color: e.prio === 'Hoch' && !fertig(e) ? 'B02A2A' : GRAU, b: e.prio === 'Hoch' && !fertig(e) });
           }).join(''), { ind: [360, 0], after: 60 });
         }
       });

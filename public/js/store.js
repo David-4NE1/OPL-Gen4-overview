@@ -44,7 +44,20 @@
     'Montage/Fertigung', 'Design', 'Software', 'Advanced Development'
   ];
   var PRIOS = ['Hoch', 'Mittel', 'Niedrig'];
-  var STATI = ['Offen', 'In Arbeit', 'Erledigt'];
+  // Status-Workflow; Closed und Canceled gelten als abgeschlossen
+  var STATI = ['Open', 'Assigned', 'In Progress', 'In Review', 'Closed', 'Canceled'];
+  var STATUS_ABGESCHLOSSEN = ['Closed', 'Canceled'];
+  // Alte Werte (bis 11/2026) und Schreibvarianten auf die neuen abbilden
+  var STATUS_ALT = { offen: 'Open', inarbeit: 'In Progress', erledigt: 'Closed', cancelled: 'Canceled', done: 'Closed', inprogress: 'In Progress', inreview: 'In Review' };
+  function statusNormalisieren(s) {
+    var k = String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+    for (var i = 0; i < STATI.length; i++) if (STATI[i].toLowerCase().replace(/[^a-z]/g, '') === k) return STATI[i];
+    return STATUS_ALT[k] || '';
+  }
+  function istErledigt(e) {
+    var s = e && typeof e === 'object' ? e.status : e;
+    return STATUS_ABGESCHLOSSEN.indexOf(s) >= 0;
+  }
   var VERANTWORTLICHKEITEN = ['Advanced Development', 'Pre Series'];
   // Feste Themen (Pflicht beim Speichern im Tool); der konkrete Ort/Inhalt steht im To Do
   var THEMEN = [
@@ -152,7 +165,7 @@
       seite: SEITEN.indexOf(e.seite) >= 0 ? e.seite : '',
       nacharbeit: NACHARBEIT.indexOf(e.nacharbeit) >= 0 ? e.nacharbeit : '',
       zielRelease: ZIEL_RELEASES.indexOf(e.zielRelease) >= 0 ? e.zielRelease
-        : (e.status === 'Erledigt' ? ZIEL_RELEASE_ERLEDIGT : ''),
+        : (statusNormalisieren(e.status) === 'Closed' ? ZIEL_RELEASE_ERLEDIGT : ''),
       unterthema: unterthemenVon(e.thema).indexOf(e.unterthema) >= 0 ? e.unterthema : '',
       komponenten: komponentenNormalisieren(e.komponenten),
       // Lastenheft: Kurztitel und Anforderung (Zielzustand) zum OPL-Punkt
@@ -160,7 +173,7 @@
       anforderung: String(e.anforderung || '').trim(),
       release: e.release || '',
       faellig: e.faellig || '',
-      status: STATI.indexOf(e.status) >= 0 ? e.status : 'Offen',
+      status: statusNormalisieren(e.status) || 'Open',
       todo: e.todo || '',
       bilder: Array.isArray(e.bilder) ? e.bilder : [],
       notiz: e.notiz || '',
@@ -522,7 +535,9 @@
   function cycle(nr, feld) {
     var e = byNr(nr);
     if (!e) return;
-    var list = feld === 'prio' ? PRIOS : STATI;
+    // Status per Klick: Open → Assigned → In Progress → In Review → Closed → Open
+    // (Canceled nur bewusst im Bearbeiten-Dialog)
+    var list = feld === 'prio' ? PRIOS : STATI.slice(0, 5);
     var next = list[(list.indexOf(e[feld]) + 1) % list.length];
     var patch = {};
     patch[feld] = next;
@@ -626,11 +641,11 @@
   }
 
   function istUeberfaellig(e) {
-    return e.status !== 'Erledigt' && !!e.faellig && e.faellig < heute();
+    return !istErledigt(e) && !!e.faellig && e.faellig < heute();
   }
 
   global.OPLStore = {
-    BEREICHE: BEREICHE, PRIOS: PRIOS, STATI: STATI, VERANTWORTLICHKEITEN: VERANTWORTLICHKEITEN,
+    BEREICHE: BEREICHE, PRIOS: PRIOS, STATI: STATI, istErledigt: istErledigt, statusNormalisieren: statusNormalisieren, VERANTWORTLICHKEITEN: VERANTWORTLICHKEITEN,
     THEMEN: THEMEN, BAUGRUPPEN: BAUGRUPPEN, SEITEN: SEITEN, NACHARBEIT: NACHARBEIT, ZIEL_RELEASES: ZIEL_RELEASES, UNTERTHEMEN: UNTERTHEMEN, unterthemenVon: unterthemenVon, istThema: istThema, teamStandard: teamStandard, altesThemaInsTodo: altesThemaInsTodo,
     state: state,
     load: load, subscribe: subscribe, onError: onError, onStatus: onStatus, isOnline: isOnline,
