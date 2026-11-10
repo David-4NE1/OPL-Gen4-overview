@@ -10,6 +10,10 @@
 (function () {
   'use strict';
 
+  // Sperre an/aus – muss zu OPL_GESPERRT in worker/index.js passen
+  var AKTIV = false;
+  if (!AKTIV) { window.OPLUmzug = { angemeldet: function () {} }; return; }
+
   var ZIEL = 'http://100.64.0.52:8000/#/opl';
 
   var CSS = [
