@@ -6,6 +6,7 @@
 <title>OPL 4NE1 Gen4</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#9679;</text></svg>">
 <link rel="stylesheet" href="css/app.css">
+<script src="js/umzug-hinweis.js"></script>
 <script src="js/i18n.js"></script>
 </head>
 <body>
@@ -357,6 +358,7 @@
     window.__OPL_IS_ADMIN = !!isAdmin;
     window.__OPL_ROLLE = rolle || (isAdmin ? 'admin' : 'bearbeiten');
     document.body.dataset.rolle = window.__OPL_ROLLE;
+    if (window.OPLUmzug) window.OPLUmzug.angemeldet(!!isAdmin);
     loadScripts();
   }
 
