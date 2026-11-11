@@ -332,6 +332,8 @@
     'Bearbeiten': 'Edit',
     'Punkt {nr} bearbeiten': 'Edit item {nr}',
     'Erstellt: {datum}': 'Created: {datum}',
+    'Erstellt: {datum} von {name}': 'Created: {datum} by {name}',
+    '{k} ohne Nr bekommen neue Nummern ab #{ab}': '{k} without no. get new numbers from #{ab}',
     'Klick: Prio wechseln (Hoch → Mittel → Niedrig)': 'Click: change prio (High → Medium → Low)',
     'Klick: Status wechseln (Offen → In Arbeit → Erledigt)': 'Click: change status (Open → In progress → Done)',
     'Klick: Status wechseln (Open → Assigned → In Progress → In Review → Closed)': 'Click: change status (Open → Assigned → In Progress → In Review → Closed)',

@@ -82,7 +82,7 @@ GROUP BY t.komponente ORDER BY punkte DESC;
 DROP VIEW IF EXISTS v_aktivitaet_woche;
 CREATE VIEW v_aktivitaet_woche AS
 SELECT strftime('%Y-KW%W', wann) AS woche,
-       SUM(text = 'angelegt') AS angelegt,
+       SUM(text LIKE 'angelegt%') AS angelegt,
        SUM(feld = 'status' AND neu IN ('Closed', 'Erledigt')) AS erledigt,
        COUNT(*) AS aenderungen,
        COUNT(DISTINCT wer) AS personen

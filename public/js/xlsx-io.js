@@ -275,7 +275,7 @@
   /* ------------------------------------------------------------------ */
 
   var HEADERS = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Bilder', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit', 'Ziel-Release', 'Unterthema', 'Komponenten'];
+                 'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Bilder', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit', 'Ziel-Release', 'Unterthema', 'Komponenten', 'Ersteller'];
 
   // Feste Anzeigegroesse je eingebettetem Bild in Pixel (96 dpi).
   var IMG_W_PX = 110, IMG_H_PX = 80, IMG_GAP_PX = 6;
@@ -318,6 +318,7 @@
       esc(value) + '</t></is></c>';
   }
   function cellNum(ref, style, value) {
+    if (value == null || value === '') return '<c r="' + ref + '" s="' + style + '"/>';
     return '<c r="' + ref + '" s="' + style + '"><v>' + value + '</v></c>';
   }
   function cellFormula(ref, style, formula) {
@@ -403,7 +404,8 @@
         cellStr('N' + r, S.CELL, e.nacharbeit || ''),
         cellStr('O' + r, S.TEXT, e.zielRelease || ''),
         cellStr('P' + r, S.CELL, e.unterthema || ''),
-        cellStr('Q' + r, S.TEXT, e.komponenten || '')
+        cellStr('Q' + r, S.TEXT, e.komponenten || ''),
+        cellStr('R' + r, S.CELL, e.erstelltVon || '')
       ];
 
       var bilder = (e.bilder || []).map(function (b) { return dataUrlToBytes(b.src); })
@@ -478,11 +480,12 @@
         '<col min="15" max="15" width="13" style="' + S.TEXT + '" customWidth="1"/>' +
         '<col min="16" max="16" width="30" customWidth="1"/>' +
         '<col min="17" max="17" width="24" style="' + S.TEXT + '" customWidth="1"/>' +
+        '<col min="18" max="18" width="20" customWidth="1"/>' +
       '</cols>' +
       '<sheetData>' + rows.join('') + '</sheetData>' +
-      '<autoFilter ref="A7:Q' + last + '"/>' +
+      '<autoFilter ref="A7:R' + last + '"/>' +
       '<mergeCells count="3">' +
-        '<mergeCell ref="A1:Q1"/><mergeCell ref="A2:Q2"/><mergeCell ref="H5:I5"/>' +
+        '<mergeCell ref="A1:R1"/><mergeCell ref="A2:R2"/><mergeCell ref="H5:I5"/>' +
       '</mergeCells>' +
       '<dataValidations count="' + (4 + (opts.themen ? 1 : 0) + (opts.baugruppen ? 1 : 0) + (opts.nacharbeit ? 1 : 0) + (opts.zielReleases ? 1 : 0)) + '">' +
         (opts.themen ? validation('list', 'C' + first + ':C' + last, '"' + opts.themen.join(',') + '"') : '') +
@@ -713,8 +716,9 @@
         var thema = (zelle('thema') || '').trim();
         if (!nrRaw && !todo && !thema) return; // Leerzeile
 
-        var nr = parseInt(String(nrRaw).replace(/\D/g, ''), 10);
-        if (!nr) { warnungen.push('Zeile ' + rn + ': keine gueltige Nr – uebersprungen.'); return; }
+        // Leere Nr = neuer Punkt; die Nummer vergibt der Import (naechste freie)
+        var nr = String(nrRaw == null ? '' : nrRaw).trim() === '' ? 0 : parseInt(String(nrRaw).replace(/\D/g, ''), 10);
+        if (nr !== 0 && !nr) { warnungen.push('Zeile ' + rn + ': keine gueltige Nr – uebersprungen.'); return; }
 
         var prio = normalize(zelle('prio'), ['Hoch', 'Mittel', 'Niedrig']);
         if (!prio) {

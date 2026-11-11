@@ -374,7 +374,7 @@ async function handleAPI(url, method, request, env) {
     const maxRow = await db.prepare('SELECT MAX(nr) AS m FROM entries').first();
     const nr = (maxRow?.m || 0) + 1;
     const now = new Date().toISOString();
-    const e = normalize({ ...data, nr, erstelltAm: now.slice(0, 10), geaendertAm: now, geaendertVon: sitzung.name });
+    const e = normalize({ ...data, nr, erstelltAm: now.slice(0, 10), erstelltVon: sitzung.name, geaendertAm: now, geaendertVon: sitzung.name });
     await insertEntry(db, e);
     await logChange(db, nr, 'angelegt', e.geaendertVon);
     return json(mitBildVerweisen(e), 201);
@@ -467,11 +467,11 @@ async function handleAPI(url, method, request, env) {
       // Die Excel kennt weder Release noch Seite: bisherige Werte je Nr behalten
       // (Nacharbeit und Ziel-Release ebenso, wenn die Spalte in der Datei leer ist)
       // Lastenheft-Titel und -Anforderung stehen nicht in der OPL-Excel: ebenfalls behalten
-      const { results: alt } = await db.prepare("SELECT nr, release, seite, nacharbeit, ziel_release, unterthema, komponenten, lh_titel, anforderung FROM entries WHERE release <> '' OR seite <> '' OR nacharbeit <> '' OR ziel_release <> '' OR unterthema <> '' OR komponenten <> '' OR lh_titel <> '' OR anforderung <> ''").all();
+      const { results: alt } = await db.prepare("SELECT nr, release, seite, nacharbeit, ziel_release, unterthema, komponenten, lh_titel, anforderung, erstellt_von FROM entries WHERE release <> '' OR seite <> '' OR nacharbeit <> '' OR ziel_release <> '' OR unterthema <> '' OR komponenten <> '' OR lh_titel <> '' OR anforderung <> '' OR COALESCE(erstellt_von, '') <> ''").all();
       const altJeNr = new Map(alt.map(r => [r.nr, r]));
       await db.prepare('DELETE FROM entries').run();
       const stmts = entries.map(raw => {
-        const e = normalize({ ...raw, release: raw.release || altJeNr.get(raw.nr)?.release, seite: raw.seite || altJeNr.get(raw.nr)?.seite, nacharbeit: raw.nacharbeit || altJeNr.get(raw.nr)?.nacharbeit, zielRelease: raw.zielRelease || altJeNr.get(raw.nr)?.ziel_release, unterthema: raw.unterthema || altJeNr.get(raw.nr)?.unterthema, komponenten: raw.komponenten || altJeNr.get(raw.nr)?.komponenten, lhTitel: raw.lhTitel || altJeNr.get(raw.nr)?.lh_titel, anforderung: raw.anforderung || altJeNr.get(raw.nr)?.anforderung, geaendertAm: now, geaendertVon: user || 'Excel-Import' });
+        const e = normalize({ ...raw, release: raw.release || altJeNr.get(raw.nr)?.release, seite: raw.seite || altJeNr.get(raw.nr)?.seite, nacharbeit: raw.nacharbeit || altJeNr.get(raw.nr)?.nacharbeit, zielRelease: raw.zielRelease || altJeNr.get(raw.nr)?.ziel_release, unterthema: raw.unterthema || altJeNr.get(raw.nr)?.unterthema, komponenten: raw.komponenten || altJeNr.get(raw.nr)?.komponenten, lhTitel: raw.lhTitel || altJeNr.get(raw.nr)?.lh_titel, anforderung: raw.anforderung || altJeNr.get(raw.nr)?.anforderung, erstelltVon: altJeNr.get(raw.nr)?.erstellt_von || '', geaendertAm: now, geaendertVon: user || 'Excel-Import' });
         return insertStmt(db, e);
       });
       await db.batch(stmts);
@@ -489,7 +489,11 @@ async function handleAPI(url, method, request, env) {
         stmts.push(updateStmt(db, e));
         aktualisiert++;
       } else {
+        // Neuer Punkt: Ersteller ist, wer importiert; im Protokoll als angelegt vermerken
+        e.erstelltVon = user || 'Excel-Import';
         stmts.push(insertStmt(db, e));
+        stmts.push(db.prepare('INSERT INTO changelog (nr, text, wann, wer) VALUES (?, ?, ?, ?)')
+          .bind(e.nr, 'angelegt (Excel-Import)', now, user || 'Excel-Import'));
         neu++;
       }
     }
@@ -1029,7 +1033,7 @@ async function protokollLesen(db, url) {
 async function listeEintraege(db, seit) {
   const { results } = await db.prepare(
     `SELECT nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, seite, nacharbeit, ziel_release, unterthema, komponenten, lh_titel, anforderung, release, faellig, status, todo, notiz,
-            erstellt_am, geaendert_am, geaendert_von,
+            erstellt_am, erstellt_von, geaendert_am, geaendert_von,
             (SELECT json_group_array(json_object(
                        'i', CAST(j.key AS INTEGER),
                        'name', json_extract(j.value, '$.name'),
@@ -1105,7 +1109,7 @@ async function schemaSicherstellen(db) {
   } catch (err) {
     if (!/duplicate column/i.test(String(err && err.message))) throw err;
   }
-  for (const spalte of ['release', 'seite', 'nacharbeit', 'unterthema', 'lh_titel', 'anforderung', 'komponenten']) {
+  for (const spalte of ['release', 'seite', 'nacharbeit', 'unterthema', 'lh_titel', 'anforderung', 'komponenten', 'erstellt_von']) {
     try {
       await db.prepare(`ALTER TABLE entries ADD COLUMN ${spalte} TEXT DEFAULT ''`).run();
     } catch (err) {
@@ -1150,6 +1154,18 @@ async function schemaSicherstellen(db) {
     ]);
     // Offene Browser laden die volle Liste neu
     if (n) { try { await standErhoehen(db, true); } catch (e) { /* nur Hinweis */ } }
+  }
+  // Einmalig: Ersteller aus dem Protokoll nachtragen (erster Eintrag "angelegt"
+  // je Punkt). Punkte ohne solchen Eintrag (Excel-Startstand, alte Importe)
+  // bleiben leer.
+  const erstellerV1 = await db.prepare("SELECT value FROM settings WHERE key = 'ersteller_v1'").first();
+  if (!erstellerV1) {
+    const res = await db.prepare(`UPDATE entries SET erstellt_von = (
+        SELECT c.wer FROM changelog c WHERE c.nr = entries.nr AND c.text LIKE 'angelegt%' ORDER BY c.id LIMIT 1)
+      WHERE COALESCE(erstellt_von, '') = ''
+        AND EXISTS (SELECT 1 FROM changelog c WHERE c.nr = entries.nr AND c.text LIKE 'angelegt%')`).run();
+    await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('ersteller_v1', ?)").bind(new Date().toISOString()).run();
+    if (res && res.meta && res.meta.changes) { try { await standErhoehen(db, true); } catch (e) { /* nur Hinweis */ } }
   }
   await db.prepare(`CREATE TABLE IF NOT EXISTS lastenheft_ziele (
     schluessel TEXT PRIMARY KEY, anforderung TEXT NOT NULL DEFAULT '', ziel TEXT NOT NULL DEFAULT '',
@@ -1252,6 +1268,7 @@ function normalize(e) {
     bilder: Array.isArray(e.bilder) ? e.bilder : [],
     notiz: e.notiz || '',
     erstelltAm: e.erstelltAm || new Date().toISOString().slice(0, 10),
+    erstelltVon: String(e.erstelltVon || '').trim().slice(0, 120),
     geaendertAm: e.geaendertAm || '',
     geaendertVon: e.geaendertVon || ''
   };
@@ -1282,6 +1299,7 @@ function dbToEntry(row) {
     bilder,
     notiz: row.notiz,
     erstelltAm: row.erstellt_am || '',
+    erstelltVon: row.erstellt_von || '',
     geaendertAm: row.geaendert_am,
     geaendertVon: row.geaendert_von
   };
@@ -1289,10 +1307,10 @@ function dbToEntry(row) {
 
 function insertStmt(db, e) {
   return db.prepare(
-    `INSERT INTO entries (nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, seite, nacharbeit, ziel_release, unterthema, komponenten, lh_titel, anforderung, release, faellig, status, todo, bilder, notiz, erstellt_am, geaendert_am, geaendert_von)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO entries (nr, bereich, thema, prio, verantwortlicher, verantwortlichkeit, baugruppe, seite, nacharbeit, ziel_release, unterthema, komponenten, lh_titel, anforderung, release, faellig, status, todo, bilder, notiz, erstellt_am, erstellt_von, geaendert_am, geaendert_von)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(e.nr, e.bereich, e.thema, e.prio, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.seite, e.nacharbeit, e.zielRelease, e.unterthema, e.komponenten, e.lhTitel, e.anforderung, e.release, e.faellig, e.status, e.todo,
-         JSON.stringify(e.bilder), e.notiz, e.erstelltAm, e.geaendertAm, e.geaendertVon);
+         JSON.stringify(e.bilder), e.notiz, e.erstelltAm, e.erstelltVon || '', e.geaendertAm, e.geaendertVon);
 }
 
 async function insertEntry(db, e) { await insertStmt(db, e).run(); }

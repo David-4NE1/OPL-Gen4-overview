@@ -35,7 +35,7 @@ VOLL_NACH_STUNDEN = 24
 
 FELDER = ['bereich', 'thema', 'unterthema', 'prio', 'status', 'verantwortlicher', 'verantwortlichkeit',
           'baugruppe', 'seite', 'nacharbeit', 'zielRelease', 'komponenten', 'release', 'faellig', 'todo',
-          'notiz', 'lhTitel', 'anforderung', 'erstelltAm', 'geaendertAm', 'geaendertVon']
+          'notiz', 'lhTitel', 'anforderung', 'erstelltAm', 'erstelltVon', 'geaendertAm', 'geaendertVon']
 SPALTE = {f: re.sub(r'([A-Z])', lambda m: '_' + m.group(1).lower(), f) for f in FELDER}
 
 SCHEMA = """
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS punkte (
   nr INTEGER PRIMARY KEY, bereich TEXT, thema TEXT, unterthema TEXT, prio TEXT, status TEXT,
   verantwortlicher TEXT, verantwortlichkeit TEXT, baugruppe TEXT, seite TEXT, nacharbeit TEXT,
   ziel_release TEXT, komponenten TEXT, release TEXT, faellig TEXT, todo TEXT, notiz TEXT,
-  lh_titel TEXT, anforderung TEXT, erstellt_am TEXT, geaendert_am TEXT, geaendert_von TEXT,
+  lh_titel TEXT, anforderung TEXT, erstellt_am TEXT, erstellt_von TEXT, geaendert_am TEXT, geaendert_von TEXT,
   bilder_anzahl INTEGER DEFAULT 0, geloescht_am TEXT, zuletzt_abgerufen TEXT
 );
 CREATE TABLE IF NOT EXISTS punkte_verlauf (
@@ -149,6 +149,12 @@ def lauf(voll_erzwingen=False):
     url, token, pfad = konfig()
     con = sqlite3.connect(pfad)
     con.executescript(SCHEMA)
+    # Spalten, die nach dem ersten Einrichten dazugekommen sind
+    for spalte in ('erstellt_von',):
+        try:
+            con.execute('ALTER TABLE punkte ADD COLUMN %s TEXT' % spalte)
+        except sqlite3.OperationalError:
+            pass
     zeit = jetzt()
     seit = meta(con, 'letzte_zeit')
     letzte_voll = meta(con, 'letzte_voll')

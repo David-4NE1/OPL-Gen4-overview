@@ -178,6 +178,7 @@
       bilder: Array.isArray(e.bilder) ? e.bilder : [],
       notiz: e.notiz || '',
       erstelltAm: e.erstelltAm || '',
+      erstelltVon: e.erstelltVon || '',
       geaendertAm: e.geaendertAm || '',
       geaendertVon: e.geaendertVon || ''
     };
@@ -413,6 +414,7 @@
     var e = normalizeEntry(data);
     e.nr = nextNr();
     e.erstelltAm = heute();
+    e.erstelltVon = state.user || '';
     e.geaendertAm = jetzt();
     e.geaendertVon = state.user || 'unbekannt';
     state.entries.push(e);
@@ -554,19 +556,26 @@
     var vorher = state.entries.length;
     var bilderProNr = {};
     var erstelltAmProNr = {};
+    var erstelltVonProNr = {};
     state.entries.forEach(function (e) {
       if (e.bilder && e.bilder.length) bilderProNr[e.nr] = e.bilder;
       if (e.erstelltAm) erstelltAmProNr[e.nr] = e.erstelltAm;
+      if (e.erstelltVon) erstelltVonProNr[e.nr] = e.erstelltVon;
     });
 
     var neu = 0, aktualisiert = 0, bilderNeu = 0;
     var betroffen = [];
+    // Zeilen ohne Nr: naechste freie Nummern vergeben (hinter allen vorhandenen
+    // und allen Nummern in der Datei)
+    var hoechste = state.entries.concat(entries).reduce(function (m, e) { return Math.max(m, +e.nr || 0); }, 0);
+    entries = entries.map(function (e) { return e.nr ? e : Object.assign({}, e, { nr: ++hoechste }); });
     if (modus === 'ersetzen') {
       state.entries = entries.map(function (e) {
         var n = themaEinordnen(normalizeEntry(e));
         n.verantwortlichkeit = n.verantwortlichkeit || teamStandard(n.verantwortlicher);
         if (!n.bilder.length && bilderProNr[n.nr]) n.bilder = bilderProNr[n.nr];
         n.erstelltAm = n.erstelltAm || erstelltAmProNr[n.nr] || heute();
+        n.erstelltVon = erstelltVonProNr[n.nr] || state.user || '';
         return n;
       });
       neu = state.entries.length;
@@ -579,6 +588,7 @@
           if (!n.bilder.length) n.bilder = vorhanden.bilder;
           else bilderNeu += Math.max(0, n.bilder.length - (vorhanden.bilder || []).length);
           n.erstelltAm = n.erstelltAm || vorhanden.erstelltAm || heute();
+          n.erstelltVon = vorhanden.erstelltVon || '';
           n.verantwortlichkeit = n.verantwortlichkeit || vorhanden.verantwortlichkeit || teamStandard(n.verantwortlicher);
           n.baugruppe = n.baugruppe || vorhanden.baugruppe;
           n.release = n.release || vorhanden.release;
@@ -602,6 +612,7 @@
           n.verantwortlichkeit = n.verantwortlichkeit || teamStandard(n.verantwortlicher);
           if (!n.bilder.length && bilderProNr[n.nr]) n.bilder = bilderProNr[n.nr];
           n.erstelltAm = n.erstelltAm || heute();
+          n.erstelltVon = state.user || '';
           n.geaendertAm = jetzt();
           n.geaendertVon = state.user || 'Excel-Import';
           state.entries.push(n);
