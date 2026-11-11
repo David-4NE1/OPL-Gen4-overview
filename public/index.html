@@ -38,33 +38,11 @@
     <p id="standLine" data-i18n>Open Point List – Humanoid Entwicklung</p>
   </div>
 
-  <div class="kpis" id="kpis">
-    <button class="kpi" data-quick="offen" type="button">
-      <span class="kpi__value" id="kpiOffen">0</span><span class="kpi__label" data-i18n>offen</span>
-    </button>
-    <button class="kpi kpi--hoch" data-quick="hoch" type="button">
-      <span class="kpi__value" id="kpiHoch">0</span><span class="kpi__label" data-i18n>Prio hoch</span>
-    </button>
-    <button class="kpi kpi--mittel" data-quick="mittel" type="button">
-      <span class="kpi__value" id="kpiMittel">0</span><span class="kpi__label" data-i18n>mittel</span>
-    </button>
-    <button class="kpi kpi--niedrig" data-quick="niedrig" type="button">
-      <span class="kpi__value" id="kpiNiedrig">0</span><span class="kpi__label" data-i18n>niedrig</span>
-    </button>
-    <button class="kpi kpi--overdue" data-quick="ueberfaellig" type="button" id="kpiOverdueBox">
-      <span class="kpi__value" id="kpiOverdue">0</span><span class="kpi__label" data-i18n>überfällig</span>
-    </button>
-    <button class="kpi kpi--done" data-quick="erledigt" type="button">
-      <span class="kpi__value" id="kpiErledigt">0</span><span class="kpi__label" data-i18n>erledigt</span>
-    </button>
-  </div>
-
   <div class="topbar__actions">
     <input id="userName" class="user-input" type="text" readonly tabindex="-1"
            title="Angemeldet als – wird im Änderungsprotokoll mitgeschrieben" data-i18n-title>
     <button id="btnLang" class="btn btn--ghost" type="button" data-lang-toggle>EN</button>
     <button id="btnDark" class="btn btn--ghost" type="button" title="Dark / Light Mode">☀</button>
-    <button id="btnNeu" class="btn btn--primary nur-bearbeiten" type="button" data-i18n>+ Neuer Punkt</button>
     <div class="menu">
       <button id="btnMenu" class="btn btn--ghost" type="button" aria-haspopup="true" aria-expanded="false"
               title="Excel &amp; mehr" data-i18n-title>⋯</button>
@@ -88,6 +66,40 @@
   </div>
 </header>
 
+<section class="dash">
+  <div id="rmBand" class="rmband" hidden></div>
+  <div class="kpis" id="kpis">
+    <button class="kpi" data-quick="offen" type="button">
+      <span class="kpi__value" id="kpiOffen">0</span><span class="kpi__label" data-i18n>offen</span>
+    </button>
+    <button class="kpi kpi--hoch" data-quick="hoch" type="button">
+      <span class="kpi__value" id="kpiHoch">0</span><span class="kpi__label" data-i18n>Prio hoch</span>
+    </button>
+    <button class="kpi kpi--mittel" data-quick="mittel" type="button">
+      <span class="kpi__value" id="kpiMittel">0</span><span class="kpi__label" data-i18n>mittel</span>
+    </button>
+    <button class="kpi kpi--niedrig" data-quick="niedrig" type="button">
+      <span class="kpi__value" id="kpiNiedrig">0</span><span class="kpi__label" data-i18n>niedrig</span>
+    </button>
+    <button class="kpi kpi--overdue" data-quick="ueberfaellig" type="button" id="kpiOverdueBox">
+      <span class="kpi__value" id="kpiOverdue">0</span><span class="kpi__label" data-i18n>überfällig</span>
+    </button>
+    <button class="kpi kpi--done" data-quick="erledigt" type="button">
+      <span class="kpi__value" id="kpiErledigt">0</span><span class="kpi__label" data-i18n>erledigt</span>
+    </button>
+  </div>
+
+  <div class="dash__aktionen">
+    <button id="btnNeu" class="btn btn--gross nur-bearbeiten" type="button" data-i18n>+ Punkt hinzufügen</button>
+  <div class="viewswitch" role="group" aria-label="Ansicht" data-i18n-aria>
+    <button type="button" class="is-active" data-view="karten" title="Karten-Ansicht" data-i18n-title><span aria-hidden="true">▤</span> <span data-i18n>Karten</span></button>
+    <button type="button" data-view="tabelle" title="Tabellen-Ansicht" data-i18n-title><span aria-hidden="true">☰</span> <span data-i18n>Liste</span></button>
+    <button type="button" data-view="lastenheft" title="Lastenheft-Übersicht nach Kategorie" data-i18n-title><span aria-hidden="true">📋</span> <span data-i18n>Lastenheft</span></button>
+  </div>
+    <a class="pillbtn" href="roadmap.html"><span aria-hidden="true">🗺</span> <span data-i18n>Roadmap</span></a>
+  </div>
+</section>
+
 <section class="filterbar">
   <input id="suche" class="search" type="search" placeholder="Suchen in Thema, To Do, Verantwortlicher …" data-i18n-ph>
   <!-- nur auf dem Smartphone sichtbar: klappt die Auswahlfilter auf -->
@@ -105,11 +117,6 @@
   <div id="fNacharbeit" class="msel" data-alle="Nacharbeit"></div>
   <div id="fZielRelease" class="msel" data-alle="Alle Ziel-Releases"></div>
   <div id="fUnterthema" class="msel" data-alle="Alle Unterthemen"></div>
-  </div>
-  <div class="viewswitch" role="group" aria-label="Ansicht" data-i18n-aria>
-    <button type="button" class="is-active" data-view="karten" title="Karten-Ansicht" data-i18n-title>▤</button>
-    <button type="button" data-view="tabelle" title="Tabellen-Ansicht" data-i18n-title>☰</button>
-    <button type="button" data-view="lastenheft" class="viewswitch__text" title="Lastenheft-Übersicht nach Kategorie" data-i18n-title><span data-i18n>Lastenheft</span></button>
   </div>
   <button id="btnFilterReset" class="btn btn--ghost" type="button" hidden data-i18n>Filter zurücksetzen</button>
 </section>
