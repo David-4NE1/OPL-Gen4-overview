@@ -302,6 +302,18 @@ main { padding: 16px; max-width: 1400px; margin: 0 auto; }
 .card__edit:hover { opacity: 1; background: var(--bg); }
 
 .card__created { font-size: 11px; color: var(--ink-soft); margin: 0; }
+.card__verlauf { margin-left: 8px; padding: 0 4px; border: 0; background: none; font: inherit; color: var(--ink-soft); cursor: pointer; text-decoration: underline dotted; }
+.card__verlauf:hover { color: var(--ink); }
+#dlgVerlauf { width: min(820px, calc(100vw - 32px)); }
+.verlauf__kopf { font-size: 13px; color: var(--ink-soft); margin: 0 0 10px; }
+.verlauf__liste { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow: auto; }
+.verlauf__liste li { display: grid; grid-template-columns: 120px 150px minmax(0, 1fr); gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line, rgba(0,0,0,.08)); font-size: 13px; }
+.verlauf__wann { color: var(--ink-soft); white-space: nowrap; }
+.verlauf__wer { font-weight: 600; overflow-wrap: anywhere; }
+.verlauf__was { overflow-wrap: anywhere; white-space: pre-line; }
+.verlauf__alt { color: var(--ink-soft); text-decoration: line-through; }
+.verlauf__liste li.verlauf__leer { display: block; color: var(--ink-soft); }
+@media (max-width: 600px) { .verlauf__liste li { grid-template-columns: 1fr; gap: 2px; } }
 .card__todo { font-size: 13.5px; color: var(--ink); white-space: pre-wrap; }
 
 .card__meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
