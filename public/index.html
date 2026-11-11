@@ -206,6 +206,7 @@
     <div id="fmBilderListe" class="thumbrow"></div>
     <footer class="dialog__footer">
       <button type="button" id="btnDelete" class="btn btn--danger nur-admin" hidden data-i18n>Löschen</button>
+      <button type="button" id="btnVerlauf" class="btn btn--ghost" hidden data-i18n>🕓 Verlauf</button>
       <span class="spacer"></span>
       <button type="button" class="btn btn--ghost" data-close data-i18n>Abbrechen</button>
       <button type="submit" class="btn btn--primary nur-bearbeiten" data-i18n>Speichern</button>
@@ -298,6 +299,16 @@
 <dialog id="dlgLog" class="dialog">
   <h2 data-i18n>Änderungsprotokoll</h2>
   <div id="logList" class="loglist"></div>
+  <footer class="dialog__footer">
+    <span class="spacer"></span>
+    <button type="button" class="btn btn--ghost" data-close data-i18n>Schließen</button>
+  </footer>
+</dialog>
+
+<!-- Dialog: Verlauf eines Punkts -->
+<dialog id="dlgVerlauf" class="dialog">
+  <h2 id="verlaufTitel" data-i18n>Verlauf</h2>
+  <div id="verlaufListe" class="verlauf"></div>
   <footer class="dialog__footer">
     <span class="spacer"></span>
     <button type="button" class="btn btn--ghost" data-close data-i18n>Schließen</button>

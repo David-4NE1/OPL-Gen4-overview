@@ -656,7 +656,7 @@
   }
 
   global.OPLStore = {
-    BEREICHE: BEREICHE, PRIOS: PRIOS, STATI: STATI, istErledigt: istErledigt, statusNormalisieren: statusNormalisieren, VERANTWORTLICHKEITEN: VERANTWORTLICHKEITEN,
+    BEREICHE: BEREICHE, PRIOS: PRIOS, STATI: STATI, FELD_NAMEN: FELD_NAMEN, istErledigt: istErledigt, statusNormalisieren: statusNormalisieren, VERANTWORTLICHKEITEN: VERANTWORTLICHKEITEN,
     THEMEN: THEMEN, BAUGRUPPEN: BAUGRUPPEN, SEITEN: SEITEN, NACHARBEIT: NACHARBEIT, ZIEL_RELEASES: ZIEL_RELEASES, UNTERTHEMEN: UNTERTHEMEN, unterthemenVon: unterthemenVon, istThema: istThema, teamStandard: teamStandard, altesThemaInsTodo: altesThemaInsTodo,
     state: state,
     load: load, subscribe: subscribe, onError: onError, onStatus: onStatus, isOnline: isOnline,

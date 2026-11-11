@@ -427,6 +427,11 @@
         ? (e.erstelltVon ? T('Erstellt: {datum} von {name}', { datum: Xlsx.ddmmyyyy(e.erstelltAm), name: e.erstelltVon })
           : T('Erstellt: {datum}', { datum: Xlsx.ddmmyyyy(e.erstelltAm) }))
         : '');
+      var vl = el('button', 'card__verlauf', T('🕓 Verlauf'));
+      vl.type = 'button';
+      vl.title = T('Wer hat wann was geändert?');
+      vl.addEventListener('click', function () { zeigeVerlauf(e.nr); });
+      created.appendChild(vl);
       if (istUebersetzt(e)) created.appendChild(el('span', 'tr-tag', T('🌐 übersetzt')));
       c.appendChild(created);
     }
@@ -880,6 +885,7 @@
     editBilder = e ? Store.clone(e.bilder) : [];
     renderEditBilder();
     $('#btnDelete').hidden = !e;
+    $('#btnVerlauf').hidden = !e;
     // Nur Lesezugriff: Felder sperren, Bilder bleiben per Klick vergroesserbar
     var nurLesen = !Store.darf('bearbeiten');
     $$('#formEdit input, #formEdit select, #formEdit textarea').forEach(function (f) { f.disabled = nurLesen; });
@@ -2003,6 +2009,66 @@
     });
   }
 
+  // Verlauf eines Punkts: alle Protokollzeilen mit Datum, Person und Änderung
+  var VERLAUF_MUSTER = /^(\w+): "([\s\S]*)" → "([\s\S]*?)"(.*)$/;
+  function zeigeVerlauf(nr) {
+    var box = $('#verlaufListe');
+    var e = Store.state.entries.filter(function (x) { return x.nr === nr; })[0];
+    $('#verlaufTitel').textContent = T('Verlauf #{nr}', { nr: nr });
+    box.textContent = '';
+    if (e && (e.erstelltAm || e.erstelltVon)) {
+      box.appendChild(el('p', 'verlauf__kopf', T('Erstellt: {datum}', { datum: Xlsx.ddmmyyyy(e.erstelltAm) }) +
+        (e.erstelltVon ? ' · ' + e.erstelltVon : '') +
+        (e.geaendertAm ? ' — ' + T('zuletzt geändert {wann} von {wer}', { wann: new Date(e.geaendertAm).toLocaleString(I18N.locale()), wer: e.geaendertVon || '?' }) : '')));
+    }
+    var liste = el('ol', 'verlauf__liste');
+    liste.appendChild(el('li', null, T('Lade …')));
+    box.appendChild(liste);
+    $('#dlgVerlauf').showModal();
+    fetch('/api/log?nr=' + nr).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (zeilen) {
+      liste.textContent = '';
+      if (!zeilen.length) {
+        liste.appendChild(el('li', 'verlauf__leer', T('Für diesen Punkt sind keine Änderungen protokolliert (z. B. aus dem Excel-Startstand oder einem älteren Import).')));
+        return;
+      }
+      zeilen.slice().reverse().forEach(function (z) {
+        var li = el('li');
+        li.appendChild(el('span', 'verlauf__wann', new Date(z.wann).toLocaleString(I18N.locale(), { dateStyle: 'short', timeStyle: 'short' })));
+        li.appendChild(el('span', 'verlauf__wer', z.wer || T('unbekannt')));
+        var m = VERLAUF_MUSTER.exec(z.text || '');
+        var was = el('span', 'verlauf__was');
+        if (m) {
+          was.appendChild(el('b', null, T(Store.FELD_NAMEN[m[1]] || m[1]) + ': '));
+          var alt = m[2] === '–' ? '' : m[2], neu = m[3] === '–' ? '' : m[3];
+          // Lange Texte: nur den geaenderten Ausschnitt zeigen (gemeinsamen Anfang/Ende kuerzen)
+          if (alt.length > 160 || neu.length > 160) {
+            var a0 = 0, e0 = 0;
+            while (a0 < alt.length && a0 < neu.length && alt[a0] === neu[a0]) a0++;
+            while (e0 < alt.length - a0 && e0 < neu.length - a0 && alt[alt.length - 1 - e0] === neu[neu.length - 1 - e0]) e0++;
+            var von = Math.max(0, a0 - 40);
+            var aus = function (t) {
+              var stueck = t.slice(von, t.length - Math.max(0, e0 - 40));
+              if (stueck.length > 400) stueck = stueck.slice(0, 400) + ' …';
+              return (von ? '… ' : '') + stueck + (e0 > 40 ? ' …' : '');
+            };
+            alt = aus(alt); neu = aus(neu);
+          }
+          was.appendChild(el('span', 'verlauf__alt', alt || '–'));
+          was.appendChild(document.createTextNode(' → '));
+          was.appendChild(el('span', 'verlauf__neu', neu || '–'));
+          if (m[4]) was.appendChild(el('small', null, m[4]));
+        } else {
+          was.textContent = z.text;
+        }
+        li.appendChild(was);
+        liste.appendChild(li);
+      });
+    }).catch(function () {
+      liste.textContent = '';
+      liste.appendChild(el('li', 'verlauf__leer', T('Verlauf konnte nicht geladen werden.')));
+    });
+  }
+
   /* --------------------------------------------------------------- Init */
 
   function init() {
@@ -2237,6 +2303,7 @@
       if (ev.altKey && ev.key === 'ArrowRight') { ev.preventDefault(); editNavigiere(1); }
     });
 
+    $('#btnVerlauf').addEventListener('click', function () { if (editNr) zeigeVerlauf(editNr); });
     $('#btnDelete').addEventListener('click', function () {
       if (editNr == null) return;
       if (!confirm(T('Punkt #{nr} wirklich löschen? Tipp: Status „Closed” oder „Canceled” behält die Historie.', { nr: editNr }))) return;

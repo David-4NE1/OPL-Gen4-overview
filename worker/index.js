@@ -1019,6 +1019,12 @@ function seitParam(url) {
 // Protokoll: ohne Parameter die neuesten 500 (Anzeige im Board); mit
 // ?nach_id=<id> aufsteigend ab dieser id (Primaerschluessel, liest nur neue Zeilen)
 async function protokollLesen(db, url) {
+  // ?nr=<Nr>: Verlauf eines Punkts (aelteste zuerst; Index auf changelog.nr)
+  const nr = parseInt(url.searchParams.get('nr'), 10);
+  if (nr > 0) {
+    const { results } = await db.prepare('SELECT * FROM changelog WHERE nr = ? ORDER BY id LIMIT 2000').bind(nr).all();
+    return results;
+  }
   const nachId = url.searchParams.get('nach_id');
   if (nachId == null) {
     const { results } = await db.prepare('SELECT * FROM changelog ORDER BY id DESC LIMIT 500').all();
@@ -1165,6 +1171,21 @@ async function schemaSicherstellen(db) {
       WHERE COALESCE(erstellt_von, '') = ''
         AND EXISTS (SELECT 1 FROM changelog c WHERE c.nr = entries.nr AND c.text LIKE 'angelegt%')`).run();
     await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('ersteller_v1', ?)").bind(new Date().toISOString()).run();
+    if (res && res.meta && res.meta.changes) { try { await standErhoehen(db, true); } catch (e) { /* nur Hinweis */ } }
+  }
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_changelog_nr ON changelog (nr)').run();
+  // Einmalig: Ersteller von Punkten aus Excel-Importen nachtragen. Die Importe
+  // stehen nur als Sammelzeile im Protokoll ("Excel-Import (zusammenführen):
+  // … n neu"); passt das Anlagedatum eines Punkts zu genau einer Person, die an
+  // dem Tag neue Punkte importiert hat, gilt sie als Ersteller.
+  const erstellerV2 = await db.prepare("SELECT value FROM settings WHERE key = 'ersteller_v2'").first();
+  if (!erstellerV2) {
+    const importe = `FROM changelog c WHERE c.nr = 0 AND c.text LIKE 'Excel-Import%' AND c.text NOT LIKE '%ersetzen%'
+        AND c.text NOT LIKE '%, 0 neu' AND substr(c.wann, 1, 10) = entries.erstellt_am`;
+    const res = await db.prepare(`UPDATE entries SET erstellt_von = (SELECT MIN(c.wer) ${importe}) || ' (Excel-Import)'
+      WHERE COALESCE(erstellt_von, '') = '' AND COALESCE(erstellt_am, '') <> ''
+        AND (SELECT COUNT(DISTINCT c.wer) ${importe}) = 1`).run();
+    await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('ersteller_v2', ?)").bind(new Date().toISOString()).run();
     if (res && res.meta && res.meta.changes) { try { await standErhoehen(db, true); } catch (e) { /* nur Hinweis */ } }
   }
   await db.prepare(`CREATE TABLE IF NOT EXISTS lastenheft_ziele (
