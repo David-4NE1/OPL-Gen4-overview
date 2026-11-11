@@ -206,7 +206,7 @@
     if (quick === 'niedrig' && !(e.prio === 'Niedrig' && !Store.istErledigt(e))) return false;
     if (quick === 'ueberfaellig' && !Store.istUeberfaellig(e)) return false;
     if (filter.suche) {
-      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.nacharbeit, e.zielRelease, e.unterthema, e.komponenten, e.lhTitel, e.anforderung, e.bereich, e.notiz,
+      var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.nacharbeit, e.zielRelease, e.unterthema, e.komponenten, e.lhTitel, e.anforderung, e.bereich, e.notiz, e.erstelltVon,
         TR[e.thema], TR[e.todo], TR[e.notiz], T(e.bereich), T(e.status), T(e.prio)]
         .join(' ').toLowerCase();
       if (hay.indexOf(filter.suche) < 0) return false;
@@ -423,7 +423,10 @@
     c.appendChild(top);
 
     if (e.erstelltAm || istUebersetzt(e)) {
-      var created = el('p', 'card__created', e.erstelltAm ? T('Erstellt: {datum}', { datum: Xlsx.ddmmyyyy(e.erstelltAm) }) : '');
+      var created = el('p', 'card__created', e.erstelltAm
+        ? (e.erstelltVon ? T('Erstellt: {datum} von {name}', { datum: Xlsx.ddmmyyyy(e.erstelltAm), name: e.erstelltVon })
+          : T('Erstellt: {datum}', { datum: Xlsx.ddmmyyyy(e.erstelltAm) }))
+        : '');
       if (istUebersetzt(e)) created.appendChild(el('span', 'tr-tag', T('🌐 übersetzt')));
       c.appendChild(created);
     }
@@ -1739,7 +1742,7 @@
 
   function exportCsv() {
     var kopf = ['Nr', 'Bereich', 'Thema/Aufgabe', 'Prio', 'Verantwortlicher',
-                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit', 'Ziel-Release', 'Unterthema', 'Komponenten'];
+                'Bis wann', 'Status', 'To Do', 'Bild', 'Erstellt am', 'Verantwortlichkeit', 'Baugruppe', 'Nacharbeit', 'Ziel-Release', 'Unterthema', 'Komponenten', 'Ersteller'];
     function q(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
     var zeilen = [kopf.map(q).join(';')];
     var auswahl = exportEintraege();
@@ -1754,7 +1757,8 @@
         e.nacharbeit,
         e.zielRelease,
         e.unterthema,
-        e.komponenten
+        e.komponenten,
+        e.erstelltVon
       ].map(q).join(';'));
     });
     // BOM, damit Excel UTF-8 erkennt
@@ -1830,9 +1834,12 @@
       var vorhandene = {};
       Store.state.entries.forEach(function (e) { vorhandene[e.nr] = e; });
       var treffer = res.entries.filter(function (e) { return vorhandene[e.nr]; }).length;
+      var ohneNr = res.entries.filter(function (e) { return !e.nr; }).length;
+      var maxNr = Store.state.entries.concat(res.entries).reduce(function (m, e) { return Math.max(m, +e.nr || 0); }, 0);
       box.appendChild(el('div', null,
         T('✓ {n} Zeilen gelesen · {treffer} bestehende Punkte werden aktualisiert · {neu} neue Punkte',
           { n: res.entries.length, treffer: treffer, neu: res.entries.length - treffer }) +
+        (ohneNr ? ' · ' + T('{k} ohne Nr bekommen neue Nummern ab #{ab}', { k: ohneNr, ab: maxNr + 1 }) : '') +
         (res.bilderGesamt ? ' · ' + T('{b} Bilder in der Datei', { b: res.bilderGesamt }) : '')));
       // Bildaenderungen je Punkt sichtbar machen (Anzahl im Board -> in der Datei).
       // Beim Zusammenfuehren ersetzt die Datei die Bilder eines Punkts, sofern sie dort welche hat.
