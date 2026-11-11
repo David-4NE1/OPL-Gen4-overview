@@ -856,3 +856,112 @@ body:not([data-rolle="admin"]) .nur-admin { display: none !important; }
   .adminzeile__mail { flex: 1 1 100%; }
   .adminzeile__platz { display: none; }
 }
+
+/* ============================================ Dashboard (Roadmap-Band, Kacheln) */
+
+.dash { padding: 16px 16px 4px; display: flex; flex-direction: column; gap: 14px; }
+
+.rmband {
+  border-radius: 16px; padding: 16px 18px 14px; color: #fff;
+  background: radial-gradient(120% 140% at 0% 0%, #23406b 0%, #172a46 45%, #101d33 100%);
+  box-shadow: 0 10px 30px rgba(16, 29, 51, .25);
+}
+.rmband__kopf { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 6px; }
+.rmband__kopf strong { font-size: 18px; letter-spacing: .2px; }
+.rmband__legende { font-size: 12px; color: #a9c6ea; }
+.rmband__spur {
+  position: relative; display: flex; align-items: flex-start; gap: 4px;
+  overflow-x: auto; padding: 6px 2px 8px; scrollbar-color: rgba(255,255,255,.35) transparent;
+}
+/* Zeitstrahl durch die Ringmitten */
+.rmband__spur::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 58px; height: 2px;
+  background: linear-gradient(90deg, rgba(255,255,255,.08), rgba(255,255,255,.28) 15%, rgba(255,255,255,.28) 85%, rgba(255,255,255,.08));
+}
+.rmband__item {
+  position: relative; flex: 1 0 168px; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 0 6px 6px; border: 0; border-radius: 14px; background: none; color: inherit; cursor: pointer; font: inherit;
+  transition: background .15s;
+}
+.rmband__item:hover { background: rgba(255,255,255,.05); }
+.rmband__item.is-active { background: rgba(77,177,255,.12); box-shadow: inset 0 0 0 1px rgba(77,177,255,.55); }
+.rmband__ringbox { position: relative; width: 104px; height: 104px; display: grid; place-items: center; }
+.rmband__item--leer { flex: 0 0 130px; opacity: .78; }
+.rmband__item--leer .rmband__ringbox { width: 80px; height: 80px; margin: 12px 0; }
+.rmband__ring { position: absolute; inset: 0; width: 100%; height: 100%; }
+.rmband__ring-bg { fill: #14233b; stroke: rgba(255,255,255,.16); stroke-width: 9; }
+.rmband__ring-fg { fill: none; stroke: #4db1ff; stroke-width: 9; stroke-linecap: round; filter: drop-shadow(0 0 6px rgba(77,177,255,.55)); }
+.rmband__name { position: relative; font-weight: 800; font-size: 19px; letter-spacing: .2px; }
+.rmband__item--leer .rmband__name { font-size: 13px; font-weight: 700; color: #c9d6e6; }
+.rmband__proz { color: #6cc1ff; font-weight: 700; font-size: 14px; }
+.rmband__datum { font-size: 13px; color: #b7c6d8; white-space: nowrap; }
+.rmband__datum.is-verzug { background: #fff; color: #1f2733; border-radius: 8px; padding: 2px 9px; font-weight: 700; }
+.rmband__status { font-size: 11.5px; padding: 2px 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,.35); color: #dfe8f3; }
+.rmband__zahl { font-size: 13px; color: #c9d6e6; white-space: nowrap; }
+.rmband__zahl b { font-size: 17px; color: #fff; }
+.rmband__bar { width: 82%; height: 6px; border-radius: 4px; background: rgba(255,255,255,.88); overflow: hidden; display: flex; justify-content: flex-end; }
+.rmband__bar-erl { display: block; height: 100%; background: #5b8fd6; }
+.rmband__heute { flex: 0 0 56px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 14px; }
+.rmband__heute-linie { width: 3px; height: 92px; border-radius: 2px; background: #4db1ff; box-shadow: 0 0 10px rgba(77,177,255,.8); }
+.rmband__heute-text { font-size: 11.5px; color: #6cc1ff; text-align: center; white-space: pre-line; line-height: 1.25; }
+
+/* Kennzahlen als Kacheln */
+.dash .kpis { display: flex; gap: 10px; flex-wrap: wrap; }
+.dash .kpi {
+  min-width: 118px; padding: 10px 18px 9px; border-radius: 14px; cursor: pointer;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; align-items: center; gap: 2px; transition: transform .1s, box-shadow .15s;
+}
+.dash .kpi:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(16,24,40,.10); background: var(--surface); }
+.dash .kpi__value { font-size: 30px; font-weight: 800; line-height: 1.05; color: var(--ink); }
+.dash .kpi__label { font-size: 12px; letter-spacing: .6px; color: var(--ink-soft); opacity: 1; }
+.dash .kpi--hoch .kpi__value { color: var(--hoch); }
+.dash .kpi--mittel .kpi__value { color: #2f5d91; }
+.dash .kpi--niedrig .kpi__value { color: #9aa5b1; }
+.dash .kpi--done .kpi__value { color: var(--ink); }
+.dash .kpi.is-active { background: var(--surface); border-color: #4db1ff; box-shadow: 0 0 0 3px rgba(77,177,255,.35); }
+.dash .kpi.is-active .kpi__value { color: inherit; }
+.dash .kpi--hoch.is-active .kpi__value { color: var(--hoch); }
+.dash .kpi--overdue.has-overdue { background: #1f2733; border-color: #1f2733; animation: none; }
+.dash .kpi--overdue.has-overdue .kpi__value, .dash .kpi--overdue.has-overdue .kpi__label { color: #fff; }
+.dash .kpi--overdue.has-overdue.is-active { background: #1f2733; box-shadow: 0 0 0 3px rgba(214,69,69,.55); }
+.dash .kpi--overdue.has-overdue.is-active .kpi__value { color: #fff; }
+
+/* Aktionsleiste */
+.dash__aktionen { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.btn--gross {
+  padding: 12px 24px; border: 0; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer;
+  background: linear-gradient(180deg, #5cbcff, #3a9ef0); color: #fff; box-shadow: 0 6px 16px rgba(58,158,240,.35);
+}
+.btn--gross:hover { filter: brightness(1.05); }
+.dash .viewswitch { border: 0; gap: 8px; overflow: visible; }
+.dash .viewswitch button, .pillbtn {
+  padding: 10px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  font-weight: 600; font-size: 14.5px; cursor: pointer; text-decoration: none; box-shadow: var(--shadow);
+}
+.dash .viewswitch button.is-active { background: #1f2733; color: #fff; border-color: #1f2733; }
+.pillbtn:hover, .dash .viewswitch button:hover { border-color: #9fc8f2; }
+.topbar { position: relative; }
+.filterbar { top: 0; }
+
+@media (max-width: 760px) {
+  .dash { padding: 10px 12px 2px; gap: 10px; }
+  .rmband { padding: 12px 10px 10px; border-radius: 14px; }
+  .rmband__item { flex: 0 0 128px; gap: 3px; }
+  .rmband__legende { display: none; }
+  .rmband__ringbox { width: 76px; height: 76px; }
+  .rmband__item--leer { flex: 0 0 100px; }
+  .rmband__item--leer .rmband__ringbox { width: 60px; height: 60px; margin: 8px 0; }
+  .rmband__spur::before { top: 44px; }
+  .rmband__name { font-size: 15px; }
+  .rmband__heute { flex: 0 0 44px; padding-top: 6px; }
+  .rmband__heute-linie { height: 70px; }
+  .rmband__datum, .rmband__zahl { font-size: 12px; }
+  .dash .rmband { order: 1; } .dash .kpis { order: 2; } .dash__aktionen { order: 3; }
+  .dash .kpis { flex-wrap: nowrap; overflow-x: auto; margin: 0 -12px; padding: 2px 12px 4px; max-width: none; }
+  .dash .kpi { min-width: 92px; padding: 8px 10px; }
+  .dash .kpi__value { font-size: 24px; }
+  .dash .kpi__label { font-size: 10px; }
+  .dash__aktionen #btnNeu { display: none; }
+  .dash .viewswitch button, .pillbtn { padding: 8px 12px; font-size: 13.5px; }
+}

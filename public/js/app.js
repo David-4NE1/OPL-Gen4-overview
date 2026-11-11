@@ -259,6 +259,7 @@
   function renderInhalt() {
     var alle = Store.state.entries;
     renderKpis(alle);
+    renderRoadmapBand(alle);
     mselFesteOptionen();
     fuelleThemaFilter(alle);
     fuelleVerantFilter(alle);
@@ -633,6 +634,109 @@
     t.appendChild(tbody);
     wrap.appendChild(t);
     return wrap;
+  }
+
+  /* ------------------------------------------------ Roadmap-Band */
+
+  // Ziel-Releases als Ringe (Anteil Closed/Canceled) mit Zieltermin und Status
+  // aus der Release-Tabelle; Klick filtert die Karten auf dieses Ziel-Release.
+  var releaseInfo = null;
+  function releasesLaden() {
+    if (releaseInfo) return;
+    releaseInfo = {};
+    fetch('/api/releases').then(function (r) { return r.ok ? r.json() : []; }).then(function (liste) {
+      (liste || []).forEach(function (r) { releaseInfo[r.name] = r; });
+      renderRoadmapBand(Store.state.entries);
+    }).catch(function () {});
+  }
+
+  function ring(prozent, gross) {
+    var r = gross ? 44 : 34, u = 2 * Math.PI * r, d = gross ? 104 : 80;
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + d + ' ' + d);
+    svg.setAttribute('class', 'rmband__ring');
+    [['rmband__ring-bg', 0], ['rmband__ring-fg', prozent]].forEach(function (k) {
+      var c = document.createElementNS(ns, 'circle');
+      c.setAttribute('cx', d / 2); c.setAttribute('cy', d / 2); c.setAttribute('r', r);
+      c.setAttribute('class', k[0]);
+      if (k[0] === 'rmband__ring-fg' && !k[1]) return; // 0 %: kein Punkt am Ringanfang
+      if (k[0] === 'rmband__ring-fg') {
+        c.setAttribute('stroke-dasharray', (u * k[1] / 100) + ' ' + u);
+        c.setAttribute('transform', 'rotate(-90 ' + d / 2 + ' ' + d / 2 + ')');
+      }
+      svg.appendChild(c);
+    });
+    return svg;
+  }
+
+  function renderRoadmapBand(alle) {
+    var band = $('#rmBand');
+    if (!band) return;
+    releasesLaden();
+    var heute = Store.heute();
+    var spalten = [{ key: '(offen)', name: T('ohne Ziel'), leer: true }].concat(Store.ZIEL_RELEASES.map(function (n) {
+      return { key: n, name: n, info: (releaseInfo || {})[n] || {} };
+    }));
+    // "Heute" hinter dem letzten Release, dessen Zieltermin schon erreicht ist
+    var heuteNach = 0;
+    spalten.forEach(function (s, i) { if (s.info && s.info.ziel && s.info.ziel <= heute) heuteNach = i; });
+
+    band.textContent = '';
+    band.hidden = false;
+    var kopf = el('div', 'rmband__kopf');
+    kopf.appendChild(el('strong', null, T('Roadmap')));
+    kopf.appendChild(el('span', 'rmband__legende', T('◯ erledigt von allen Punkten mit diesem Ziel · Klick filtert die Karten')));
+    band.appendChild(kopf);
+    var spur = el('div', 'rmband__spur');
+    spalten.forEach(function (s, i) {
+      var punkte = alle.filter(function (e) { return (e.zielRelease || '(offen)') === s.key; });
+      var fertig = punkte.filter(Store.istErledigt).length;
+      var offen = punkte.length - fertig;
+      var prozent = punkte.length ? Math.round(100 * fertig / punkte.length) : 0;
+      var aktiv = filter.zielRelease.length === 1 && filter.zielRelease[0] === s.key;
+      var item = el('button', 'rmband__item' + (s.leer ? ' rmband__item--leer' : '') + (aktiv ? ' is-active' : ''));
+      item.type = 'button';
+      item.title = aktiv ? T('Filter aufheben') : T('Karten auf dieses Ziel-Release filtern');
+      var r = el('div', 'rmband__ringbox');
+      r.appendChild(ring(s.leer ? 0 : prozent, !s.leer));
+      r.appendChild(el('span', 'rmband__name', s.name));
+      item.appendChild(r);
+      if (!s.leer) item.appendChild(el('span', 'rmband__proz', prozent + ' %'));
+      var info = s.info || {};
+      if (s.leer) {
+        item.appendChild(el('span', 'rmband__datum', T('nicht eingeplant')));
+      } else if (info.ziel) {
+        var tage = tageBis(info.ziel);
+        var verzug = tage < 0 && offen > 0;
+        item.appendChild(el('span', 'rmband__datum' + (verzug ? ' is-verzug' : ''),
+          (verzug ? '⚠ ' : '') + Xlsx.ddmmyyyy(info.ziel) + (tage < 0 ? ' · ' + T('vor {n} T', { n: -tage }) : tage === 0 ? ' · ' + T('heute') : ' · ' + T('in {n} T', { n: tage }))));
+      } else {
+        item.appendChild(el('span', 'rmband__datum', T('ohne Zieldatum')));
+      }
+      if (info.status) item.appendChild(el('span', 'rmband__status', T(info.status)));
+      var zahl = el('span', 'rmband__zahl');
+      zahl.appendChild(el('b', null, String(offen)));
+      zahl.appendChild(document.createTextNode(' ' + T('offen') + ' · ' + fertig + ' ' + T('erledigt')));
+      item.appendChild(zahl);
+      var bar = el('span', 'rmband__bar');
+      var seg = el('span', 'rmband__bar-erl');
+      seg.style.width = (punkte.length ? 100 * fertig / punkte.length : 0) + '%';
+      bar.appendChild(seg);
+      item.appendChild(bar);
+      item.addEventListener('click', function () {
+        filter.zielRelease = aktiv ? [] : [s.key];
+        render();
+      });
+      spur.appendChild(item);
+      if (i === heuteNach && !s.leer) {
+        var h = el('div', 'rmband__heute');
+        h.appendChild(el('span', 'rmband__heute-linie'));
+        h.appendChild(el('span', 'rmband__heute-text', T('Heute') + '\n' + Xlsx.ddmmyyyy(heute).slice(0, 6)));
+        spur.appendChild(h);
+      }
+    });
+    band.appendChild(spur);
   }
 
   function renderKpis(alle) {
