@@ -195,7 +195,7 @@
     if (!trifft(filter.baugruppe, e.baugruppe || '(offen)')) return false;
     if (!trifft(filter.zielRelease, e.zielRelease || '(offen)')) return false;
     if (!trifft(filter.unterthema, e.unterthema || '(offen)')) return false;
-    if (!trifft(filter.ersteller, e.erstelltVon || '(unbekannt)')) return false;
+    if (!trifft(filter.ersteller, erstellerBasis(e))) return false;
     // "Re-Milling + Modification" erscheint unter beiden Filterwerten
     if (filter.nacharbeit.length && !filter.nacharbeit.some(function (v) {
       return v === '(keine)' ? !e.nacharbeit : (e.nacharbeit || '').indexOf(v) >= 0;
@@ -954,9 +954,10 @@
     var heute = Store.heute(), vor7 = tagPlus(heute, -6);
     var m = {};
     liste.forEach(function (e) {
-      var k = e.erstelltVon || '(unbekannt)';
-      var z = m[k] || (m[k] = { name: k, n: 0, offen: 0, neu: 0, letzter: '' });
+      var k = erstellerBasis(e);
+      var z = m[k] || (m[k] = { name: k, n: 0, imp: 0, offen: 0, neu: 0, letzter: '' });
       z.n++;
+      if (/\(Excel-Import\)\s*$/.test(e.erstelltVon || '')) z.imp++;
       if (!Store.istErledigt(e)) z.offen++;
       var a = String(e.erstelltAm || '').slice(0, 10);
       if (a >= vor7) z.neu++;
@@ -978,6 +979,7 @@
       var tdB = el('td', 'aw-tab__balken');
       var bar = el('div', 'aw-bar aw-bar--neutral'); var fill = el('i'); fill.style.width = Math.round(z.n / maxN * 100) + '%'; bar.appendChild(fill);
       tdB.appendChild(bar); tdB.appendChild(el('span', 'aw-bar__text', String(z.n)));
+      if (z.imp) tdB.title = T('davon {n} per Excel-Import', { n: z.imp });
       tr.appendChild(tdB);
       tr.appendChild(el('td', 'aw-tab__zahl', String(z.offen)));
       tr.appendChild(el('td', 'aw-tab__zahl', z.neu ? '+' + z.neu : '·'));
@@ -1186,9 +1188,14 @@
       .forEach(function (n) { dl.appendChild(new Option(n)); });
   }
 
+  // Ersteller fuer Filter und Statistik: "Name (Excel-Import)" zaehlt beim Namen
+  function erstellerBasis(e) {
+    return String(e.erstelltVon || '').replace(/\s*\(Excel-Import\)\s*$/, '').trim() || '(unbekannt)';
+  }
+
   function fuelleErstellerFilter(alle) {
     var namen = {};
-    alle.forEach(function (e) { namen[e.erstelltVon || '(unbekannt)'] = true; });
+    alle.forEach(function (e) { namen[erstellerBasis(e)] = true; });
     mselOptionen('#fErsteller', 'ersteller', Object.keys(namen).sort().map(function (n) { return [n, T(n)]; }));
   }
 

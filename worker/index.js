@@ -1200,6 +1200,26 @@ async function schemaSicherstellen(db) {
     await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('ersteller_v2', ?)").bind(new Date().toISOString()).run();
     if (res && res.meta && res.meta.changes) { try { await standErhoehen(db, true); } catch (e) { /* nur Hinweis */ } }
   }
+  // Einmalig: Schreibweise "Jannik Goez" auf "Jannik Göz" vereinheitlichen
+  // (Verantwortlicher), mit Eintrag im Verlauf der betroffenen Punkte.
+  const namenV1 = await db.prepare("SELECT value FROM settings WHERE key = 'namen_v1'").first();
+  if (!namenV1) {
+    const jetzt = new Date().toISOString();
+    const wo = "WHERE verantwortlicher LIKE '%Jannik Goez%'";
+    const res = await db.batch([
+      db.prepare(`INSERT INTO changelog (nr, text, wann, wer)
+        SELECT nr, 'verantwortlicher: "' || verantwortlicher || '" → "' || replace(verantwortlicher, 'Jannik Goez', 'Jannik Göz') || '"', ?, 'Automatik'
+          FROM entries ${wo}`).bind(jetzt),
+      db.prepare(`UPDATE entries SET verantwortlicher = replace(verantwortlicher, 'Jannik Goez', 'Jannik Göz'), geaendert_am = ? ${wo}`).bind(jetzt),
+      db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('namen_v1', ?)").bind(jetzt)
+    ]);
+    const n = (res[1] && res[1].meta && res[1].meta.changes) || 0;
+    if (n) {
+      await db.prepare('INSERT INTO changelog (nr, text, wann, wer) VALUES (0, ?, ?, ?)')
+        .bind(`Namen vereinheitlicht: Jannik Goez → Jannik Göz (${n} Punkte)`, jetzt, 'Automatik').run();
+      try { await standErhoehen(db, true); } catch (e) { /* nur Hinweis */ }
+    }
+  }
   await db.prepare(`CREATE TABLE IF NOT EXISTS lastenheft_ziele (
     schluessel TEXT PRIMARY KEY, anforderung TEXT NOT NULL DEFAULT '', ziel TEXT NOT NULL DEFAULT '',
     geaendert_am TEXT NOT NULL DEFAULT '', geaendert_von TEXT NOT NULL DEFAULT '')`).run();

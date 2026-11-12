@@ -130,6 +130,7 @@
     '– erst Thema wählen –': '– choose topic first –',
     'Ohne Unterthema': 'No subtopic',
     'Lastenheft': 'Requirements',
+    'davon {n} per Excel-Import': 'of which {n} via Excel import',
     '(unbekannt – vor Protokoll)': '(unknown – before log)',
     '(unbekannt)': '(unknown)',
     '+ Komponente': '+ Component',
