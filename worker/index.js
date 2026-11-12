@@ -518,6 +518,18 @@ async function handleAPI(url, method, request, env) {
     return json(await protokollLesen(db, url));
   }
 
+  // GET /api/abschluss: Datum der letzten Statusaenderung nach Closed/Canceled je Punkt
+  // (fuer das Burn-down-Diagramm; aeltere Abschluesse ohne Protokoll fehlen hier)
+  if (path === '/api/abschluss' && method === 'GET') {
+    const { results } = await db.prepare(
+      `SELECT nr, MAX(wann) AS wann FROM changelog
+        WHERE nr > 0 AND text LIKE 'status:%'
+          AND (text LIKE '%→ "Closed"%' OR text LIKE '%→ "Canceled"%' OR text LIKE '%→ "erledigt"%'
+               OR text LIKE '%→ "cancelled"%' OR text LIKE '%→ "done"%')
+        GROUP BY nr`).all();
+    return json(results);
+  }
+
   return json({ error: 'Route nicht gefunden' }, 404);
 }
 
