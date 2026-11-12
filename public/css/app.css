@@ -1049,3 +1049,68 @@ body:not([data-rolle="admin"]) .nur-admin { display: none !important; }
 }
 .aw-tab tr.aw-weg { display: none; }
 .aw-mehr { margin-top: 8px; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 4px 0; }
+
+/* Roadmap einklappen */
+.rmband__kopf { align-items: center; }
+.rmband__knopf { margin-left: auto; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.25); color: #dfe8f3;
+  border-radius: 999px; padding: 3px 12px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.rmband__knopf:hover { background: rgba(255,255,255,.16); }
+.rmband.is-zu { padding: 10px 16px; }
+.rmband.is-zu .rmband__kopf { margin-bottom: 0; }
+.rmband.is-zu .rmband__legende { display: none; }
+.rmband__kurz { display: flex; flex-wrap: wrap; gap: 6px; }
+.rmband__chip { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.2); color: #c9d6e6; border-radius: 999px;
+  padding: 3px 11px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.rmband__chip b { color: #fff; margin-right: 2px; }
+.rmband__chip:hover { background: rgba(255,255,255,.14); }
+.rmband__chip.is-active { border-color: #4db1ff; background: rgba(77,177,255,.18); }
+.rmband__chip-warn { margin-left: 5px; color: #ffd27a; }
+
+/* Desktop: Kennzahlen und Aktionen in einer Zeile */
+@media (min-width: 761px) {
+  .dash { flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: 18px; row-gap: 12px; }
+  .dash .rmband { flex: 1 1 100%; }
+  .dash__aktionen { margin-left: auto; }
+}
+
+/* Laptop (geringe Bildschirmhoehe): kompakte Roadmap, kleinere Kacheln */
+@media (min-width: 761px) and (max-height: 920px) {
+  .dash { padding: 10px 16px 2px; row-gap: 8px; }
+  .rmband { padding: 10px 14px 8px; border-radius: 14px; }
+  .rmband__kopf { margin-bottom: 2px; }
+  .rmband__kopf strong { font-size: 15px; }
+  .rmband__spur { padding: 2px 2px 4px; align-items: center; }
+  .rmband__spur::before { top: 32px; }
+  .rmband__item {
+    flex: 1 0 190px; display: grid; grid-template-columns: 58px 1fr; column-gap: 10px; row-gap: 0;
+    align-items: center; justify-items: start; text-align: left; padding: 3px 8px;
+  }
+  .rmband__item > .rmband__ringbox { grid-row: 1 / span 3; width: 58px; height: 58px; }
+  .rmband__item--leer { flex: 0 0 160px; }
+  .rmband__item--leer .rmband__ringbox { width: 50px; height: 50px; margin: 0; }
+  .rmband__name { font-size: 13.5px; }
+  .rmband__item--leer .rmband__name { font-size: 10.5px; }
+  .rmband__proz { font-size: 12.5px; }
+  .rmband__datum, .rmband__zahl { font-size: 12px; }
+  .rmband__datum.is-verzug { padding: 0 6px; }
+  .rmband__zahl b { font-size: 14px; }
+  .rmband__status, .rmband__bar { display: none; }
+  .rmband__heute { flex: 0 0 40px; padding-top: 0; }
+  .rmband__heute-linie { height: 44px; }
+  .rmband__heute-text { font-size: 10.5px; }
+  .dash .kpi { min-width: 74px; padding: 5px 10px 4px; border-radius: 10px; }
+  .dash .kpi__value { font-size: 20px; }
+  .dash .kpi__label { font-size: 10px; }
+  .btn--gross { padding: 8px 16px; font-size: 14px; border-radius: 10px; }
+  .dash .viewswitch button, .pillbtn { padding: 6px 10px; font-size: 13px; border-radius: 10px; }
+  .dash .kpis { gap: 6px; }
+  .dash .kpi { min-width: 64px; padding: 4px 8px 3px; }
+  .dash .kpi__label { letter-spacing: .3px; }
+  .dash__aktionen { gap: 6px; }
+  .dash .viewswitch { gap: 6px; }
+  .btn--gross { padding: 7px 14px; font-size: 13.5px; }
+  .filterbar { padding: 6px 16px; gap: 6px; }
+  .filterbar .search, .filterbar .select { padding: 5px 9px; font-size: 13px; }
+  .filterbar .search { flex-basis: 200px; }
+  .msel__btn { max-width: 190px; }
+}
