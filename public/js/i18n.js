@@ -130,6 +130,8 @@
     '– erst Thema wählen –': '– choose topic first –',
     'Ohne Unterthema': 'No subtopic',
     'Lastenheft': 'Requirements',
+    '▸ Roadmap aufklappen': '▸ Expand roadmap',
+    '▾ einklappen': '▾ Collapse',
     'davon {n} per Excel-Import': 'of which {n} via Excel import',
     '(unbekannt – vor Protokoll)': '(unknown – before log)',
     '(unbekannt)': '(unknown)',

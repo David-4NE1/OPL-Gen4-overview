@@ -1107,6 +1107,16 @@
     var kopf = el('div', 'rmband__kopf');
     kopf.appendChild(el('strong', null, T('Roadmap')));
     kopf.appendChild(el('span', 'rmband__legende', T('◯ erledigt von allen Punkten mit diesem Ziel · Klick filtert die Karten')));
+    var zu = false;
+    try { zu = localStorage.getItem('opl_rm_zu') === '1'; } catch (e) { /* egal */ }
+    band.classList.toggle('is-zu', zu);
+    var knopf = el('button', 'rmband__knopf', zu ? T('▸ Roadmap aufklappen') : T('▾ einklappen'));
+    knopf.type = 'button';
+    knopf.setAttribute('aria-expanded', zu ? 'false' : 'true');
+    knopf.addEventListener('click', function () {
+      try { localStorage.setItem('opl_rm_zu', zu ? '0' : '1'); } catch (e) { /* egal */ }
+      renderRoadmapBand(Store.state.entries);
+    });
     band.appendChild(kopf);
     var spur = el('div', 'rmband__spur');
     spalten.forEach(function (s, i) {
@@ -1156,7 +1166,26 @@
         spur.appendChild(h);
       }
     });
-    band.appendChild(spur);
+    if (zu) {
+      // Eingeklappt: je Release nur "Name Prozent" als Chip in der Kopfzeile
+      var kurz = el('div', 'rmband__kurz');
+      Array.prototype.forEach.call(spur.querySelectorAll('.rmband__item'), function (it, i) {
+        var s = spalten[i];
+        var c = el('button', 'rmband__chip' + (it.classList.contains('is-active') ? ' is-active' : ''));
+        c.type = 'button';
+        c.title = it.title;
+        c.appendChild(el('b', null, s.name));
+        var pz = it.querySelector('.rmband__proz'), dt = it.querySelector('.rmband__datum.is-verzug');
+        if (pz) c.appendChild(document.createTextNode(' ' + pz.textContent));
+        if (dt) c.appendChild(el('span', 'rmband__chip-warn', '⚠'));
+        c.addEventListener('click', function () { it.click(); });
+        kurz.appendChild(c);
+      });
+      kopf.appendChild(kurz);
+    } else {
+      band.appendChild(spur);
+    }
+    kopf.appendChild(knopf);
   }
 
   function renderKpis(alle) {
