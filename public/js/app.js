@@ -20,9 +20,9 @@
   // Auswahlfilter sind Listen (Mehrfachauswahl), leere Liste = alle
   var FILTER_FELDER = [['#fBereich', 'bereich'], ['#fThema', 'thema'], ['#fPrio', 'prio'], ['#fStatus', 'status'],
     ['#fVerant', 'verant'], ['#fTeam', 'team'], ['#fBaugruppe', 'baugruppe'], ['#fNacharbeit', 'nacharbeit'],
-    ['#fZielRelease', 'zielRelease'], ['#fUnterthema', 'unterthema']];
+    ['#fZielRelease', 'zielRelease'], ['#fUnterthema', 'unterthema'], ['#fErsteller', 'ersteller']];
   function leererFilter() {
-    return { suche: '', bereich: [], thema: [], prio: [], status: [], verant: [], team: [], baugruppe: [], nacharbeit: [], zielRelease: [], unterthema: [] };
+    return { suche: '', bereich: [], thema: [], prio: [], status: [], verant: [], team: [], baugruppe: [], nacharbeit: [], zielRelease: [], unterthema: [], ersteller: [] };
   }
   var filter = leererFilter();
 
@@ -195,6 +195,7 @@
     if (!trifft(filter.baugruppe, e.baugruppe || '(offen)')) return false;
     if (!trifft(filter.zielRelease, e.zielRelease || '(offen)')) return false;
     if (!trifft(filter.unterthema, e.unterthema || '(offen)')) return false;
+    if (!trifft(filter.ersteller, e.erstelltVon || '(unbekannt)')) return false;
     // "Re-Milling + Modification" erscheint unter beiden Filterwerten
     if (filter.nacharbeit.length && !filter.nacharbeit.some(function (v) {
       return v === '(keine)' ? !e.nacharbeit : (e.nacharbeit || '').indexOf(v) >= 0;
@@ -205,6 +206,7 @@
     if (quick === 'mittel' && !(e.prio === 'Mittel' && !Store.istErledigt(e))) return false;
     if (quick === 'niedrig' && !(e.prio === 'Niedrig' && !Store.istErledigt(e))) return false;
     if (quick === 'ueberfaellig' && !Store.istUeberfaellig(e)) return false;
+    if (quick === 'ohnekomp' && (Store.istErledigt(e) || (e.komponenten || '').trim())) return false;
     if (filter.suche) {
       var hay = [e.nr, e.thema, e.todo, e.verantwortlicher, e.verantwortlichkeit, e.baugruppe, e.nacharbeit, e.zielRelease, e.unterthema, e.komponenten, e.lhTitel, e.anforderung, e.bereich, e.notiz, e.erstelltVon,
         TR[e.thema], TR[e.todo], TR[e.notiz], T(e.bereich), T(e.status), T(e.prio)]
@@ -263,6 +265,7 @@
     mselFesteOptionen();
     fuelleThemaFilter(alle);
     fuelleVerantFilter(alle);
+    fuelleErstellerFilter(alle);
     var istAktiv = filterAktiv();
     $('#btnFilterReset').hidden = !istAktiv;
     // Smartphone: Zahl der aktiven Auswahlfilter am Knopf "Filter"
@@ -276,7 +279,7 @@
     if (istAktiv) {
       var teile = [];
       if (quick) {
-        var ql = { offen: 'Offen', erledigt: 'Erledigt', hoch: 'Prio Hoch', mittel: 'Prio Mittel', niedrig: 'Prio Niedrig', ueberfaellig: 'Überfällig' };
+        var ql = { offen: 'Offen', erledigt: 'Erledigt', hoch: 'Prio Hoch', mittel: 'Prio Mittel', niedrig: 'Prio Niedrig', ueberfaellig: 'Überfällig', ohnekomp: 'Offen ohne Komponente' };
         teile.push(T(ql[quick] || quick));
       }
       var werte = function (key) {
@@ -294,6 +297,7 @@
       if (filter.nacharbeit.length) teile.push(T('Nacharbeit: {v}', { v: werte('nacharbeit') }));
       if (filter.zielRelease.length) teile.push(T('Ziel-Release: {v}', { v: werte('zielRelease') }));
       if (filter.unterthema.length) teile.push(T('Unterthema: {v}', { v: werte('unterthema') }));
+      if (filter.ersteller.length) teile.push(T('Erstellt von: {v}', { v: werte('ersteller') }));
       if (filter.suche) teile.push(T('Suche: "{v}"', { v: filter.suche }));
       $('#filterBannerText').textContent = T('Zeige {n} von {gesamt} Punkten — {teile}',
         { n: liste.length, gesamt: alle.length, teile: teile.join(', ') });
@@ -315,6 +319,7 @@
     }
 
     if (view === 'tabelle') { content.appendChild(renderTabelle(liste)); return; }
+    if (view === 'auswertung') { content.appendChild(renderAuswertung(liste)); return; }
     if (view === 'lastenheft') {
       if (!lhZiele) lhZieleLaden();
       if (!lhForderungen) lhForderungenLaden();
@@ -564,6 +569,7 @@
     { feld: 'prio', label: 'Prio' },
     { feld: 'verantwortlicher', label: 'Verantwortlicher' },
     { feld: 'verantwortlichkeit', label: 'Verantwortlichkeit' },
+    { feld: 'erstelltVon', label: 'Erstellt von' },
     { feld: 'faellig', label: 'Bis wann' },
     { feld: 'status', label: 'Status' },
     { feld: 'todo', label: 'To Do' },
@@ -613,6 +619,7 @@
 
       row.appendChild(el('td', null, e.verantwortlicher || '–'));
       row.appendChild(el('td', null, e.verantwortlichkeit ? T(e.verantwortlichkeit) : '–'));
+      row.appendChild(el('td', 'td-ersteller', e.erstelltVon || '–'));
 
       var tdD = el('td', null, e.faellig ? Xlsx.ddmmyyyy(e.faellig) : '–');
       if (Store.istUeberfaellig(e)) { tdD.style.color = 'var(--hoch)'; tdD.style.fontWeight = '700'; }
@@ -636,6 +643,416 @@
     return wrap;
   }
 
+  /* ------------------------------------------------------ Auswertung */
+
+  // Burn-down, Verantwortliche × Status, Ersteller und offene Punkte ohne
+  // Komponente. Alles bezieht sich auf die gerade gefilterten Punkte.
+  var abschluss = null; // nr -> Datum des Abschlusses (aus dem Protokoll)
+  var awAlleVerant = false; // Verantwortliche: alle Zeilen statt der ersten 12
+
+  function abschlussLaden() {
+    if (abschluss) return;
+    abschluss = {};
+    fetch('/api/abschluss', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : []; }).then(function (l) {
+      (l || []).forEach(function (z) { abschluss[z.nr] = String(z.wann || '').slice(0, 10); });
+      if (view === 'auswertung') render();
+    }).catch(function () {});
+  }
+
+  function wechsleAnsicht(v) {
+    view = v;
+    $$('.viewswitch button').forEach(function (x) { x.classList.toggle('is-active', x.dataset.view === v); });
+    render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function isoTag(d) {
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+  function tagPlus(iso, n) {
+    var d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return isoTag(d);
+  }
+  function kurzDatum(iso) { return iso.slice(8, 10) + '.' + iso.slice(5, 7) + '.'; }
+
+  // Mehrere Namen in einem Feld ("A, B", "A / B", "A + B") einzeln zaehlen
+  function personen(wert) {
+    var l = String(wert || '').split(/\s*,\s*|\s+\/\s+|\s+\+\s+|\s+und\s+/).map(function (s) { return s.trim(); }).filter(Boolean);
+    return l.length ? l : ['(offen)'];
+  }
+
+  function aKarte(titel, info, extraCls) {
+    var k = el('section', 'aw-karte' + (extraCls ? ' ' + extraCls : ''));
+    var h = el('header', 'aw-karte__kopf');
+    h.appendChild(el('h2', null, titel));
+    if (info) h.appendChild(el('p', null, info));
+    k.appendChild(h);
+    return k;
+  }
+
+  function renderAuswertung(liste) {
+    abschlussLaden();
+    releasesLaden();
+    var w = el('div', 'aw');
+    w.appendChild(renderBurndown(liste));
+    var reihe = el('div', 'aw-reihe');
+    reihe.appendChild(renderVerantStatus(liste));
+    reihe.appendChild(renderErsteller(liste));
+    w.appendChild(reihe);
+    w.appendChild(renderOhneKomponente(liste));
+    return w;
+  }
+
+  /* Burn-down: offene Punkte je Tag (angelegt bis dahin, noch nicht abgeschlossen) */
+  function renderBurndown(liste) {
+    var heute = Store.heute();
+    var schluss = function (e) {
+      if (!Store.istErledigt(e)) return null;
+      return (abschluss && abschluss[e.nr]) || String(e.geaendertAm || e.erstelltAm || heute).slice(0, 10);
+    };
+    var punkte = liste.map(function (e) {
+      return { a: String(e.erstelltAm || '').slice(0, 10) || heute, z: schluss(e) };
+    });
+    var rel = filter.zielRelease.length === 1 ? filter.zielRelease[0] : '';
+    var relInfo = rel && releaseInfo && releaseInfo[rel];
+    var zielTag = relInfo && relInfo.ziel ? String(relInfo.ziel).slice(0, 10) : '';
+
+    var karte = aKarte(T('Burn-down: offene Punkte'), rel
+      ? T('Ziel-Release {r}{z} · alle anderen aktiven Filter gelten mit', { r: rel, z: zielTag ? ' · ' + T('Zieltermin') + ' ' + Xlsx.ddmmyyyy(zielTag) : '' })
+      : T('Alle gefilterten Punkte · Ziel-Release wählen für Soll-Linie zum Zieltermin'), 'aw-karte--bd');
+
+    // Auswahl Ziel-Release
+    var wahl = el('div', 'aw-chips');
+    [''].concat(Store.ZIEL_RELEASES).forEach(function (r) {
+      var b = el('button', 'aw-chip' + (r === rel || (!r && !filter.zielRelease.length) ? ' is-active' : ''), r || T('Alle'));
+      b.type = 'button';
+      b.addEventListener('click', function () { filter.zielRelease = r ? [r] : []; render(); });
+      wahl.appendChild(b);
+    });
+    karte.appendChild(wahl);
+
+    if (!punkte.length) { karte.appendChild(el('p', 'aw-leer', T('Keine Punkte im Filter.'))); return karte; }
+
+    var start = punkte.reduce(function (m, p) { return p.a < m ? p.a : m; }, heute);
+    var ende = heute;
+    if (zielTag && zielTag > ende) ende = zielTag;
+    var tage = [];
+    for (var t = start; t <= ende && tage.length < 800; t = tagPlus(t, 1)) tage.push(t);
+    var offen = tage.map(function (d) {
+      if (d > heute) return null;
+      return punkte.filter(function (p) { return p.a <= d && (!p.z || p.z > d); }).length;
+    });
+    var neu = tage.map(function (d) { return punkte.filter(function (p) { return p.a === d; }).length; });
+    var fertig = tage.map(function (d) { return punkte.filter(function (p) { return p.z === d; }).length; });
+    var iHeute = tage.indexOf(heute);
+    var jetzt = offen[iHeute];
+
+    // Kennzahlen
+    var summe = function (arr, von, bis) { var s = 0; for (var i = Math.max(0, von); i <= bis; i++) s += arr[i] || 0; return s; };
+    var neu7 = summe(neu, iHeute - 6, iHeute), fertig7 = summe(fertig, iHeute - 6, iHeute);
+    var tempo = summe(fertig, iHeute - 27, iHeute) / 4; // abgeschlossen je Woche (4 Wochen)
+    var netto = (summe(fertig, iHeute - 27, iHeute) - summe(neu, iHeute - 27, iHeute)) / 4;
+    var prognose = netto > 0 ? tagPlus(heute, Math.ceil(jetzt / netto * 7)) : '';
+    var kz = el('div', 'aw-kz');
+    var kachel = function (wert, text, cls) {
+      var k = el('div', 'aw-kz__k' + (cls ? ' ' + cls : ''));
+      k.appendChild(el('strong', null, wert));
+      k.appendChild(el('span', null, text));
+      kz.appendChild(k);
+    };
+    kachel(String(jetzt), T('offen heute'));
+    kachel('+' + neu7 + ' / −' + fertig7, T('neu / abgeschlossen (7 Tage)'));
+    kachel(tempo.toFixed(1).replace('.', ','), T('abgeschlossen je Woche (Ø 4 Wochen)'));
+    var progText = !jetzt ? T('alles abgeschlossen') : prognose ? Xlsx.ddmmyyyy(prognose) : T('keine – es kommt mehr dazu als fertig wird');
+    var progCls = zielTag && jetzt ? (!prognose || prognose > zielTag ? 'is-schlecht' : 'is-gut') : '';
+    kachel(progText, zielTag ? T('Prognose „alles erledigt“ · Ziel {z}', { z: Xlsx.ddmmyyyy(zielTag) }) : T('Prognose „alles erledigt“ (bei aktuellem Netto-Tempo)'), progCls);
+    karte.appendChild(kz);
+
+    // Diagramm (SVG)
+    var W = 960, H = 280, L = 44, R = 64, O = 16, U = 30;
+    var max = Math.max.apply(null, offen.filter(function (v) { return v != null; }).concat([1]));
+    var schritt = max <= 10 ? 2 : max <= 25 ? 5 : max <= 60 ? 10 : max <= 150 ? 25 : 50;
+    var yMax = Math.ceil(max / schritt) * schritt;
+    var x = function (i) { return L + (tage.length > 1 ? i / (tage.length - 1) : 0) * (W - L - R); };
+    var y = function (v) { return O + (1 - v / yMax) * (H - O - U); };
+    var ns = 'http://www.w3.org/2000/svg';
+    var mk = function (tag, attrs, text) {
+      var n = document.createElementNS(ns, tag);
+      Object.keys(attrs).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+      if (text != null) n.textContent = text;
+      return n;
+    };
+    var box = el('div', 'aw-bd');
+    var svg = mk('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'aw-bd__svg', role: 'img',
+      'aria-label': T('Burn-down: offene Punkte je Tag') });
+    for (var v = 0; v <= yMax; v += schritt) {
+      svg.appendChild(mk('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: 'aw-bd__grid' }));
+      svg.appendChild(mk('text', { x: L - 8, y: y(v) + 4, class: 'aw-bd__achse', 'text-anchor': 'end' }, String(v)));
+    }
+    // x-Achse: Montage
+    var abstand = tage.length > 120 ? 28 : tage.length > 60 ? 14 : 7;
+    tage.forEach(function (d, i) {
+      if (new Date(d + 'T12:00:00').getDay() === 1 && Math.round((new Date(d) - new Date(start)) / 864e5) % abstand < 7) {
+        svg.appendChild(mk('text', { x: x(i), y: H - 10, class: 'aw-bd__achse', 'text-anchor': 'middle' }, kurzDatum(d)));
+      }
+    });
+    // Flaeche + Linie (treppenfoermig bis heute)
+    var pfad = '', i0 = 0;
+    for (var i = 0; i <= iHeute; i++) {
+      pfad += (i === 0 ? 'M' : 'H' + x(i) + 'V') + (i === 0 ? x(i) + ' ' + y(offen[i]) : y(offen[i]));
+    }
+    svg.appendChild(mk('path', { d: pfad + 'V' + y(0) + 'H' + x(i0) + 'Z', class: 'aw-bd__flaeche' }));
+    svg.appendChild(mk('path', { d: pfad, class: 'aw-bd__linie' }));
+    // Soll-Linie ab heute bis Zieltermin
+    if (zielTag && zielTag > heute && jetzt) {
+      var iZiel = tage.indexOf(zielTag);
+      svg.appendChild(mk('line', { x1: x(iHeute), y1: y(jetzt), x2: x(iZiel), y2: y(0), class: 'aw-bd__soll' }));
+    }
+    if (zielTag && tage.indexOf(zielTag) >= 0) {
+      var iz = tage.indexOf(zielTag);
+      svg.appendChild(mk('line', { x1: x(iz), x2: x(iz), y1: O, y2: H - U, class: 'aw-bd__ziel' }));
+      svg.appendChild(mk('text', { x: x(iz) - 4, y: O + 10, class: 'aw-bd__marke', 'text-anchor': 'end' }, T('Ziel {r}', { r: rel })));
+    }
+    svg.appendChild(mk('line', { x1: x(iHeute), x2: x(iHeute), y1: O, y2: H - U, class: 'aw-bd__heute' }));
+    svg.appendChild(mk('text', { x: x(iHeute) + 4, y: O + 10, class: 'aw-bd__marke' }, T('Heute')));
+    svg.appendChild(mk('circle', { cx: x(iHeute), cy: y(jetzt), r: 5, class: 'aw-bd__punkt' }));
+    // Hover
+    var cross = mk('line', { x1: 0, x2: 0, y1: O, y2: H - U, class: 'aw-bd__cross', visibility: 'hidden' });
+    var dot = mk('circle', { cx: 0, cy: 0, r: 5, class: 'aw-bd__punkt', visibility: 'hidden' });
+    svg.appendChild(cross); svg.appendChild(dot);
+    var tip = el('div', 'aw-bd__tip'); tip.hidden = true;
+    var fang = mk('rect', { x: L, y: O, width: W - L - R, height: H - O - U, fill: 'transparent' });
+    svg.appendChild(fang);
+    var zeige = function (ev) {
+      var r = svg.getBoundingClientRect();
+      var px = (ev.clientX - r.left) / r.width * W;
+      var i = Math.max(0, Math.min(iHeute, Math.round((px - L) / (W - L - R) * (tage.length - 1))));
+      cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
+      dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(offen[i])); dot.setAttribute('visibility', 'visible');
+      tip.textContent = '';
+      tip.appendChild(el('strong', null, Xlsx.ddmmyyyy(tage[i])));
+      tip.appendChild(el('span', null, T('{n} offen', { n: offen[i] })));
+      if (neu[i] || fertig[i]) tip.appendChild(el('span', 'aw-bd__tip-leise', '+' + neu[i] + ' ' + T('neu') + ' · −' + fertig[i] + ' ' + T('abgeschlossen')));
+      tip.hidden = false;
+      var links = x(i) / W * r.width;
+      tip.style.left = Math.min(r.width - 170, Math.max(0, links + 12)) + 'px';
+      tip.style.top = (y(offen[i]) / H * r.height - 20) + 'px';
+    };
+    fang.addEventListener('mousemove', zeige);
+    fang.addEventListener('mouseleave', function () {
+      tip.hidden = true; cross.setAttribute('visibility', 'hidden'); dot.setAttribute('visibility', 'hidden');
+    });
+    box.appendChild(svg);
+    box.appendChild(tip);
+    karte.appendChild(box);
+    var leg = el('div', 'aw-legende');
+    var li = function (cls, text) { var s = el('span'); s.appendChild(el('i', cls)); s.appendChild(document.createTextNode(text)); leg.appendChild(s); };
+    li('aw-leg--ist', T('offen (Ist)'));
+    if (zielTag && zielTag > heute) li('aw-leg--soll', T('Soll bis Zieltermin'));
+    karte.appendChild(leg);
+    karte.appendChild(el('p', 'aw-fuss', T('Abschlussdatum aus dem Änderungsprotokoll; ältere Abschlüsse ohne Protokoll zählen mit dem Datum der letzten Änderung.')));
+    return karte;
+  }
+
+  /* Verantwortliche × Status */
+  function renderVerantStatus(liste) {
+    var karte = aKarte(T('Verantwortliche × Status'), T('Klick auf eine Zahl zeigt die Karten dazu'), 'aw-karte--vs');
+    var zeilen = {};
+    liste.forEach(function (e) {
+      personen(e.verantwortlicher).forEach(function (p) {
+        var z = zeilen[p] || (zeilen[p] = { name: p, roh: {}, st: {}, offen: 0, ueber: 0, n: 0 });
+        z.roh[e.verantwortlicher || '(offen)'] = true;
+        z.st[e.status] = (z.st[e.status] || 0) + 1;
+        z.n++;
+        if (!Store.istErledigt(e)) z.offen++;
+        if (Store.istUeberfaellig(e)) z.ueber++;
+      });
+    });
+    var reihen = Object.keys(zeilen).map(function (k) { return zeilen[k]; })
+      .sort(function (a, b) { return b.offen - a.offen || b.n - a.n || a.name.localeCompare(b.name); });
+    var maxZ = 1;
+    reihen.forEach(function (z) { Store.STATI.forEach(function (s) { maxZ = Math.max(maxZ, z.st[s] || 0); }); });
+
+    var wrap = el('div', 'aw-tabwrap');
+    var t = el('table', 'aw-tab aw-tab--matrix');
+    var hr = el('tr');
+    hr.appendChild(el('th', 'aw-tab__name', T('Verantwortlich')));
+    Store.STATI.forEach(function (s) {
+      var th = el('th', 'aw-tab__zahl');
+      th.appendChild(el('span', 'chip chip--status-' + slug(s), T(s)));
+      hr.appendChild(th);
+    });
+    hr.appendChild(el('th', 'aw-tab__zahl', T('Offen')));
+    hr.appendChild(el('th', 'aw-tab__zahl', T('Überfällig')));
+    hr.appendChild(el('th', 'aw-tab__balken', T('Erledigt')));
+    var th = el('thead'); th.appendChild(hr); t.appendChild(th);
+    var tb = el('tbody');
+    var zelle = function (n, klick, cls, titel) {
+      var td = el('td', 'aw-tab__zahl' + (cls ? ' ' + cls : ''));
+      if (!n) { td.appendChild(el('span', 'aw-null', '·')); return td; }
+      var b = el('button', 'aw-zahl', String(n));
+      b.type = 'button';
+      if (titel) b.title = titel;
+      b.addEventListener('click', klick);
+      td.appendChild(b);
+      return td;
+    };
+    var gehe = function (z, status) {
+      return function () {
+        filter.verant = Object.keys(z.roh);
+        filter.status = status || [];
+        quick = null;
+        wechsleAnsicht('karten');
+      };
+    };
+    var summe = { st: {}, offen: 0, ueber: 0, n: 0 };
+    var MAXZ = 12;
+    reihen.forEach(function (z, idx) {
+      var tr = el('tr', !awAlleVerant && idx >= MAXZ ? 'aw-weg' : '');
+      tr.appendChild(el('td', 'aw-tab__name', z.name === '(offen)' ? T('(nicht zugeordnet)') : z.name));
+      Store.STATI.forEach(function (s) {
+        var n = z.st[s] || 0;
+        summe.st[s] = (summe.st[s] || 0) + n;
+        var td = zelle(n, gehe(z, [s]), null, z.name + ' · ' + T(s) + ': ' + n);
+        if (n) td.style.setProperty('--aw-st', Math.round(8 + 42 * n / maxZ) + '%');
+        tr.appendChild(td);
+      });
+      var offenStati = Store.STATI.filter(function (s) { return !Store.istErledigt(s); });
+      tr.appendChild(zelle(z.offen, gehe(z, offenStati), 'aw-tab__fett'));
+      var tdU = zelle(z.ueber, function () { filter.verant = Object.keys(z.roh); filter.status = []; quick = 'ueberfaellig'; wechsleAnsicht('karten'); }, z.ueber ? 'aw-tab__warn' : '');
+      tr.appendChild(tdU);
+      var pz = Math.round((z.n - z.offen) / z.n * 100);
+      var tdB = el('td', 'aw-tab__balken');
+      var bar = el('div', 'aw-bar'); var fill = el('i'); fill.style.width = pz + '%'; bar.appendChild(fill);
+      tdB.appendChild(bar); tdB.appendChild(el('span', 'aw-bar__text', pz + ' %'));
+      tr.appendChild(tdB);
+      summe.offen += z.offen; summe.ueber += z.ueber; summe.n += z.n;
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    var tf = el('tfoot'); var fr = el('tr');
+    fr.appendChild(el('td', 'aw-tab__name', T('Summe Zuordnungen')));
+    Store.STATI.forEach(function (s) { fr.appendChild(el('td', 'aw-tab__zahl', String(summe.st[s] || 0))); });
+    fr.appendChild(el('td', 'aw-tab__zahl', String(summe.offen)));
+    fr.appendChild(el('td', 'aw-tab__zahl', String(summe.ueber)));
+    fr.appendChild(el('td', 'aw-tab__balken', summe.n ? Math.round((summe.n - summe.offen) / summe.n * 100) + ' %' : ''));
+    tf.appendChild(fr); t.appendChild(tf);
+    wrap.appendChild(t);
+    karte.appendChild(wrap);
+    if (reihen.length > MAXZ) {
+      var mehr = el('button', 'aw-mehr', awAlleVerant ? T('Weniger anzeigen') : T('Alle {n} Personen anzeigen', { n: reihen.length }));
+      mehr.type = 'button';
+      mehr.addEventListener('click', function () { awAlleVerant = !awAlleVerant; render(); });
+      karte.appendChild(mehr);
+    }
+    karte.appendChild(el('p', 'aw-fuss', T('Punkte mit mehreren Namen („A, B“) zählen bei jeder Person.')));
+    return karte;
+  }
+
+  /* Wer hat die Punkte angelegt? */
+  function renderErsteller(liste) {
+    var karte = aKarte(T('Erstellt von'), T('Wer hat die Punkte angelegt?'), 'aw-karte--er');
+    var heute = Store.heute(), vor7 = tagPlus(heute, -6);
+    var m = {};
+    liste.forEach(function (e) {
+      var k = e.erstelltVon || '(unbekannt)';
+      var z = m[k] || (m[k] = { name: k, n: 0, offen: 0, neu: 0, letzter: '' });
+      z.n++;
+      if (!Store.istErledigt(e)) z.offen++;
+      var a = String(e.erstelltAm || '').slice(0, 10);
+      if (a >= vor7) z.neu++;
+      if (a > z.letzter) z.letzter = a;
+    });
+    var reihen = Object.keys(m).map(function (k) { return m[k]; })
+      .sort(function (a, b) { return (a.name === '(unbekannt)') - (b.name === '(unbekannt)') || b.n - a.n; });
+    var maxN = Math.max.apply(null, reihen.map(function (z) { return z.n; }).concat([1]));
+    var t = el('table', 'aw-tab aw-tab--er');
+    var hr = el('tr');
+    [['Person', 'aw-tab__name'], ['Angelegt', 'aw-tab__balken'], ['davon offen', 'aw-tab__zahl'], ['7 Tage', 'aw-tab__zahl'], ['zuletzt', 'aw-tab__zahl']]
+      .forEach(function (h) { hr.appendChild(el('th', h[1], T(h[0]))); });
+    var th = el('thead'); th.appendChild(hr); t.appendChild(th);
+    var tb = el('tbody');
+    reihen.forEach(function (z) {
+      var tr = el('tr', 'aw-klick');
+      tr.title = T('Karten dieser Person anzeigen');
+      tr.appendChild(el('td', 'aw-tab__name', z.name === '(unbekannt)' ? T('(unbekannt – vor Protokoll)') : z.name));
+      var tdB = el('td', 'aw-tab__balken');
+      var bar = el('div', 'aw-bar aw-bar--neutral'); var fill = el('i'); fill.style.width = Math.round(z.n / maxN * 100) + '%'; bar.appendChild(fill);
+      tdB.appendChild(bar); tdB.appendChild(el('span', 'aw-bar__text', String(z.n)));
+      tr.appendChild(tdB);
+      tr.appendChild(el('td', 'aw-tab__zahl', String(z.offen)));
+      tr.appendChild(el('td', 'aw-tab__zahl', z.neu ? '+' + z.neu : '·'));
+      tr.appendChild(el('td', 'aw-tab__zahl aw-tab__leise', z.letzter ? Xlsx.ddmmyyyy(z.letzter) : '–'));
+      tr.addEventListener('click', function () { filter.ersteller = [z.name]; quick = null; wechsleAnsicht('karten'); });
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    var wrap = el('div', 'aw-tabwrap'); wrap.appendChild(t);
+    karte.appendChild(wrap);
+    karte.appendChild(el('p', 'aw-fuss', T('Ersteller steht auch auf jeder Karte, als Spalte in der Liste und als Filter „Alle Ersteller“.')));
+    return karte;
+  }
+
+  /* Offene Punkte ohne Komponente */
+  function renderOhneKomponente(liste) {
+    var offen = liste.filter(function (e) { return !Store.istErledigt(e); });
+    var ohne = offen.filter(function (e) { return !(e.komponenten || '').trim(); })
+      .sort(function (a, b) { return PRIO_RANK[a.prio] - PRIO_RANK[b.prio] || a.nr - b.nr; });
+    var pz = offen.length ? Math.round(ohne.length / offen.length * 100) : 0;
+    var karte = aKarte(T('Offene Punkte ohne Komponente'),
+      T('{n} von {m} offenen Punkten ({p} %) ist noch keine Komponente zugeordnet', { n: ohne.length, m: offen.length, p: pz }), 'aw-karte--ok');
+    if (!ohne.length) { karte.appendChild(el('p', 'aw-leer', T('Alle offenen Punkte haben eine Komponente. 👍'))); return karte; }
+
+    // Verteilung nach Baugruppe
+    var bg = {};
+    ohne.forEach(function (e) { var k = e.baugruppe || '(offen)'; bg[k] = (bg[k] || 0) + 1; });
+    var verteilung = el('div', 'aw-verteilung');
+    Store.BAUGRUPPEN.concat(['(offen)']).forEach(function (k) {
+      if (!bg[k]) return;
+      var b = el('button', 'aw-verteilung__k');
+      b.type = 'button';
+      b.appendChild(el('strong', null, String(bg[k])));
+      b.appendChild(el('span', null, k === '(offen)' ? T('ohne Baugruppe') : T(k)));
+      b.title = T('Diese Punkte als Karten anzeigen');
+      b.addEventListener('click', function () { filter.baugruppe = [k]; quick = 'ohnekomp'; wechsleAnsicht('karten'); });
+      verteilung.appendChild(b);
+    });
+    karte.appendChild(verteilung);
+
+    var t = el('table', 'aw-tab aw-tab--ok');
+    var hr = el('tr');
+    [['Nr', 'aw-tab__zahl'], ['Prio', ''], ['Baugruppe', ''], ['To Do', 'aw-tab__todo'], ['Verantwortlich', ''], ['Erstellt von', ''], ['', '']]
+      .forEach(function (h) { hr.appendChild(el('th', h[1], T(h[0]))); });
+    var th = el('thead'); th.appendChild(hr); t.appendChild(th);
+    var tb = el('tbody');
+    var GRENZE = 12;
+    ohne.slice(0, GRENZE).forEach(function (e) {
+      var tr = el('tr', 'aw-klick');
+      tr.appendChild(el('td', 'aw-tab__zahl aw-tab__leise', String(e.nr)));
+      var tdP = el('td'); var p = el('span', 'chip chip--static'); p.appendChild(el('span', 'chip__dot dot--' + slug(e.prio))); p.appendChild(el('span', null, T(e.prio))); tdP.appendChild(p);
+      tr.appendChild(tdP);
+      tr.appendChild(el('td', null, e.baugruppe ? T(e.baugruppe) : '–'));
+      tr.appendChild(el('td', 'aw-tab__todo', tx(String(e.todo || '').split('\n')[0])));
+      tr.appendChild(el('td', null, e.verantwortlicher || '–'));
+      tr.appendChild(el('td', 'aw-tab__leise', e.erstelltVon || '–'));
+      var tdE = el('td'); var b = el('button', 'aw-mini', T('+ Komponente')); b.type = 'button'; tdE.appendChild(b);
+      tr.appendChild(tdE);
+      tr.title = T('Punkt {nr} öffnen und Komponente eintragen', { nr: e.nr });
+      tr.addEventListener('click', function () { oeffneEdit(e.nr); });
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    var wrap = el('div', 'aw-tabwrap'); wrap.appendChild(t);
+    karte.appendChild(wrap);
+    var fuss = el('div', 'aw-fussleiste');
+    if (ohne.length > GRENZE) fuss.appendChild(el('span', 'aw-tab__leise', T('… und {n} weitere', { n: ohne.length - GRENZE })));
+    var alle = el('button', 'pillbtn', T('Alle {n} als Karten anzeigen', { n: ohne.length }));
+    alle.type = 'button';
+    alle.addEventListener('click', function () { quick = 'ohnekomp'; wechsleAnsicht('karten'); });
+    fuss.appendChild(alle);
+    karte.appendChild(fuss);
+    return karte;
+  }
+
   /* ------------------------------------------------ Roadmap-Band */
 
   // Ziel-Releases als Ringe (Anteil Closed/Canceled) mit Zieltermin und Status
@@ -647,6 +1064,7 @@
     fetch('/api/releases').then(function (r) { return r.ok ? r.json() : []; }).then(function (liste) {
       (liste || []).forEach(function (r) { releaseInfo[r.name] = r; });
       renderRoadmapBand(Store.state.entries);
+      if (view === 'auswertung') render();
     }).catch(function () {});
   }
 
@@ -766,6 +1184,12 @@
     dl.textContent = '';
     liste.filter(function (n) { return n !== '(offen)'; })
       .forEach(function (n) { dl.appendChild(new Option(n)); });
+  }
+
+  function fuelleErstellerFilter(alle) {
+    var namen = {};
+    alle.forEach(function (e) { namen[e.erstelltVon || '(unbekannt)'] = true; });
+    mselOptionen('#fErsteller', 'ersteller', Object.keys(namen).sort().map(function (n) { return [n, T(n)]; }));
   }
 
   function fuelleThemaFilter(alle) {
@@ -2240,6 +2664,7 @@
       b.addEventListener('click', function () {
         view = b.dataset.view;
         if (view === 'lastenheft') lhZieleLaden(); // Aenderungen anderer mitnehmen
+        if (view === 'auswertung') { abschlussLaden(); releasesLaden(); }
         $$('.viewswitch button').forEach(function (x) { x.classList.toggle('is-active', x === b); });
         render();
       });
