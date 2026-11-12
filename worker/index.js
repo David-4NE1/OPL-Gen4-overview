@@ -1220,6 +1220,67 @@ async function schemaSicherstellen(db) {
       try { await standErhoehen(db, true); } catch (e) { /* nur Hinweis */ }
     }
   }
+  // Einmalig: Aenderungen vom Pre-Series Development Server (11.11.2026,
+  // Karoly Beres) uebernehmen. Nur Punkte, bei denen hier noch Karoly Beres
+  // verantwortlich ist; Status nur von Open/In Progress auf Assigned,
+  // Faelligkeit/Seite nur wenn leer. Jede Aenderung steht im Verlauf.
+  const abgleichV1 = await db.prepare("SELECT value FROM settings WHERE key = 'abgleich_server_v1'").first();
+  if (!abgleichV1) {
+    const jetzt = new Date().toISOString();
+    const wer = 'Karoly Beres (Abgleich Pre-Series-Server)';
+    const ALT = 'Karoly Beres';
+    const liste = [
+      { nr: 11124, verant: 'Margit Kubale', status: 'Assigned', faellig: '2026-11-13' },
+      { nr: 11128, verant: 'Josef Mecid' },
+      { nr: 11130, verant: 'Margit Kubale', status: 'Assigned' },
+      { nr: 11131, verant: 'Margit Kubale', status: 'Assigned' },
+      { nr: 11132, verant: 'Andreas Kopp', status: 'Assigned' },
+      { nr: 11133, verant: 'Alexander Mayer', status: 'Assigned', seite: 'Beidseitig' },
+      { nr: 11138, verant: 'Josef Mecid', status: 'Assigned' },
+      { nr: 11139, verant: 'Alexander Mayer', status: 'Assigned' },
+      { nr: 11143, verant: 'Josef Mecid', status: 'Assigned' }
+    ];
+    const stmts = [];
+    const log = (nr, feld, ausdruckNeu, bedingung, ...werte) => stmts.push(db.prepare(
+      `INSERT INTO changelog (nr, text, wann, wer) SELECT nr, '${feld}: "' || COALESCE(${feld}, '') || '" → "' || ${ausdruckNeu} || '"', ?, ?
+         FROM entries WHERE nr = ? AND verantwortlicher LIKE '%${ALT}%' AND ${bedingung}`).bind(...werte, jetzt, wer, nr));
+    for (const p of liste) {
+      // Reihenfolge: erst Status/Faelligkeit/Seite (solange Karoly Beres noch eingetragen ist), zuletzt Verantwortlicher
+      if (p.status) {
+        log(p.nr, 'status', '?', "status IN ('Open', 'In Progress')", p.status);
+        stmts.push(db.prepare(`UPDATE entries SET status = ?, geaendert_am = ?, geaendert_von = ?
+          WHERE nr = ? AND verantwortlicher LIKE '%${ALT}%' AND status IN ('Open', 'In Progress')`).bind(p.status, jetzt, wer, p.nr));
+      }
+      for (const feld of ['faellig', 'seite']) {
+        if (!p[feld]) continue;
+        log(p.nr, feld, '?', `COALESCE(${feld}, '') = ''`, p[feld]);
+        stmts.push(db.prepare(`UPDATE entries SET ${feld} = ?, geaendert_am = ?, geaendert_von = ?
+          WHERE nr = ? AND verantwortlicher LIKE '%${ALT}%' AND COALESCE(${feld}, '') = ''`).bind(p[feld], jetzt, wer, p.nr));
+      }
+      log(p.nr, 'verantwortlicher', `replace(verantwortlicher, '${ALT}', ?)`, '1 = 1', p.verant);
+      stmts.push(db.prepare(`UPDATE entries SET verantwortlicher = replace(verantwortlicher, '${ALT}', ?), geaendert_am = ?, geaendert_von = ?
+        WHERE nr = ? AND verantwortlicher LIKE '%${ALT}%'`).bind(p.verant, jetzt, wer, p.nr));
+      stmts.push(null); // Marke: letztes Update dieses Punkts
+    }
+    const echte = stmts.filter(Boolean);
+    const res = await db.batch(echte);
+    // Welche Punkte wurden uebernommen? (Verantwortlicher-Update je Punkt)
+    const uebernommen = [], uebersprungen = [];
+    let k = -1, p = 0;
+    for (const s of stmts) {
+      if (s === null) { ((res[k].meta && res[k].meta.changes) ? uebernommen : uebersprungen).push(liste[p].nr); p++; continue; }
+      k++;
+    }
+    await db.batch([
+      db.prepare('INSERT INTO changelog (nr, text, wann, wer) VALUES (0, ?, ?, ?)').bind(
+        `Abgleich Pre-Series-Server (Änderungen vom 11.11.2026): ${uebernommen.length} Punkte übernommen` +
+        (uebernommen.length ? ` (${uebernommen.join(', ')})` : '') +
+        (uebersprungen.length ? `; übersprungen, da nicht mehr Karoly Beres verantwortlich oder nicht vorhanden: ${uebersprungen.join(', ')}` : ''),
+        jetzt, 'Automatik'),
+      db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('abgleich_server_v1', ?)").bind(jetzt)
+    ]);
+    if (uebernommen.length) { try { await standErhoehen(db, true); } catch (e) { /* nur Hinweis */ } }
+  }
   await db.prepare(`CREATE TABLE IF NOT EXISTS lastenheft_ziele (
     schluessel TEXT PRIMARY KEY, anforderung TEXT NOT NULL DEFAULT '', ziel TEXT NOT NULL DEFAULT '',
     geaendert_am TEXT NOT NULL DEFAULT '', geaendert_von TEXT NOT NULL DEFAULT '')`).run();
