@@ -781,10 +781,8 @@
         img.addEventListener('click', function () { zeigeLightbox(e.bilder, i); });
         row.appendChild(img);
       });
-      if (e.bilder.length > 1) row.appendChild(el('span', 'thumbrow__zahl', T('{n} Bilder', { n: e.bilder.length })));
-      // Bilder gleich unter Prio/Status, damit sie in der Vorschau sichtbar sind
-      var stz = c.querySelector('.card__status');
-      c.insertBefore(row, stz ? stz.nextSibling : null);
+      // klein unten an der Karte, vor der Zeile "Erstellt"
+      c.insertBefore(row, c.querySelector('.card__created'));
     } else if (e.notiz) {
       c.appendChild(original(el('div', 'card__meta', '🖼 ' + tx(e.notiz)), e.notiz));
     }
