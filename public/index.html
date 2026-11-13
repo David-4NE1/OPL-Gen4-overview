@@ -102,30 +102,46 @@
 </section>
 
 <section class="filterbar">
-  <input id="suche" class="search" type="search" placeholder="Suchen in Thema, To Do, Verantwortlicher …" data-i18n-ph>
+  <input id="suche" class="search" type="search" placeholder="Suchen …  ( / )" aria-label="Suchen in Thema, To Do, Person, Komponente" data-i18n-ph>
   <!-- nur auf dem Smartphone sichtbar: klappt die Auswahlfilter auf -->
   <button id="btnFilterToggle" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filterAuswahl">
     <span data-i18n>Filter</span> <span id="filterZahl" class="filter-toggle__zahl" hidden></span>
   </button>
   <div id="filterAuswahl" class="filterbar__auswahl">
-  <div id="fBereich" class="msel" data-alle="Alle Bereiche"></div>
-  <div id="fThema" class="msel" data-alle="Alle Themen"></div>
-  <div id="fPrio" class="msel" data-alle="Alle Prios"></div>
-  <div id="fStatus" class="msel" data-alle="Alle Status"></div>
-  <div id="fVerant" class="msel" data-alle="Alle Verantwortlichen"></div>
-  <div id="fTeam" class="msel" data-alle="Alle Verantwortlichkeiten"></div>
-  <div id="fBaugruppe" class="msel" data-alle="Alle Baugruppen"></div>
-  <div id="fNacharbeit" class="msel" data-alle="Nacharbeit"></div>
-  <div id="fZielRelease" class="msel" data-alle="Alle Ziel-Releases"></div>
-  <div id="fUnterthema" class="msel" data-alle="Alle Unterthemen"></div>
-  <div id="fErsteller" class="msel" data-alle="Alle Ersteller"></div>
+  <div id="fStatus" class="msel" data-alle="Status"></div>
+  <div id="fPrio" class="msel" data-alle="Prio"></div>
+  <div id="fVerant" class="msel" data-alle="Person"></div>
+  <div id="fZielRelease" class="msel" data-alle="Ziel-Release"></div>
+  <div id="fBaugruppe" class="msel" data-alle="Baugruppe"></div>
+  <button id="btnMehrFilter" class="select mehrfilter" type="button" aria-expanded="false" aria-controls="filterMehr"><span data-i18n>Mehr Filter</span> <span id="mehrZahl" class="mehrfilter__zahl" hidden></span></button>
+  <div id="filterMehr" class="filterbar__mehr" hidden>
+    <div id="fBereich" class="msel" data-alle="Bereich"></div>
+    <div id="fThema" class="msel" data-alle="Thema"></div>
+    <div id="fUnterthema" class="msel" data-alle="Unterthema"></div>
+    <div id="fTeam" class="msel" data-alle="Team (AD / Pre Series)"></div>
+    <div id="fNacharbeit" class="msel" data-alle="Nacharbeit"></div>
+    <div id="fErsteller" class="msel" data-alle="Ersteller"></div>
   </div>
-  <button id="btnFilterReset" class="btn btn--ghost" type="button" hidden data-i18n>Filter zurücksetzen</button>
+  </div>
+  <div class="filterbar__rechts">
+    <select id="ansicht" class="select" aria-label="Ansichten" data-i18n-aria></select>
+    <label class="sortwahl"><span data-i18n>Sortierung</span>
+      <select id="sortKarten" class="select">
+        <option value="prio" data-i18n>Prio, dann Fälligkeit</option>
+        <option value="faellig" data-i18n>Fälligkeit</option>
+        <option value="nr" data-i18n>Nummer</option>
+        <option value="neu" data-i18n>Neueste zuerst</option>
+        <option value="geaendert" data-i18n>Zuletzt geändert</option>
+      </select>
+    </label>
+    <button id="btnKompakt" class="select kompaktbtn" type="button" aria-pressed="false" title="Kompakte Karten für Meetings: Titel, Prio, Status, Fälligkeit, Person" data-i18n-title><span data-i18n>Kompakt</span></button>
+    <button id="btnFilterReset" class="btn btn--ghost" type="button" hidden data-i18n>Alle zurücksetzen</button>
+  </div>
 </section>
 
 <div id="filterBanner" class="filter-banner" hidden>
   <span id="filterBannerText" class="filter-banner__text"></span>
-  <button id="filterBannerClose" class="filter-banner__close" type="button" data-i18n>✕ Zurücksetzen</button>
+  <button id="filterBannerClose" class="filter-banner__close" type="button" data-i18n>✕ Alle zurücksetzen</button>
 </div>
 
 <div id="offlineBanner" class="tr-banner tr-banner--warn" hidden data-i18n>⚠ Verbindung zum Server gestört – angezeigt wird ein älterer, im Browser gespeicherter Stand. Bitte keine Änderungen eintragen, bis dieser Hinweis verschwindet.</div>
@@ -137,7 +153,8 @@
 <!-- Smartphone: schneller Zugriff auf "Neuer Punkt" -->
 <button id="btnNeuFab" class="fab nur-bearbeiten" type="button" aria-label="Neuer Punkt" title="Neuer Punkt" data-i18n-title data-i18n-aria>+</button>
 
-<div id="toast" class="toast" hidden></div>
+<div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
+<button id="btnNachOben" class="nachoben" type="button" hidden aria-label="Nach oben" title="Nach oben" data-i18n-title>↑</button>
 
 <!-- Dialog: Punkt anlegen/bearbeiten -->
 <dialog id="dlgEdit" class="dialog">

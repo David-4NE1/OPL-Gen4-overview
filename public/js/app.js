@@ -149,6 +149,79 @@
     toast._t = setTimeout(function () { t.hidden = true; }, isError ? 7000 : 3200);
   }
 
+  // Toast mit Aktion (z. B. "Rückgängig")
+  function toastAktion(msg, label, fn) {
+    var t = $('#toast');
+    t.textContent = '';
+    t.appendChild(el('span', null, msg));
+    var b = el('button', 'toast__aktion', label);
+    b.type = 'button';
+    b.addEventListener('click', function () { t.hidden = true; fn(); });
+    t.appendChild(b);
+    t.className = 'toast toast--aktion';
+    t.hidden = false;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { t.hidden = true; }, 8000);
+  }
+
+  // Prio/Status gezielt waehlen statt durchschalten; mit Rueckgaengig
+  function feldAendern(e, feld, wert) {
+    var alt = e[feld];
+    if (alt === wert) return;
+    var p = {}; p[feld] = wert;
+    Store.update(e.nr, p);
+    var name = feld === 'prio' ? T('Prio') : T('Status');
+    toastAktion(T('#{nr}: {feld} {a} → {b}', { nr: e.nr, feld: name, a: T(alt), b: T(wert) }), T('Rückgängig'), function () {
+      var q = {}; q[feld] = alt;
+      Store.update(e.nr, q);
+      toast(T('Rückgängig gemacht'));
+    });
+  }
+
+  var menueBox = null;
+  function menueZu() {
+    if (menueBox && menueBox.parentNode) menueBox.parentNode.removeChild(menueBox);
+    menueBox = null;
+  }
+  function auswahlMenue(anker, werte, aktuell, waehlen, zeichnen) {
+    var warOffen = menueBox && menueBox._anker === anker;
+    menueZu();
+    if (warOffen) return;
+    if (!Store.darf('bearbeiten')) return;
+    var m = el('div', 'auswahl');
+    m.setAttribute('role', 'menu');
+    m._anker = anker;
+    werte.forEach(function (v) {
+      var b = el('button', 'auswahl__opt' + (v === aktuell ? ' is-aktuell' : ''));
+      b.type = 'button';
+      b.setAttribute('role', 'menuitemradio');
+      b.setAttribute('aria-checked', String(v === aktuell));
+      zeichnen(v, b);
+      if (v === aktuell) b.appendChild(el('span', 'auswahl__haken', '✓'));
+      b.addEventListener('click', function (ev) { ev.stopPropagation(); menueZu(); waehlen(v); });
+      m.appendChild(b);
+    });
+    document.body.appendChild(m);
+    var r = anker.getBoundingClientRect();
+    var top = r.bottom + 4 + window.scrollY, left = r.left + window.scrollX;
+    if (r.bottom + m.offsetHeight + 8 > window.innerHeight) top = r.top + window.scrollY - m.offsetHeight - 4;
+    left = Math.min(left, window.scrollX + document.documentElement.clientWidth - m.offsetWidth - 8);
+    m.style.top = top + 'px'; m.style.left = Math.max(8, left) + 'px';
+    menueBox = m;
+    var erster = m.querySelector('.is-aktuell') || m.querySelector('button');
+    if (erster) erster.focus();
+    m.addEventListener('keydown', function (ev) {
+      var opts = $$('.auswahl__opt', m), i = opts.indexOf(document.activeElement);
+      if (ev.key === 'Escape') { menueZu(); anker.focus(); }
+      else if (ev.key === 'ArrowDown') { ev.preventDefault(); opts[(i + 1) % opts.length].focus(); }
+      else if (ev.key === 'ArrowUp') { ev.preventDefault(); opts[(i - 1 + opts.length) % opts.length].focus(); }
+    });
+  }
+  document.addEventListener('click', function (ev) {
+    if (menueBox && !menueBox.contains(ev.target) && !menueBox._anker.contains(ev.target)) menueZu();
+  });
+  window.addEventListener('resize', menueZu);
+
   function tageBis(iso) {
     if (!iso) return null;
     var a = new Date(Store.heute() + 'T00:00:00');
@@ -216,6 +289,23 @@
     return true;
   }
 
+  var FILTER_NAMEN = { bereich: 'Bereich', thema: 'Thema', prio: 'Prio', status: 'Status', verant: 'Person', team: 'Team',
+    baugruppe: 'Baugruppe', nacharbeit: 'Nacharbeit', zielRelease: 'Ziel-Release', unterthema: 'Unterthema', ersteller: 'Ersteller' };
+  function filterChips() {
+    var l = [];
+    var ql = { offen: 'Offen', erledigt: 'Erledigt', hoch: 'Prio Hoch', mittel: 'Prio Mittel', niedrig: 'Prio Niedrig', ueberfaellig: 'Überfällig', ohnekomp: 'Offen ohne Komponente' };
+    if (quick) l.push({ text: T(ql[quick] || quick), weg: function () { quick = null; } });
+    FILTER_FELDER.forEach(function (ff) {
+      var key = ff[1];
+      filter[key].forEach(function (v) {
+        var anzeige = v === '(offen)' ? (key === 'thema' ? T('(nicht zugeordnet)') : T('(offen)')) : T(v);
+        l.push({ text: T(FILTER_NAMEN[key]) + ': ' + anzeige, weg: function () { filter[key] = filter[key].filter(function (x) { return x !== v; }); } });
+      });
+    });
+    if (filter.suche) l.push({ text: T('Suche: "{v}"', { v: filter.suche }), weg: function () { filter.suche = ''; $('#suche').value = ''; } });
+    return l;
+  }
+
   function trifft(liste, wert) {
     return !liste.length || liste.indexOf(wert) >= 0;
   }
@@ -230,7 +320,17 @@
     return l.length === 1 && l[0] !== '(offen)' ? l[0] : '';
   }
 
+  var kartenSort = 'prio';
+  try { kartenSort = localStorage.getItem('opl_sort') || 'prio'; } catch (e) { /* egal */ }
+  var kompakt = false;
+  try { kompakt = localStorage.getItem('opl_kompakt') === '1'; } catch (e) { /* egal */ }
+
   function sortiereKarten(a, b) {
+    var da0 = a.faellig || '9999-99-99', db0 = b.faellig || '9999-99-99';
+    if (kartenSort === 'faellig') { if (da0 !== db0) return da0 < db0 ? -1 : 1; return PRIO_RANK[a.prio] - PRIO_RANK[b.prio] || a.nr - b.nr; }
+    if (kartenSort === 'nr') return a.nr - b.nr;
+    if (kartenSort === 'neu') { var ea = a.erstelltAm || '', eb = b.erstelltAm || ''; if (ea !== eb) return ea < eb ? 1 : -1; return b.nr - a.nr; }
+    if (kartenSort === 'geaendert') { var ga = a.geaendertAm || '', gb = b.geaendertAm || ''; if (ga !== gb) return ga < gb ? 1 : -1; return b.nr - a.nr; }
     var pa = PRIO_RANK[a.prio], pb = PRIO_RANK[b.prio];
     if (pa !== pb) return pa - pb;
     // ohne Datum ans Ende
@@ -255,7 +355,17 @@
 
   function render() {
     renderInhalt();
+    requestAnimationFrame(mehrPruefen);
     if (EN) { trBanner(); trNachladen(); }
+  }
+
+  // "Mehr anzeigen" auch dort, wo Titel oder Text nach dem Layout abgeschnitten sind
+  function mehrPruefen() {
+    $$('#content .card__mehr[hidden]').forEach(function (b) {
+      var c = b.closest('.card');
+      var abgeschnitten = $$('.card__titel, .card__todo', c).some(function (n) { return n.scrollHeight > n.clientHeight + 2; });
+      if (abgeschnitten) b.hidden = false;
+    });
   }
 
   function renderInhalt() {
@@ -272,6 +382,9 @@
     var nAuswahl = FILTER_FELDER.filter(function (f) { return filter[f[1]].length; }).length;
     $('#filterZahl').textContent = nAuswahl;
     $('#filterZahl').hidden = !nAuswahl;
+    var nMehr = ['bereich', 'thema', 'unterthema', 'team', 'nacharbeit', 'ersteller'].filter(function (k) { return filter[k].length; }).length;
+    $('#mehrZahl').textContent = nMehr;
+    $('#mehrZahl').hidden = !nMehr;
 
     var liste = alle.filter(sichtbar);
 
@@ -299,8 +412,17 @@
       if (filter.unterthema.length) teile.push(T('Unterthema: {v}', { v: werte('unterthema') }));
       if (filter.ersteller.length) teile.push(T('Erstellt von: {v}', { v: werte('ersteller') }));
       if (filter.suche) teile.push(T('Suche: "{v}"', { v: filter.suche }));
-      $('#filterBannerText').textContent = T('Zeige {n} von {gesamt} Punkten — {teile}',
-        { n: liste.length, gesamt: alle.length, teile: teile.join(', ') });
+      var bt = $('#filterBannerText');
+      bt.textContent = '';
+      bt.appendChild(el('span', 'filter-banner__zahl', T('{n} von {gesamt} Punkten', { n: liste.length, gesamt: alle.length })));
+      filterChips().forEach(function (fc) {
+        var c = el('button', 'fchip', fc.text);
+        c.type = 'button';
+        c.title = T('Filter entfernen');
+        c.appendChild(el('span', 'fchip__x', '×'));
+        c.addEventListener('click', function () { fc.weg(); render(); });
+        bt.appendChild(c);
+      });
       banner.hidden = false;
     } else {
       banner.hidden = true;
@@ -343,6 +465,8 @@
 
     var gruppen = {};
     offeneListe.forEach(function (e) { (gruppen[e.bereich] = gruppen[e.bereich] || []).push(e); });
+    content.classList.toggle('is-kompakt', kompakt);
+    content.appendChild(renderSprungleiste(gruppen, erledigt.length));
 
     Store.BEREICHE.forEach(function (bereich) {
       if (!gruppen[bereich]) return;
@@ -359,13 +483,129 @@
     }
   }
 
+  // Ansichten: feste Vorlagen plus eigene, im Browser gespeichert
+  function ansichtenLaden() {
+    try { return JSON.parse(localStorage.getItem('opl_ansichten') || '[]'); } catch (e) { return []; }
+  }
+  function ansichtAnwenden(a) {
+    filter = leererFilter();
+    Object.keys(a.filter || {}).forEach(function (k) { if (k in filter) filter[k] = a.filter[k]; });
+    quick = a.quick || null;
+    $('#suche').value = filter.suche || '';
+    render();
+  }
+  function ansichtenBauen() {
+    var sel = $('#ansicht');
+    sel.textContent = '';
+    sel.appendChild(new Option(T('Ansichten …'), ''));
+    var ich = Store.state.user || '';
+    var vorlagen = [
+      { name: T('Meine Punkte'), meine: true },
+      { name: T('Überfällig'), quick: 'ueberfaellig' },
+      { name: T('Prio Hoch, offen'), quick: 'hoch' },
+      { name: T('Offen ohne Komponente'), quick: 'ohnekomp' }
+    ];
+    var g1 = document.createElement('optgroup'); g1.label = T('Vorlagen');
+    vorlagen.forEach(function (v, i) { g1.appendChild(new Option(v.name, 'v' + i)); });
+    sel.appendChild(g1);
+    var eigene = ansichtenLaden();
+    if (eigene.length) {
+      var g2 = document.createElement('optgroup'); g2.label = T('Gespeichert');
+      eigene.forEach(function (v, i) { g2.appendChild(new Option(v.name, 'e' + i)); });
+      sel.appendChild(g2);
+    }
+    var g3 = document.createElement('optgroup'); g3.label = T('Verwalten');
+    g3.appendChild(new Option(T('＋ Aktuelle Filter speichern …'), 'neu'));
+    if (eigene.length) g3.appendChild(new Option(T('Gespeicherte Ansicht löschen …'), 'loeschen'));
+    sel.appendChild(g3);
+    sel.onchange = function () {
+      var w = sel.value;
+      sel.value = '';
+      if (!w) return;
+      if (w === 'neu') {
+        var name = prompt(T('Name der Ansicht (z. B. „Überfällig 4.1.2“):'));
+        if (!name) return;
+        var l = ansichtenLaden();
+        l.push({ name: name.trim(), filter: JSON.parse(JSON.stringify(filter)), quick: quick });
+        try { localStorage.setItem('opl_ansichten', JSON.stringify(l)); } catch (e) { /* egal */ }
+        ansichtenBauen();
+        toast(T('Ansicht „{n}“ gespeichert', { n: name.trim() }));
+        return;
+      }
+      if (w === 'loeschen') {
+        var l2 = ansichtenLaden();
+        var welche = prompt(T('Welche Ansicht löschen? Name eingeben:') + '\n' + l2.map(function (a) { return '· ' + a.name; }).join('\n'));
+        if (!welche) return;
+        var rest = l2.filter(function (a) { return a.name !== welche.trim(); });
+        try { localStorage.setItem('opl_ansichten', JSON.stringify(rest)); } catch (e) { /* egal */ }
+        ansichtenBauen();
+        return;
+      }
+      if (w[0] === 'v') {
+        var v = vorlagen[+w.slice(1)];
+        if (v.meine) {
+          var meine = {};
+          Store.state.entries.forEach(function (e) {
+            if (ich && personen(e.verantwortlicher).indexOf(ich) >= 0) meine[e.verantwortlicher] = true;
+          });
+          if (!ich) { toast(T('Bitte oben rechts deinen Namen eintragen.'), true); return; }
+          ansichtAnwenden({ filter: { verant: Object.keys(meine).length ? Object.keys(meine) : [ich] }, quick: 'offen' });
+        } else ansichtAnwenden(v);
+        return;
+      }
+      ansichtAnwenden(eigene[+w.slice(1)]);
+    };
+  }
+
+  function gruppenId(titel) { return 'gruppe-' + slug(titel); }
+
+  function renderSprungleiste(gruppen, nErledigt) {
+    var nav = el('nav', 'sprung');
+    nav.setAttribute('aria-label', T('Zu Bereich springen'));
+    var namen = Store.BEREICHE.filter(function (b) { return gruppen[b]; })
+      .concat(Object.keys(gruppen).filter(function (b) { return Store.BEREICHE.indexOf(b) < 0; }));
+    var springe = function (titel, istErl) {
+      return function () {
+        if (istErl) erledigtOffen = true; else zugeklappt[titel] = false;
+        render();
+        var z = document.getElementById(gruppenId(istErl ? 'Erledigt' : titel));
+        if (z) z.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+    };
+    namen.forEach(function (b) {
+      var k = el('button', 'sprung__k');
+      k.type = 'button';
+      k.appendChild(document.createTextNode(T(b)));
+      k.appendChild(el('span', 'sprung__n', String(gruppen[b].length)));
+      k.addEventListener('click', springe(b, false));
+      nav.appendChild(k);
+    });
+    if (nErledigt) {
+      var ke = el('button', 'sprung__k sprung__k--erl');
+      ke.type = 'button';
+      ke.appendChild(document.createTextNode(T('✓ Erledigt')));
+      ke.appendChild(el('span', 'sprung__n', String(nErledigt)));
+      ke.addEventListener('click', springe('Erledigt', true));
+      nav.appendChild(ke);
+    }
+    var alleZu = namen.every(function (b) { return zugeklappt[b]; });
+    var t = el('button', 'sprung__alle', alleZu ? T('Alle aufklappen') : T('Alle einklappen'));
+    t.type = 'button';
+    t.addEventListener('click', function () { namen.forEach(function (b) { zugeklappt[b] = !alleZu; }); render(); });
+    nav.appendChild(t);
+    return nav;
+  }
+
   function renderGruppe(titel, eintraege, istErledigtGruppe) {
     var offen = istErledigtGruppe ? erledigtOffen : !zugeklappt[titel];
     var g = el('section', 'group' + (offen ? ' is-open' : ''));
+    g.id = gruppenId(titel);
 
     var head = el('button', 'group__head');
     head.type = 'button';
     head.setAttribute('aria-expanded', String(offen));
+    head.setAttribute('aria-label', (istErledigtGruppe ? T('Erledigt') : T(titel)) + ' – ' +
+      T('{n} Punkte', { n: eintraege.length }) + ' – ' + (offen ? T('einklappen') : T('aufklappen')));
     head.appendChild(el('span', 'group__chev', '▶'));
     head.appendChild(el('h2', null, istErledigtGruppe ? T('✓ Erledigt') : T(titel)));
 
@@ -412,14 +652,37 @@
     return g;
   }
 
+  // Kurztitel: erste Zeile des To Do; der Rest ist die Beschreibung
+  function titelUndRest(text) {
+    var t = String(text || '').replace(/\r/g, '');
+    var i = t.indexOf('\n');
+    var titel = (i < 0 ? t : t.slice(0, i)).trim();
+    var rest = (i < 0 ? '' : t.slice(i + 1)).replace(/^\s*\n/, '').trim();
+    return { titel: titel, rest: rest };
+  }
+
+  function chipBtn(cls, text, titel, klick) {
+    var b = el('button', 'chip chip--edit' + (cls ? ' ' + cls : ''), text);
+    b.type = 'button';
+    if (titel) { b.title = titel; b.setAttribute('aria-label', titel + ': ' + text); }
+    if (klick) b.addEventListener('click', klick);
+    return b;
+  }
+
   function renderCard(e) {
-    var c = el('article', 'card card--' + slug(e.prio) + (Store.istErledigt(e) ? ' card--erledigt' : ''));
+    var erl = Store.istErledigt(e);
+    var ueberfaellig = Store.istUeberfaellig(e);
+    var c = el('article', 'card card--' + slug(e.prio) + (erl ? ' card--erledigt' : '') + (ueberfaellig ? ' card--ueber' : ''));
+    var tr = titelUndRest(tx(e.todo));
 
     var top = el('div', 'card__top');
     top.appendChild(el('span', 'card__nr', '#' + e.nr));
-    var themaBox = el('span', 'card__thema', e.thema ? (Store.istThema(e.thema) ? T(e.thema) : tx(e.thema)) : T('(ohne Thema)'));
-    if (e.unterthema) themaBox.appendChild(el('span', 'card__unterthema', T(e.unterthema)));
-    top.appendChild(themaBox);
+    var kopf = el('div', 'card__kopf');
+    var titel = el('h3', 'card__titel', tr.titel || T('(ohne Beschreibung)'));
+    kopf.appendChild(original(titel, e.todo));
+    var themaText = e.thema ? (Store.istThema(e.thema) ? T(e.thema) : tx(e.thema)) : T('(ohne Thema)');
+    kopf.appendChild(el('span', 'card__thema', themaText + (e.unterthema ? ' › ' + T(e.unterthema) : '')));
+    top.appendChild(kopf);
     var edit = el('button', 'card__edit', '✎');
     edit.type = 'button';
     edit.title = T('Bearbeiten');
@@ -427,6 +690,71 @@
     edit.addEventListener('click', function () { oeffneEdit(e.nr); });
     top.appendChild(edit);
     c.appendChild(top);
+
+    // Prio, Status, Faelligkeit: die Zeile, die man im Meeting liest
+    var stZeile = el('div', 'card__status');
+    var prio = chipBtn('chip--menu', '', T('Prio'), function () {
+      auswahlMenue(prio, Store.PRIOS, e.prio, function (v) { feldAendern(e, 'prio', v); }, function (v, b) {
+        b.appendChild(el('span', 'chip__dot dot--' + slug(v))); b.appendChild(el('span', null, T(v)));
+      });
+    });
+    prio.appendChild(el('span', 'chip__dot dot--' + slug(e.prio)));
+    prio.appendChild(el('span', null, T(e.prio)));
+    stZeile.appendChild(prio);
+    var st = chipBtn('chip--menu chip--status-' + slug(e.status), T(e.status), T('Status'), function () {
+      auswahlMenue(st, Store.STATI, e.status, function (v) { feldAendern(e, 'status', v); }, function (v, b) {
+        b.appendChild(el('span', 'chip chip--status-' + slug(v), T(v)));
+      });
+    });
+    stZeile.appendChild(st);
+    var tage = tageBis(e.faellig);
+    var due = chipBtn('chip--due' +
+      (ueberfaellig ? ' is-overdue' : (tage != null && tage >= 0 && tage <= 7 && !erl ? ' is-soon' : '')) +
+      (e.faellig ? '' : ' chip--none'), (ueberfaellig ? '⚠ ' : '📅 ') + datumLabel(e.faellig), T('Fälligkeit'),
+      function () { oeffneEdit(e.nr, 'faellig'); });
+    stZeile.appendChild(due);
+    c.appendChild(stZeile);
+
+    // Beschreibung, nach ~5 Zeilen gekuerzt
+    var lang = tr.titel.length > 110 || tr.rest.length > 300 || tr.rest.split('\n').length > 5;
+    if (tr.rest) c.appendChild(original(el('p', 'card__todo', tr.rest), e.todo));
+    {
+      var mehr = el('button', 'card__mehr', T('Mehr anzeigen'));
+      mehr.hidden = !lang; // sonst nach dem Layout pruefen (mehrPruefen)
+      mehr.type = 'button';
+      mehr.setAttribute('aria-expanded', 'false');
+      mehr.addEventListener('click', function () {
+        var auf = c.classList.toggle('is-voll');
+        mehr.textContent = auf ? T('Weniger anzeigen') : T('Mehr anzeigen');
+        mehr.setAttribute('aria-expanded', String(auf));
+      });
+      c.appendChild(mehr);
+    }
+
+    // Zuordnung in fester Reihenfolge: Person, Team, Baugruppe, Ziel-Release, Komponenten, Nacharbeit
+    var meta = el('div', 'card__meta');
+    meta.appendChild(chipBtn('chip--person' + (e.verantwortlicher ? '' : ' chip--none'), '👤 ' + (e.verantwortlicher || T('offen')),
+      T('Person (verantwortlich)'), function () { oeffneEdit(e.nr, 'verant'); }));
+    meta.appendChild(chipBtn(e.verantwortlichkeit ? '' : 'chip--none',
+      (e.verantwortlichkeit === 'Advanced Development' ? 'AD' : e.verantwortlichkeit ? T(e.verantwortlichkeit) : T('Team offen')),
+      T('Team (Advanced Development / Pre Series)'), function () { oeffneEdit(e.nr, 'team'); }));
+    meta.appendChild(chipBtn(e.baugruppe ? '' : 'chip--none',
+      '📍 ' + (e.baugruppe ? T(e.baugruppe) + (e.seite ? ' · ' + T(e.seite) : '') : T('Baugruppe offen')),
+      T('Baugruppe'), function () { oeffneEdit(e.nr, 'baugruppe'); }));
+    meta.appendChild(chipBtn('chip--ziel' + (e.zielRelease ? '' : ' chip--none'), '🎯 ' + (e.zielRelease || T('Ziel offen')),
+      T('Ziel-Release'), function () { oeffneEdit(e.nr, 'zielRelease'); }));
+    if (e.komponenten) meta.appendChild(chipBtn('chip--komp', '🔩 ' + e.komponenten, T('Komponenten'), function () { oeffneEdit(e.nr, 'komponenten'); }));
+    if (e.nacharbeit) meta.appendChild(chipBtn('chip--nacharbeit', '🛠 ' + T(e.nacharbeit), T('Nacharbeit am Teil'), function () { oeffneEdit(e.nr, 'nacharbeit'); }));
+    if (e.release) {
+      var rl = el('a', 'chip chip--edit', '🚀 ' + e.release);
+      rl.href = 'roadmap.html';
+      rl.title = T('Release-Zuordnung in der Roadmap ändern');
+      meta.appendChild(rl);
+    }
+    if (!Store.istThema(e.thema)) {
+      meta.appendChild(chipBtn('chip--warn', '⚠ ' + T('Thema zuordnen'), T('Thema aus der Liste wählen'), function () { oeffneEdit(e.nr, 'thema'); }));
+    }
+    c.appendChild(meta);
 
     if (e.erstelltAm || istUebersetzt(e)) {
       var created = el('p', 'card__created', e.erstelltAm
@@ -442,96 +770,6 @@
       c.appendChild(created);
     }
 
-    if (e.todo) c.appendChild(original(el('p', 'card__todo', tx(e.todo)), e.todo));
-
-    var meta = el('div', 'card__meta');
-
-    var prio = el('button', 'chip');
-    prio.type = 'button';
-    prio.title = T('Klick: Prio wechseln (Hoch → Mittel → Niedrig)');
-    prio.appendChild(el('span', 'chip__dot dot--' + slug(e.prio)));
-    prio.appendChild(el('span', null, T(e.prio)));
-    prio.addEventListener('click', function () { Store.cycle(e.nr, 'prio'); });
-    meta.appendChild(prio);
-
-    var st = el('button', 'chip chip--status-' + slug(e.status), T(e.status));
-    st.type = 'button';
-    st.title = T('Klick: Status wechseln (Open → Assigned → In Progress → In Review → Closed)');
-    st.addEventListener('click', function () { Store.cycle(e.nr, 'status'); });
-    meta.appendChild(st);
-
-    var ueberfaellig = Store.istUeberfaellig(e);
-    var tage = tageBis(e.faellig);
-    var due = el('button', 'chip chip--due' +
-      (ueberfaellig ? ' is-overdue' : (tage != null && tage >= 0 && tage <= 7 && !Store.istErledigt(e) ? ' is-soon' : '')) +
-      (e.faellig ? '' : ' chip--none'), (ueberfaellig ? '⚠ ' : '📅 ') + datumLabel(e.faellig));
-    due.type = 'button';
-    due.title = T('Fälligkeit ändern');
-    due.addEventListener('click', function () { oeffneEdit(e.nr, 'faellig'); });
-    meta.appendChild(due);
-
-    var vn = el('button', 'chip' + (e.verantwortlicher ? '' : ' chip--none'),
-      '👤 ' + (e.verantwortlicher || T('offen')));
-    vn.type = 'button';
-    vn.title = T('Verantwortlichen setzen');
-    vn.addEventListener('click', function () { oeffneEdit(e.nr, 'verant'); });
-    meta.appendChild(vn);
-
-    var tm = el('button', 'chip' + (e.verantwortlichkeit ? '' : ' chip--none'),
-      '🏷 ' + (e.verantwortlichkeit ? T(e.verantwortlichkeit) : T('Verantwortlichkeit offen')));
-    tm.type = 'button';
-    tm.title = T('Verantwortlichkeit setzen (Advanced Development / Pre Series)');
-    tm.addEventListener('click', function () { oeffneEdit(e.nr, 'team'); });
-    meta.appendChild(tm);
-
-    var bg = el('button', 'chip' + (e.baugruppe ? '' : ' chip--none'),
-      '📍 ' + (e.baugruppe ? T(e.baugruppe) + (e.seite ? ' · ' + T(e.seite) : '') : T('Baugruppe offen')));
-    bg.type = 'button';
-    bg.title = T('Baugruppe setzen');
-    bg.addEventListener('click', function () { oeffneEdit(e.nr, 'baugruppe'); });
-    meta.appendChild(bg);
-
-    if (e.komponenten) {
-      var ko = el('button', 'chip chip--komp', '🔩 ' + e.komponenten);
-      ko.type = 'button';
-      ko.title = T('Komponenten');
-      ko.addEventListener('click', function () { oeffneEdit(e.nr, 'komponenten'); });
-      meta.appendChild(ko);
-    }
-
-    if (e.zielRelease) {
-      var zr = el('button', 'chip chip--ziel', '🎯 ' + e.zielRelease);
-      zr.type = 'button';
-      zr.title = T('Ziel-Release');
-      zr.addEventListener('click', function () { oeffneEdit(e.nr, 'zielRelease'); });
-      meta.appendChild(zr);
-    }
-
-    if (e.nacharbeit) {
-      var na = el('button', 'chip chip--nacharbeit', '🛠 ' + T(e.nacharbeit));
-      na.type = 'button';
-      na.title = T('Nacharbeit am Teil');
-      na.addEventListener('click', function () { oeffneEdit(e.nr, 'nacharbeit'); });
-      meta.appendChild(na);
-    }
-
-    if (e.release) {
-      var rl = el('a', 'chip', '🚀 ' + e.release);
-      rl.href = 'roadmap.html';
-      rl.title = T('Release-Zuordnung in der Roadmap ändern');
-      meta.appendChild(rl);
-    }
-
-    if (!Store.istThema(e.thema)) {
-      var th = el('button', 'chip chip--warn', '⚠ ' + T('Thema zuordnen'));
-      th.type = 'button';
-      th.title = T('Thema aus der Liste wählen');
-      th.addEventListener('click', function () { oeffneEdit(e.nr, 'thema'); });
-      meta.appendChild(th);
-    }
-
-    c.appendChild(meta);
-
     if (e.bilder && e.bilder.length) {
       var row = el('div', 'thumbrow');
       e.bilder.forEach(function (b, i) {
@@ -543,7 +781,10 @@
         img.addEventListener('click', function () { zeigeLightbox(e.bilder, i); });
         row.appendChild(img);
       });
-      c.appendChild(row);
+      if (e.bilder.length > 1) row.appendChild(el('span', 'thumbrow__zahl', T('{n} Bilder', { n: e.bilder.length })));
+      // Bilder gleich unter Prio/Status, damit sie in der Vorschau sichtbar sind
+      var stz = c.querySelector('.card__status');
+      c.insertBefore(row, stz ? stz.nextSibling : null);
     } else if (e.notiz) {
       c.appendChild(original(el('div', 'card__meta', '🖼 ' + tx(e.notiz)), e.notiz));
     }
@@ -613,7 +854,11 @@
       p.type = 'button';
       p.appendChild(el('span', 'chip__dot dot--' + slug(e.prio)));
       p.appendChild(el('span', null, T(e.prio)));
-      p.addEventListener('click', function () { Store.cycle(e.nr, 'prio'); });
+      p.addEventListener('click', function () {
+        auswahlMenue(p, Store.PRIOS, e.prio, function (v) { feldAendern(e, 'prio', v); }, function (v, b) {
+          b.appendChild(el('span', 'chip__dot dot--' + slug(v))); b.appendChild(el('span', null, T(v)));
+        });
+      });
       tdP.appendChild(p);
       row.appendChild(tdP);
 
@@ -628,7 +873,11 @@
       var tdS = el('td');
       var s = el('button', 'chip chip--status-' + slug(e.status), T(e.status));
       s.type = 'button';
-      s.addEventListener('click', function () { Store.cycle(e.nr, 'status'); });
+      s.addEventListener('click', function () {
+        auswahlMenue(s, Store.STATI, e.status, function (v) { feldAendern(e, 'status', v); }, function (v, b) {
+          b.appendChild(el('span', 'chip chip--status-' + slug(v), T(v)));
+        });
+      });
       tdS.appendChild(s);
       row.appendChild(tdS);
 
@@ -1200,6 +1449,11 @@
     $('#kpiOverdueBox').classList.toggle('has-overdue', ueber > 0);
     $$('.kpi').forEach(function (b) {
       b.classList.toggle('is-active', quick === b.dataset.quick);
+      var w = $('.kpi__value', b), lab = $('.kpi__label', b);
+      if (w && lab) {
+        b.setAttribute('aria-label', w.textContent + ' ' + lab.textContent + ' – ' + (quick === b.dataset.quick ? T('Filter aufheben') : T('filtern')));
+        b.setAttribute('aria-pressed', String(quick === b.dataset.quick));
+      }
     });
     $('#standLine').textContent = T('Open Point List · {n} Punkte · Stand {datum}',
       { n: alle.length, datum: Xlsx.ddmmyyyy(Store.heute()) });
@@ -2687,6 +2941,43 @@
       render();
     }
     $('#btnFilterReset').addEventListener('click', resetFilter);
+
+    var sortSel = $('#sortKarten');
+    sortSel.value = kartenSort;
+    sortSel.addEventListener('change', function () {
+      kartenSort = sortSel.value;
+      try { localStorage.setItem('opl_sort', kartenSort); } catch (e) { /* egal */ }
+      render();
+    });
+    var kb = $('#btnKompakt');
+    var kompaktZeigen = function () { kb.classList.toggle('is-active', kompakt); kb.setAttribute('aria-pressed', String(kompakt)); };
+    kompaktZeigen();
+    kb.addEventListener('click', function () {
+      kompakt = !kompakt;
+      try { localStorage.setItem('opl_kompakt', kompakt ? '1' : '0'); } catch (e) { /* egal */ }
+      kompaktZeigen();
+      render();
+    });
+    $('#btnMehrFilter').addEventListener('click', function () {
+      var m = $('#filterMehr'), auf = m.hidden;
+      m.hidden = !auf;
+      this.setAttribute('aria-expanded', String(auf));
+      this.classList.toggle('is-offen', auf);
+    });
+    ansichtenBauen();
+
+    var hoch = $('#btnNachOben');
+    window.addEventListener('scroll', function () { hoch.hidden = window.scrollY < 700; }, { passive: true });
+    hoch.addEventListener('click', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      var t = ev.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (document.querySelector('dialog[open]')) return;
+      ev.preventDefault();
+      $('#suche').focus();
+    });
     $('#filterBannerClose').addEventListener('click', resetFilter);
 
     $$('.kpi').forEach(function (b) {
